@@ -1,0 +1,1053 @@
+'use client';
+
+import React, { useState } from 'react';
+import { useStore } from '@/store/useStore';
+import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer } from 'lucide-react';
+import { exportToExcel } from '@/utils/exportUtils';
+
+export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
+  const store = useStore();
+  const matrixKey = `${projectName}_${type}`;
+  const fallbackBlocks = [{"blockName":"BLOCK A","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 01","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]},{"blockName":"BLOCK B","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]}];
+  const fallbackFloors = [];
+
+  // Master base floors for project
+  const baseFloors = store.paymentMatrix[projectName] || store.paymentMatrix[`${projectName}_team`] || [];
+  
+  // Compute paymentMatrix strictly based on master baseFloors
+  let paymentMatrix = [];
+  if (type === 'ipc' || type === 'ipc_select') {
+    const teamMatrix = store.paymentMatrix[`${projectName}_team`] || [];
+    const fullMatrix = baseFloors.map(canonicalRow => {
+      const teamRow = teamMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
+      return {
+        floor: canonicalRow.floor,
+        numApts: canonicalRow.numApts,
+        items: teamRow ? (teamRow.items || {}) : {}
+      };
+    });
+    
+    // Only keep floors that have at least one cell with data
+    paymentMatrix = fullMatrix.filter(row => {
+      return Object.values(row.items).some(val => val && val.trim() !== '');
+    });
+  } else {
+    const teamMatrix = store.paymentMatrix[`${projectName}_team`] || [];
+    const sourceMatrix = teamMatrix.length > 0 ? teamMatrix : baseFloors;
+    paymentMatrix = baseFloors.map(canonicalRow => {
+      const teamRow = sourceMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
+      return {
+        floor: canonicalRow.floor,
+        numApts: canonicalRow.numApts,
+        items: teamRow ? (teamRow.items || {}) : {}
+      };
+    });
+  }
+
+  const matrixBlocks = (store.matrixBlocks[projectName] && store.matrixBlocks[projectName].length > 0) 
+    ? store.matrixBlocks[projectName] 
+    : (store.matrixBlocks['BCONS TĐH'] || fallbackBlocks);
+  
+  const updateMatrixCell = (...args) => store.updateMatrixCell(matrixKey, ...args);
+  const updateCategoryName = (...args) => store.updateCategoryName(projectName, ...args);
+  const deleteCategoryName = (...args) => store.deleteCategoryName(projectName, ...args);
+  const deleteGroupName = (...args) => store.deleteGroupName(projectName, ...args);
+  const deleteBlockName = (...args) => store.deleteBlockName(projectName, ...args);
+  const updateGroupName = (...args) => store.updateGroupName(projectName, ...args);
+  const addCategoryGroup = (...args) => store.addCategoryGroup(projectName, ...args);
+  const addCategoryItem = (...args) => store.addCategoryItem(projectName, ...args);
+  const addFloor = (...args) => store.addFloor(projectName, ...args);
+  const updateFloorName = (...args) => store.updateFloorName(projectName, ...args);
+  const updateFloorNumApts = (...args) => store.updateFloorNumApts(projectName, ...args);
+  const deleteFloor = (...args) => store.deleteFloor(projectName, ...args);
+  const updateBlockName = (...args) => store.updateBlockName(projectName, ...args);
+  const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
+  const [selectedCell, setSelectedCell] = useState(null);
+  const [inputValue, setInputValue] = useState('');
+  const [batchList, setBatchList] = useState([]);
+  const [newBatchName, setNewBatchName] = useState('');
+  const [newBatchUnits, setNewBatchUnits] = useState('');
+  const [unitError, setUnitError] = useState('');
+  const [activeTeam, setActiveTeam] = useState('');
+  
+  const [isBOQModalOpen, setIsBOQModalOpen] = useState(false);
+  const [boqData, setBoqData] = useState({ blockName: '', groupName: '', itemName: '' });
+
+  const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', isConfirm: false, onConfirm: null, onDelete: null });
+  const [hiddenColumns, setHiddenColumns] = useState([]);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
+  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, numApts: '', startNumber: 1 });
+
+  const toggleHideColumn = (itemKey) => {
+    setHiddenColumns(prev => 
+      prev.includes(itemKey) ? prev.filter(k => k !== itemKey) : [...prev, itemKey]
+    );
+  };
+
+  const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey);
+  const [promptInputValue, setPromptInputValue] = useState('');
+
+  const openPrompt = (title, defaultValue, onConfirm, onDelete = null) => {
+    setPromptConfig({ isOpen: true, title, isConfirm: false, onConfirm, onDelete });
+    setPromptInputValue(defaultValue || '');
+  };
+
+  const openConfirm = (title, onConfirm) => {
+    setPromptConfig({ isOpen: true, title, isConfirm: true, onConfirm });
+    setPromptInputValue('');
+  };
+
+  const handleEditBlock = (bIdx, oldName) => {
+    openPrompt("Nhập tên BLOCK mới (VD: BLOCK B):", oldName, (newName) => {
+      if (newName && newName.trim() !== '' && newName !== oldName) {
+        updateBlockName(bIdx, newName.trim());
+      }
+    }, () => {
+      openConfirm(`Bạn có chắc chắn muốn xóa BLOCK ${oldName} không? Toàn bộ các nhóm và hạng mục bên trong sẽ bị xóa sạch.`, () => {
+        deleteBlockName(bIdx);
+      });
+    });
+  };
+
+  const handleCreateBOQ = (e) => {
+    e.preventDefault();
+    if (!boqData.blockName || !boqData.groupName || !boqData.itemName) return;
+    addBOQNode(boqData.blockName.trim(), boqData.groupName.trim(), boqData.itemName.trim());
+    setBoqData({ blockName: '', groupName: '', itemName: '' });
+    setIsBOQModalOpen(false);
+  };
+
+  const handleEditGroup = (bIdx, gIdx, oldName) => {
+    openPrompt("Nhập tên nhóm mới:", oldName, (newName) => {
+      if (newName && newName.trim() !== '' && newName !== oldName) {
+        updateGroupName(bIdx, gIdx, newName.trim());
+      }
+    }, () => {
+      openConfirm(`Bạn có chắc chắn muốn xóa NHÓM ${oldName} không? Toàn bộ các hạng mục bên trong sẽ bị xóa sạch.`, () => {
+        deleteGroupName(bIdx, gIdx);
+      });
+    });
+  };
+
+  const handleEditItem = (bIdx, gIdx, iIdx, oldName) => {
+    openPrompt("Nhập tên hạng mục mới:", oldName, (newName) => {
+      if (newName && newName.trim() !== '' && newName !== oldName) {
+        updateCategoryName(bIdx, gIdx, iIdx, oldName, newName.trim());
+      }
+    }, () => {
+      openConfirm(`Bạn có chắc chắn muốn xóa HẠNG MỤC ${oldName} không?`, () => {
+        deleteCategoryName(bIdx, gIdx, iIdx);
+      });
+    });
+  };
+
+  const handleAddGroup = (bIdx) => {
+    openPrompt("Nhập tên NHÓM mới (VD: HÀNH LANG):", "", (newName) => {
+      if (newName && newName.trim() !== '') {
+        addCategoryGroup(bIdx, newName.trim());
+      }
+    });
+  };
+
+  const handleAddItem = (bIdx, gIdx) => {
+    openPrompt("Nhập tên HẠNG MỤC mới (VD: Bả 1 lớp):", "", (newName) => {
+      if (newName && newName.trim() !== '') {
+        addCategoryItem(bIdx, gIdx, newName.trim());
+      }
+    });
+  };
+
+  const handleAddFloor = () => {
+    let maxFloor = 0;
+    paymentMatrix.forEach(row => {
+      const match = String(row.floor).match(/\d+/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (num > maxFloor) maxFloor = num;
+      }
+    });
+    setAddFloorData({
+      numFloors: 1,
+      numApts: '',
+      startNumber: maxFloor + 1
+    });
+    setIsAddFloorModalOpen(true);
+  };
+
+  const handleEditFloor = (oldName) => {
+    openPrompt("Nhập tên TẦNG mới (VD: Tầng 16 (50%)):", oldName, (newName) => {
+      if (newName && newName.trim() !== '' && newName !== oldName) {
+        updateFloorName(oldName, newName.trim());
+      }
+    }, () => {
+      openConfirm(`Bạn có chắc chắn muốn xóa Tầng ${oldName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
+        deleteFloor(oldName);
+      });
+    });
+  };
+
+  const handleEditNumApts = (floorName, currentVal) => {
+    openPrompt(`Nhập số căn cho tầng ${floorName}:`, currentVal, (newName) => {
+      if (newName !== null && newName.trim() !== currentVal) {
+        updateFloorNumApts(floorName, newName.trim());
+      }
+    });
+  };
+
+  const handleDeleteFloor = (floorName) => {
+    openConfirm(`Bạn có chắc chắn muốn xóa Tầng ${floorName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
+      deleteFloor(floorName);
+    });
+  };
+
+  const allCategories = matrixBlocks.flatMap(b => b.groups.flatMap(g => g.items));
+  const typeLabel = type === 'ipc' ? 'IPC' : 'Đợt';
+
+  const getCellColor = (val) => {
+    if (!val) return '';
+    if (val === 'Xong 100%') return '#6ee7b7'; // emerald-300
+    if (val === 'Tạm dừng') return '#fca5a5'; // red-300
+
+    // Extract core batch base name (e.g. "ĐỢT 2 (1)" -> "ĐỢT 2")
+    const firstPart = val.split('+')[0].trim();
+    const baseName = firstPart.replace(/\([^)]*\)/g, '').trim().toUpperCase() || firstPart.toUpperCase();
+    
+    // Nếu ở chế độ ipc_select và là "ĐỢT" thì hiển thị màu xám
+    if (type === 'ipc_select' && baseName.includes('ĐỢT')) {
+      return '#e2e8f0'; // slate-200
+    }
+
+    // Hash baseName string to HSL color
+    let hash = 0;
+    for (let i = 0; i < baseName.length; i++) {
+      hash = baseName.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    // Multiply by golden angle 137.5 to ensure distinct colors for sequential names (ĐỢT 1, ĐỢT 2...)
+    const h = Math.abs(hash * 137.5) % 360;
+    return `hsl(${h}, 75%, 85%)`;
+  };
+
+  const displayCellValue = (rawVal, team) => {
+    if (!rawVal) return '';
+    if (type === 'ipc_select' || type === 'ipc') {
+      let display = rawVal;
+      store.teams.forEach(t => {
+        // Escape special characters in team name for regex
+        const escapedTeamName = t.teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
+      });
+      
+      if (type === 'ipc_select' || type === 'ipc') {
+        const parts = display.split('+').map(p => p.trim());
+        const extractedParts = parts.map(p => {
+          if (p.toUpperCase().includes('ĐỢT')) {
+            const match = p.match(/\(([^)]+)\)/);
+            return match ? match[1] : p;
+          }
+          return p;
+        });
+        return extractedParts.join(' + ');
+      }
+      return display.trim();
+    }
+    
+    if (team === 'ALL') return rawVal;
+    const parts = rawVal.split(' + ');
+    const teamParts = parts.filter(p => p.includes(`(${team})`));
+    if (teamParts.length > 0) {
+      return teamParts.map(p => p.replace(`(${team})`, '').trim()).join(', ');
+    }
+    return '';
+  };
+
+  const mergeCellValue = (rawVal, newVal, team) => {
+    if (!team || team === 'ALL') return newVal;
+    const parts = rawVal ? rawVal.split(' + ').map(p => p.trim()).filter(Boolean) : [];
+    // Keep all other teams' batches 100% intact
+    const otherTeamParts = parts.filter(p => !p.includes(`(${team})`));
+
+    if (newVal && newVal.trim() !== '') {
+      const teamBatches = newVal.split(' + ').map(p => p.trim()).filter(Boolean);
+      const formattedTeamBatches = teamBatches.map(b => {
+        if (b.includes(`(${team})`)) return b;
+        return `${b} (${team})`;
+      });
+      return [...otherTeamParts, ...formattedTeamBatches].join(' + ');
+    }
+
+    return otherTeamParts.join(' + ');
+  };
+
+  const handleCellClick = (floor, cat, currentRawVal, numApts) => {
+    if (type === 'team' && selectedTeamFilter === 'ALL') {
+      openConfirm("⚠️ Bảng TỔNG chỉ dùng để xem tổng hợp tất cả các đội. Vui lòng chọn 1 Tổ Đội cụ thể ở menu trên cùng để nhập hoặc chỉnh sửa đợt thi công!", null);
+      return;
+    }
+
+    const hasExistingData = currentRawVal && currentRawVal.trim() !== '';
+    const totalApts = parseInt(numApts, 10);
+    const isNumAptsMissing = !numApts || isNaN(totalApts) || totalApts <= 0;
+
+    // Only block if trying to add new data to an empty cell on a floor with missing numApts
+    if (!hasExistingData && isNumAptsMissing) {
+      openConfirm(`⚠️ Tầng ${floor} chưa khai báo Số Căn Tổng (hiện tại là '-'). Vui lòng nhấp vào ô "Số căn" của Tầng ${floor} để nhập số căn tổng trước!`, null);
+      return;
+    }
+
+    setSelectedCell({ floor, category: cat, rawValue: currentRawVal, numApts: numApts || '' });
+    
+    // Parse batches for the currently selected team
+    let initialBatches = [];
+    if (currentRawVal && currentRawVal.trim() !== '') {
+      const parts = currentRawVal.split(' + ').map(p => p.trim()).filter(Boolean);
+      if (selectedTeamFilter !== 'ALL') {
+        initialBatches = parts
+          .filter(p => p.includes(`(${selectedTeamFilter})`) || !p.match(/\([^)]*\)/g) || p.includes('ĐỢT') || p.includes('IPC'))
+          .map(p => p.replace(`(${selectedTeamFilter})`, '').trim());
+      } else {
+        initialBatches = parts;
+      }
+    }
+
+    setBatchList(initialBatches);
+    setInputValue(initialBatches.join(' + '));
+    setNewBatchName('');
+    setNewBatchUnits('');
+    setUnitError('');
+    setActiveTeam(selectedTeamFilter !== 'ALL' ? selectedTeamFilter : '');
+  };
+
+  const handleSaveCell = (valueToSave) => {
+    const finalVal = valueToSave !== undefined ? valueToSave : inputValue;
+    if (selectedCell) {
+      const mergedVal = mergeCellValue(selectedCell.rawValue, finalVal, selectedTeamFilter);
+      updateMatrixCell(selectedCell.floor, selectedCell.category, mergedVal);
+      setSelectedCell(null);
+    }
+  };
+
+  const handleExportExcel = () => {
+    const exportData = paymentMatrix.map(row => {
+      const flatRow = {
+        'Tầng': row.floor,
+        'Số căn': row.numApts || '-'
+      };
+      
+      matrixBlocks.forEach(block => {
+        block.groups.forEach(group => {
+          group.items.forEach(cat => {
+            const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
+            if (isColumnVisible(itemKey)) {
+              const colName = `${block.blockName} - ${group.groupName} - ${cat}`;
+              
+              let cellValue = row.items[itemKey] || '';
+              if (type === 'ipc') {
+                 const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
+                 const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
+                 cellValue = ipcRow?.items?.[itemKey] || '';
+              } else {
+                 cellValue = displayCellValue(cellValue, selectedTeamFilter) || '';
+              }
+              
+              flatRow[colName] = cellValue;
+            }
+          });
+        });
+      });
+      return flatRow;
+    });
+
+    const title = type === 'ipc' ? `IPC_${projectName}` : `Tien_Do_${projectName}`;
+    exportToExcel(exportData, title, 'DuLieu');
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+      {/* Table Title Banner */}
+      <div className="bg-purple-800 text-white p-4 rounded-xl mb-4 shadow-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div>
+            <h2 className="font-extrabold text-lg tracking-wide uppercase">
+              {type === 'team' ? 'BẢNG THEO DÕI KẾ HOẠCH THANH TOÁN TỔ ĐỘI' : 'BẢNG THEO DÕI KẾ HOẠCH THANH TOÁN THẦU PHỤ'}
+            </h2>
+            <div className="flex items-center gap-4 text-xs text-purple-200 mt-1">
+              <span><strong>CÔNG TRÌNH:</strong> {projectName}</span>
+              <span><strong>GÓI THẦU:</strong> HOÀN THIỆN</span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs bg-purple-900/70 border border-purple-400/40 text-purple-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-yellow-300" /> A. Kế hoạch hồ sơ thanh toán
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Helper Toolbar */}
+      <div className="flex flex-wrap items-center justify-end gap-3 mb-4 text-xs no-print">
+        <button 
+          onClick={handlePrint}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
+        >
+          <Printer className="w-4 h-4" /> In Bảng
+        </button>
+        <button 
+          onClick={handleExportExcel}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-lg border border-emerald-200 shadow-sm transition-colors"
+        >
+          <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
+        </button>
+        <button 
+          onClick={() => setIsBOQModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 shadow-sm transition-colors"
+        >
+          <span className="text-lg leading-none pb-0.5">+</span> Tạo BOQ Nhanh
+        </button>
+      </div>
+
+      {/* Grid Container */}
+      <div className="overflow-x-auto rounded-xl border border-gray-300 shadow-inner">
+        <table className="matrix-table min-w-[1100px] w-full">
+          <thead>
+            {/* Block level */}
+            <tr>
+              <th rowSpan={2} colSpan={2} className="header-green text-sm uppercase font-bold py-2 px-2 whitespace-nowrap min-w-[100px] border-r border-white/20 align-middle">
+                {projectName}
+              </th>
+              {matrixBlocks.map((block, bIdx) => {
+                const visibleCountInBlock = block.groups.reduce((acc, g) => {
+                  const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
+                  return acc + Math.max(visG.length, visG.length === 0 ? 0 : 1);
+                }, 0);
+
+                if (visibleCountInBlock === 0) return null;
+
+                return (
+                  <th key={bIdx} colSpan={visibleCountInBlock} className="bg-indigo-900 text-white text-sm uppercase font-extrabold py-2 border-b border-white/20 border-r border-white/20">
+                    <div className="flex items-center justify-center gap-2 group">
+                      <span className="cursor-pointer hover:text-indigo-200 transition-colors" onDoubleClick={() => handleEditBlock(bIdx, block.blockName)} title="Bấm đúp để đổi tên Block">
+                        {block.blockName}
+                      </span>
+                      <button onClick={() => handleAddGroup(bIdx)} className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/20 hover:bg-white/40 text-white w-5 h-5 rounded-full flex items-center justify-center text-lg leading-none pb-0.5" title="Thêm Nhóm (VD: HÀNH LANG)">+</button>
+                    </div>
+                  </th>
+                );
+              })}
+            </tr>
+            {/* Group level */}
+            <tr>
+              {matrixBlocks.flatMap((block, bIdx) => 
+                block.groups.map((group, gIdx) => {
+                  const visItems = group.items.filter(cat => isColumnVisible(`${block.blockName}_${group.groupName}_${cat}`));
+                  if (visItems.length === 0 && group.items.length > 0) return null;
+                  const isEven = (bIdx + gIdx) % 2 === 0;
+                  return (
+                    <th 
+                      key={`${bIdx}-${gIdx}`} 
+                      colSpan={Math.max(visItems.length, 1)} 
+                      className={`${isEven ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'} text-[11px] font-bold uppercase py-1 border-b border-orange-200/60 border-r border-orange-200/60 transition-colors`}
+                    >
+                      <div className="flex items-center justify-center gap-2 group">
+                        <span className="cursor-pointer hover:text-orange-900" onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)} title="Bấm đúp để sửa tên">{group.groupName}</span>
+                        <button onClick={() => handleAddItem(bIdx, gIdx)} className="opacity-0 group-hover:opacity-100 transition-opacity bg-orange-200/60 hover:bg-orange-300 text-orange-900 w-4 h-4 rounded-full flex items-center justify-center text-base leading-none pb-0.5" title="Thêm Hạng Mục (Cột) mới">+</button>
+                      </div>
+                    </th>
+                  );
+                })
+              )}
+            </tr>
+            {/* Item level */}
+            <tr className="bg-slate-100 text-slate-800 text-[10px]">
+              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs min-w-[60px]">Tầng</th>
+              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs min-w-[60px]">Số căn</th>
+              {matrixBlocks.flatMap((block, bIdx) =>
+                block.groups.flatMap((group, gIdx) => {
+                  if (group.items.length === 0) {
+                    return <th key={`empty-${bIdx}-${gIdx}`} className="py-2 px-1 border-r border-gray-200 text-gray-400 italic text-[10px] font-normal">(Chưa có)</th>;
+                  }
+                  return group.items.map((cat, iIdx) => {
+                    const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
+                    if (!isColumnVisible(itemKey)) return null;
+                    return (
+                      <th 
+                        key={`${bIdx}-${gIdx}-${iIdx}`} 
+                        onDoubleClick={() => handleEditItem(bIdx, gIdx, iIdx, cat)}
+                        className="font-semibold leading-tight py-2 px-1 border-r border-gray-200 break-words max-w-[100px] cursor-pointer hover:bg-slate-300 transition-colors relative group/col"
+                        title="Bấm đúp để sửa tên"
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span>{cat}</span>
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleHideColumn(itemKey); }}
+                            className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-slate-200 rounded transition"
+                            title="Ẩn cột này"
+                          >
+                            <EyeOff className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </th>
+                    );
+                  });
+                })
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {paymentMatrix.map((row, idx) => (
+              <tr key={idx} className="hover:bg-slate-50 transition border-b border-gray-200 group">
+                <td 
+                  className="font-bold text-center bg-amber-50/70 border-r border-amber-200 text-slate-900 py-1.5 cursor-pointer hover:bg-amber-100 transition-colors"
+                  onDoubleClick={() => handleEditFloor(row.floor)}
+                  title="Bấm đúp để sửa hoặc xóa tầng"
+                >
+                  {row.floor}
+                </td>
+                <td 
+                  className="font-bold text-center bg-white border-r border-gray-200 text-slate-900 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors text-xs"
+                  onClick={() => handleEditNumApts(row.floor, row.numApts || '')}
+                  title="Nhấn để nhập số căn"
+                >
+                  {row.numApts || '-'}
+                </td>
+                {matrixBlocks.flatMap((block, bIdx) =>
+                  block.groups.flatMap((group, gIdx) => {
+                    if (group.items.length === 0) {
+                      return <td key={`empty-td-${bIdx}-${gIdx}`} className="border-r border-gray-200 bg-gray-50/50"></td>;
+                    }
+                    return group.items.map((cat, cIdx) => {
+                      const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
+                      if (!isColumnVisible(itemKey)) return null;
+                      const rawVal = row.items[itemKey];
+                      const displayVal = displayCellValue(rawVal, selectedTeamFilter);
+                      let ipcRawVal = '';
+                      if (type === 'ipc') {
+                        const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
+                        const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
+                        ipcRawVal = ipcRow?.items?.[itemKey] || '';
+                      }
+
+                      let bgColor = '';
+                      if (type === 'ipc') {
+                        if (ipcRawVal) {
+                          bgColor = getCellColor(ipcRawVal);
+                        } else if (rawVal) {
+                          bgColor = '#e2e8f0'; // slate-200 (gray)
+                        }
+                      } else {
+                        bgColor = getCellColor(displayVal || rawVal);
+                      }
+                      
+                      return (
+                        <td
+                          key={`${bIdx}-${gIdx}-${cIdx}`}
+                          onClick={() => {
+                            if ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal) {
+                               // No action if empty
+                            } else if (type === 'ipc') {
+                               handleCellClick(row.floor, itemKey, ipcRawVal, row.numApts);
+                            } else {
+                              handleCellClick(row.floor, itemKey, rawVal, row.numApts);
+                            }
+                          }}
+                          className={`transition-all duration-150 text-center font-bold text-xs text-gray-900 select-none border-r border-gray-200 ${
+                            (type === 'team' && selectedTeamFilter === 'ALL') 
+                              ? 'cursor-not-allowed hover:opacity-100' 
+                              : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
+                          }`}
+                          style={{ backgroundColor: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
+                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? "Chế độ xem TỔNG (Chỉ xem)" : "Nhấp để chỉnh sửa ô")}
+                        >
+                          <div className="flex flex-col items-center justify-center gap-1 min-h-[32px] py-1">
+                            {type === 'ipc' ? (
+                              <>
+                                <span className="text-[10px] opacity-70 leading-tight">{displayVal || ''}</span>
+                                {ipcRawVal && (
+                                  <span className="bg-blue-600 text-white border border-blue-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold shadow-sm mt-0.5">
+                                    {ipcRawVal}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <span>{displayVal || ''}</span>
+                            )}
+                          </div>
+                        </td>
+                      );
+                    });
+                  })
+                )}
+              </tr>
+            ))}
+            {type === 'team' && (
+              <tr>
+                <td 
+                  colSpan={matrixBlocks.reduce((acc, block) => acc + block.groups.reduce((gAcc, g) => gAcc + Math.max(g.items.length, 1), 0), 0) + 2} 
+                  className="py-2 px-2 border-t border-gray-200 bg-gray-50/50 text-left"
+                >
+                  <button 
+                    onClick={handleAddFloor}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-xs"
+                  >
+                    <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng Mới
+                  </button>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Edit Cell Modal */}
+      {selectedCell && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
+          <div className="bg-white rounded-[24px] p-6 w-full max-w-[440px] shadow-2xl border border-gray-100 transform transition-all">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="text-lg font-extrabold text-gray-900 flex items-center gap-2">
+                <Edit2 className="w-5 h-5 text-indigo-600" /> Cập nhật đợt thi công / thanh toán
+              </h3>
+              <button 
+                onClick={() => setSelectedCell(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <p className="text-[13px] text-gray-500 mb-4">
+              Tầng <strong className="text-indigo-600 font-extrabold">{selectedCell.floor}</strong> &bull; <span className="font-medium">{selectedCell.category}</span>
+            </p>
+
+            {/* List of current batches */}
+            {batchList.length > 0 && (
+              <div className="mb-4 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
+                <label className="block text-[11px] font-bold text-indigo-900 uppercase tracking-wider mb-2">
+                  Danh sách các đợt đã ghi nhận ({batchList.length}):
+                </label>
+                <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto pr-1">
+                  {batchList.map((batch, index) => (
+                    <span key={index} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 shadow-sm">
+                      {batch}
+                      <button 
+                        type="button"
+                        onClick={() => setBatchList(batchList.filter((_, i) => i !== index))}
+                        className="text-indigo-300 hover:text-red-600 hover:bg-red-50 rounded p-0.5 transition"
+                        title="Xóa đợt này"
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add batch form */}
+            {!(type === 'team' && selectedTeamFilter === 'ALL') && (
+              <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 mb-4 space-y-3">
+                <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
+                  Thêm đợt thi công mới:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 block mb-1">MÃ ĐỢT / IPC</span>
+                    <input 
+                      type="text" 
+                      value={newBatchName}
+                      onChange={(e) => setNewBatchName(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="VD: Đợt 01, IPC 01"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 block mb-1">SỐ CĂN / KHỐI LƯỢNG</span>
+                    <input 
+                      type="text" 
+                      value={newBatchUnits}
+                      onChange={(e) => setNewBatchUnits(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      placeholder="VD: 5 căn, 50%"
+                    />
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    if (!newBatchName.trim()) return;
+                    const formatted = newBatchUnits.trim() 
+                      ? `${newBatchName.trim()} (${newBatchUnits.trim()})` 
+                      : newBatchName.trim();
+                    setBatchList([...batchList, formatted]);
+                    setNewBatchName('');
+                    setNewBatchUnits('');
+                  }}
+                  className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 transition flex items-center justify-center gap-1"
+                >
+                  + Thêm đợt này vào danh sách
+                </button>
+              </div>
+            )}
+
+            {/* Quick action buttons */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-100">
+                <button 
+                  onClick={() => {
+                    setBatchList([]);
+                    handleSaveCell('');
+                  }}
+                  className="px-3 py-2 bg-slate-100 hover:bg-red-50 hover:text-red-600 text-slate-600 text-xs font-bold rounded-xl transition"
+                >
+                  Xóa rỗng
+                </button>
+                <div className="flex gap-2">
+                  {!(type === 'team' && selectedTeamFilter === 'ALL') && type !== 'ipc' && (
+                      <button 
+                        onClick={() => handleSaveCell('Xong 100%')} 
+                        className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-200 transition"
+                      >
+                        Xong 100%
+                      </button>
+                    )}
+                  <button 
+                    onClick={() => {
+                      const maxUnits = parseInt(selectedCell?.numApts, 10) || 0;
+                      const addUnits = newBatchName.trim() ? (parseInt(newBatchUnits, 10) || 0) : 0;
+                      const currentSum = batchList.reduce((sum, b) => {
+                        const m = b.match(/\((\d+)[^)]*\)/) || b.match(/(\d+)\s*căn/i) || b.match(/^(\d+)/);
+                        return sum + (m ? parseInt(m[1], 10) : 0);
+                      }, 0);
+
+                      const rawVal = selectedCell?.rawValue || '';
+                      const allParts = rawVal ? rawVal.split(' + ').map(p => p.trim()).filter(Boolean) : [];
+                      const otherTeamParts = activeTeam 
+                        ? allParts.filter(p => !p.includes(`(${activeTeam})`))
+                        : [];
+                      const otherTeamUnits = otherTeamParts.reduce((sum, b) => {
+                        const m = b.match(/\((\d+)[^)]*\)/) || b.match(/(\d+)\s*căn/i) || b.match(/^(\d+)/);
+                        return sum + (m ? parseInt(m[1], 10) : 0);
+                      }, 0);
+
+                      const totalProjected = otherTeamUnits + currentSum + addUnits;
+
+                      if (maxUnits > 0 && (totalProjected > maxUnits)) {
+                        const remainingAllowed = Math.max(0, maxUnits - (otherTeamUnits + currentSum));
+                        const errorMsg = `⚠️ KHÔNG THỂ LƯU (VƯỢT HẠN MỨC): Tổng số căn (${totalProjected} căn) vượt quá số căn tổng của Tầng ${selectedCell.floor} (${maxUnits} căn)! Bạn chỉ có thể nhập tối đa thêm ${remainingAllowed} căn nữa.`;
+                        setUnitError(errorMsg);
+                        openConfirm(errorMsg, null);
+                        return;
+                      }
+
+                      let finalVal = batchList.join(' + ');
+                      if (newBatchName.trim()) {
+                        let formatted = newBatchUnits.trim() 
+                          ? `${newBatchName.trim()} (${newBatchUnits.trim()})` 
+                          : newBatchName.trim();
+                        if (type === 'team' && activeTeam) {
+                          formatted = `${formatted} (${activeTeam})`;
+                        }
+                        finalVal = finalVal ? `${finalVal} + ${formatted}` : formatted;
+                      }
+                      handleSaveCell(finalVal);
+                    }} 
+                    className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition"
+                  >
+                    Lưu thay đổi
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create BOQ Modal */}
+      {isBOQModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-[420px] shadow-2xl border border-gray-100 overflow-hidden transform transition-all">
+            <div className="p-5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-between">
+              <h3 className="font-bold text-base flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-yellow-300" /> Tạo cấu trúc BOQ mới
+              </h3>
+              <button onClick={() => setIsBOQModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateBOQ} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Cấp 1: Block <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: BLOCK B, THÁP C, KHU VILLA..."
+                  value={boqData.blockName}
+                  onChange={(e) => setBoqData({ ...boqData, blockName: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-semibold"
+                  list="block-suggestions"
+                />
+                <datalist id="block-suggestions">
+                  {matrixBlocks.map((b, i) => <option key={i} value={b.blockName} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Cấp 2: Nhóm <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: CĂN HỘ, MẶT NGOÀI..."
+                  value={boqData.groupName}
+                  onChange={(e) => setBoqData({ ...boqData, groupName: e.target.value.toUpperCase() })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-semibold"
+                  list="group-suggestions"
+                />
+                <datalist id="group-suggestions">
+                  {Array.from(new Set(matrixBlocks.flatMap(b => b.groups.map(g => g.groupName)))).map((g, i) => <option key={i} value={g} />)}
+                </datalist>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Cấp 3: Hạng mục <span className="text-red-500">*</span></label>
+                <input
+                  type="text"
+                  required
+                  placeholder="VD: Xây tường, Lát nền..."
+                  value={boqData.itemName}
+                  onChange={(e) => setBoqData({ ...boqData, itemName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:outline-none text-sm font-semibold"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBOQModalOpen(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-500/20"
+                >
+                  Tạo cấu trúc
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Prompt/Confirm Modal */}
+      {promptConfig.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-[420px] shadow-2xl border border-gray-100 transform transition-all">
+            <h3 className="text-lg font-extrabold text-gray-900 mb-4">{promptConfig.title}</h3>
+            
+            {!promptConfig.isConfirm && (
+              <input
+                type="text"
+                value={promptInputValue}
+                onChange={(e) => setPromptInputValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && typeof promptConfig.onConfirm === 'function') {
+                    promptConfig.onConfirm(promptInputValue);
+                    setPromptConfig({ ...promptConfig, isOpen: false });
+                  }
+                }}
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all mb-6"
+                autoFocus
+              />
+            )}
+            
+            <div className="flex justify-between items-center mt-6 pt-2 border-t border-gray-100">
+              {!promptConfig.isConfirm && promptConfig.onDelete ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const deleteFn = promptConfig.onDelete;
+                    setPromptConfig({ ...promptConfig, isOpen: false });
+                    setTimeout(() => deleteFn(), 50);
+                  }}
+                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs border border-red-200 transition active:scale-95 flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-red-500" /> Xóa
+                </button>
+              ) : <div />}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPromptConfig({ ...promptConfig, isOpen: false })}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof promptConfig.onConfirm === 'function') {
+                      promptConfig.onConfirm(promptInputValue);
+                    }
+                    setPromptConfig({ ...promptConfig, isOpen: false });
+                  }}
+                  className={`px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 ${
+                    promptConfig.isConfirm 
+                      ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' 
+                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
+                  }`}
+                >
+                  {promptConfig.onConfirm ? (promptConfig.isConfirm ? 'Đồng ý xóa' : 'Xác nhận') : 'Đã hiểu'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Thêm Tầng Mới */}
+      {isAddFloorModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-[420px] shadow-2xl border border-gray-100 transform transition-all">
+            <h3 className="text-lg font-extrabold text-gray-900 mb-4">Thêm Tầng Mới</h3>
+            
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Số lượng tầng cần thêm</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={addFloorData.numFloors}
+                  onChange={(e) => setAddFloorData({ ...addFloorData, numFloors: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                  autoFocus
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Bắt đầu từ tầng số (tự động tăng)</label>
+                <input
+                  type="number"
+                  value={addFloorData.startNumber}
+                  onChange={(e) => setAddFloorData({ ...addFloorData, startNumber: e.target.value })}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Số căn mỗi tầng (Không bắt buộc)</label>
+                <input
+                  type="text"
+                  value={addFloorData.numApts}
+                  onChange={(e) => setAddFloorData({ ...addFloorData, numApts: e.target.value })}
+                  placeholder="VD: 10"
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                />
+              </div>
+            </div>
+            
+            <div className="flex justify-end gap-2 mt-6 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsAddFloorModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const numFloors = parseInt(addFloorData.numFloors, 10);
+                  const startNum = parseInt(addFloorData.startNumber, 10);
+                  const apts = addFloorData.numApts.trim();
+                  
+                  if (!isNaN(numFloors) && numFloors > 0 && !isNaN(startNum)) {
+                    for (let i = 0; i < numFloors; i++) {
+                      const floorName = `Tầng ${startNum + i}`;
+                      addFloor(floorName);
+                      if (apts !== '') {
+                        // Thêm timeout nhỏ để đảm bảo addFloor đã update state
+                        setTimeout(() => updateFloorNumApts(floorName, apts), 50);
+                      }
+                    }
+                  }
+                  setIsAddFloorModalOpen(false);
+                }}
+                className="px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20"
+              >
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ẩn / Hiện Cột */}
+      {isColumnModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[24px] p-6 w-full max-w-lg shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <Eye className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-extrabold text-gray-900">Quản Lý Ẩn / Hiện Cột</h3>
+              </div>
+              <button onClick={() => setIsColumnModalOpen(false)} className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center text-sm font-bold">✕</button>
+            </div>
+
+            <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1 text-xs">
+              {matrixBlocks.map((block, bIdx) => (
+                <div key={bIdx} className="bg-slate-50 p-3 rounded-xl border border-gray-200 space-y-2">
+                  <div className="font-extrabold text-indigo-900 uppercase text-[11px] border-b border-gray-200 pb-1">
+                    {block.blockName}
+                  </div>
+                  {block.groups.map((group, gIdx) => (
+                    <div key={gIdx} className="pl-2 space-y-1.5">
+                      <div className="font-bold text-orange-800 text-[10px] uppercase">{group.groupName}</div>
+                      <div className="grid grid-cols-2 gap-2 pl-2">
+                        {group.items.map((cat, iIdx) => {
+                          const key = `${block.blockName}_${group.groupName}_${cat}`;
+                          const visible = isColumnVisible(key);
+                          return (
+                            <label key={iIdx} className="flex items-center gap-2 cursor-pointer text-gray-700 hover:text-indigo-600 font-medium">
+                              <input 
+                                type="checkbox" 
+                                checked={visible}
+                                onChange={() => toggleHideColumn(key)}
+                                className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                              />
+                              <span className={visible ? 'font-bold text-gray-900' : 'line-through text-gray-400'}>{cat}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 mt-6 pt-3 border-t border-gray-100">
+              <button 
+                type="button" 
+                onClick={() => setHiddenColumns([])} 
+                className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition"
+              >
+                Hiện Tất Cả Cột
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setIsColumnModalOpen(false)} 
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
