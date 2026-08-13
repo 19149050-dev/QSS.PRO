@@ -13,7 +13,7 @@ export default function AddProjectModal({ isOpen, onClose }) {
     address: '',
     contractNo: '',
     contractDate: new Date().toISOString().split('T')[0],
-    cht: '',
+    cht: [],
     gs: '',
     numBlocks: '1',
     contractValue: '',
@@ -29,7 +29,7 @@ export default function AddProjectModal({ isOpen, onClose }) {
 
     addProject({
       ...formData,
-      cht: formData.cht ? [formData.cht] : [],
+      cht: formData.cht || [],
       contractValue: Number(formData.contractValue) || 0,
       addendumValue: Number(formData.addendumValue) || 0,
       advancePayment: Number(formData.advancePayment) || 0,
@@ -114,18 +114,27 @@ export default function AddProjectModal({ isOpen, onClose }) {
             </div>
             <div>
               <label className="block font-semibold text-gray-700 mb-1">CHT, GS</label>
-              <select
-                value={formData.cht}
-                onChange={(e) => setFormData({ ...formData, cht: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              >
-                <option value="">-- Chọn Nhân viên --</option>
+              <div className="w-full h-[84px] overflow-y-auto px-3 py-2 border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-indigo-500">
                 {users.filter(u => u.role !== 'ADMIN').map((u) => (
-                  <option key={u.id} value={u.name}>
-                    {u.name} ({u.role})
-                  </option>
+                  <label key={u.id} className="flex items-center gap-2 mb-1.5 cursor-pointer hover:bg-gray-50 px-1 rounded transition">
+                    <input
+                      type="checkbox"
+                      checked={formData.cht.includes(u.name)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setFormData(prev => ({
+                          ...prev,
+                          cht: checked 
+                            ? [...prev.cht, u.name]
+                            : prev.cht.filter(n => n !== u.name)
+                        }));
+                      }}
+                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-xs text-gray-700">{u.name} ({u.role})</span>
+                  </label>
                 ))}
-              </select>
+              </div>
             </div>
           </div>
 
