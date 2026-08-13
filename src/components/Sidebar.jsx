@@ -24,10 +24,11 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const { activeTab, setActiveTab } = useStore();
+  const { activeTab, setActiveTab, currentUser, logoutUser } = useStore();
 
   const handleLogout = () => {
     document.cookie = 'isAuthenticated=; path=/; max-age=0; samesite=lax';
+    logoutUser();
     window.location.assign('/login');
   };
 
@@ -68,12 +69,12 @@ export default function Sidebar() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-white font-bold text-xs shadow-sm">
-                A
+                {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'A'}
               </div>
               <div>
-                <p className="font-bold text-white leading-tight">Quản trị hệ thống</p>
+                <p className="font-bold text-white leading-tight">{currentUser?.name || 'Quản trị hệ thống'}</p>
                 <span className="inline-block text-[9px] bg-black border border-zinc-800 text-zinc-400 px-1.5 py-0.5 rounded font-black tracking-widest uppercase mt-1">
-                  ADMIN
+                  {currentUser?.role || 'ADMIN'}
                 </span>
               </div>
             </div>

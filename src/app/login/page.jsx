@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ArrowRight, Building2, Eye, LockKeyhole, ShieldCheck, Sparkles, Sun, UserRound } from 'lucide-react';
-import { findAuthUser } from '@/lib/authUsers';
+import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles, Sun, UserRound } from 'lucide-react';
+import { useStore } from '@/store/useStore';
 
 const highlights = [
   { label: 'Hiệu quả', icon: ShieldCheck },
@@ -11,8 +11,10 @@ const highlights = [
 ];
 
 export default function LoginPage() {
+  const { users, loginUser } = useStore();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('0000');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -24,11 +26,20 @@ export default function LoginPage() {
   const handleLogin = (event) => {
     event.preventDefault();
 
-    const authUser = findAuthUser(username, password);
-    if (authUser) {
-      document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
-      window.location.assign('/');
-      return;
+    const inputUsername = username.trim().toLowerCase();
+    const user = users.find(u => 
+      u.username.toLowerCase() === inputUsername || 
+      u.username.toLowerCase() === `@${inputUsername}`
+    );
+
+    if (user) {
+      const expectedPassword = user.password || (user.username === '@admin' ? '0000' : '1234');
+      if (password === expectedPassword) {
+        document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
+        loginUser(user);
+        window.location.assign('/');
+        return;
+      }
     }
 
     setError('Tài khoản hoặc mật khẩu không chính xác.');
@@ -85,13 +96,19 @@ export default function LoginPage() {
               <div className="group relative flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 transition-all focus-within:border-black focus-within:bg-white focus-within:ring-4 focus-within:ring-black/5 hover:border-slate-300">
                 <LockKeyhole className="h-4 w-4 text-slate-400 transition-colors group-focus-within:text-black" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   className="h-12 w-full bg-transparent text-[14px] font-medium text-black outline-none placeholder:text-slate-400"
                   placeholder="Nhập mật khẩu..."
                 />
-                <Eye className="h-4 w-4 text-slate-400 cursor-pointer hover:text-black transition-colors" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="focus:outline-none">
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-slate-400 cursor-pointer hover:text-black transition-colors" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-slate-400 cursor-pointer hover:text-black transition-colors" />
+                  )}
+                </button>
               </div>
             </label>
           </div>

@@ -60,7 +60,10 @@ export const useStore = create(
       activeViewParams: null,
       viewMode: 'table', // 'table' | 'card'
       ipcSelections: {}, // stores selected cells for IPC: { "projectName_period": { "floor_category": true/false } }
+      currentUser: null,
 
+      loginUser: (user) => set({ currentUser: user }),
+      logoutUser: () => set({ currentUser: null }),
       setViewMode: (mode) => set({ viewMode: mode }),
       setActiveProject: (project) => set({ activeProject: project }),
       setActiveTab: (tab, params = null) => set({ activeTab: tab, activeViewParams: params }),
