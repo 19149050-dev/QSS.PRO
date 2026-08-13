@@ -239,12 +239,12 @@ export default function ProjectsPage() {
 
                 <div className="mt-6 pt-4 border-t border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Link
-                      href={`/projects/${proj.id}`}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                    <button
+                      onClick={() => setActiveTab('project-detail', { id: proj.id })}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 transition"
                     >
-                      Ma trận thanh toán <ChevronRight className="w-4 h-4" />
-                    </Link>
+                      Chi tiết <ChevronRight className="w-3 h-3" />
+                    </button>
                     <button onClick={() => setEditingProject(proj)} title="Sửa công trình" className="text-gray-400 hover:text-indigo-600 p-1">
                       <Edit3 className="w-3.5 h-3.5" />
                     </button>
