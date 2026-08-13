@@ -167,10 +167,18 @@ export default function UsersPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5 text-gray-400">
-                          <button title="Lịch sử" className="p-1.5 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
+                          <button 
+                            title="Lịch sử" 
+                            onClick={() => alert("Tính năng xem lịch sử đang phát triển")}
+                            className="p-1.5 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          >
                             <Clock className="w-3.5 h-3.5" />
                           </button>
-                          <button title="Sửa" className="p-1.5 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition">
+                          <button 
+                            title="Sửa" 
+                            onClick={() => alert("Tính năng sửa nhân viên đang phát triển")}
+                            className="p-1.5 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                          >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
                           <button 
@@ -180,12 +188,20 @@ export default function UsersPage() {
                           >
                             {user.status === 'Active' ? <Lock className="w-3.5 h-3.5 text-amber-600" /> : <Unlock className="w-3.5 h-3.5 text-emerald-600" />}
                           </button>
-                          <button title="Đổi mật khẩu" className="p-1.5 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition">
+                          <button 
+                            title="Đổi mật khẩu" 
+                            onClick={() => alert("Tính năng đổi mật khẩu đang phát triển")}
+                            className="p-1.5 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition"
+                          >
                             <Key className="w-3.5 h-3.5" />
                           </button>
                           <button 
                             title="Xóa" 
-                            onClick={() => deleteUser(user.id)}
+                            onClick={() => {
+                              if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản của ${user.name} không?`)) {
+                                deleteUser(user.id);
+                              }
+                            }}
                             className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                           >
                             <Trash2 className="w-3.5 h-3.5 text-red-400" />
