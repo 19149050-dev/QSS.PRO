@@ -4,12 +4,11 @@ import React from 'react';
 import Navbar from '@/components/Navbar';
 import { useStore } from '@/store/useStore';
 import PaymentMatrix from '@/components/PaymentMatrix';
-import Link from 'next/link';
 import { ArrowLeft, Building2, MapPin } from 'lucide-react';
 
-export default function ProjectDetailPage({ params }) {
-  const { projects } = useStore();
-  const proj = projects.find(p => p.id === params.id);
+export default function ProjectDetailView() {
+  const { projects, activeViewParams, setActiveTab } = useStore();
+  const proj = projects.find(p => p.id === activeViewParams?.id);
 
   const formatVND = (amount) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
@@ -20,9 +19,9 @@ export default function ProjectDetailPage({ params }) {
       <div className="pb-12">
         <Navbar />
         <div className="p-8 w-full">
-          <Link href="/projects" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition mb-6">
+          <button onClick={() => setActiveTab('projects')} className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition mb-6">
             <ArrowLeft className="w-4 h-4" /> Quay lại Danh sách Công trình
-          </Link>
+          </button>
           <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 shadow-sm">
             <Building2 className="w-12 h-12 text-gray-300 mx-auto mb-4" />
             <h2 className="text-lg font-bold text-gray-800 mb-2">Không tìm thấy công trình</h2>
@@ -39,9 +38,9 @@ export default function ProjectDetailPage({ params }) {
 
       <div className="p-8 space-y-8 w-full">
         {/* Back Link */}
-        <Link href="/projects" className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition">
+        <button onClick={() => setActiveTab('projects')} className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition">
           <ArrowLeft className="w-4 h-4" /> Quay lại Danh sách Công trình
-        </Link>
+        </button>
 
         {/* Project Header Info */}
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-200">

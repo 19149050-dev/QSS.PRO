@@ -1,26 +1,32 @@
 'use client';
 
 import React from 'react';
-import { usePathname } from 'next/navigation';
+import { useStore } from '@/store/useStore';
 import { Search, Bell, ShieldCheck, Sparkles, Database } from 'lucide-react';
 
 export default function Navbar({ onOpenAddModal, searchSearch, onSearchChange }) {
-  const pathname = usePathname();
+  const { activeTab } = useStore();
 
   const getHeaderInfo = () => {
-    switch (pathname) {
-      case '/':
+    switch (activeTab) {
+      case 'dashboard':
         return { title: 'Trang Chủ Tổng Quan', subtitle: 'Báo cáo tổng quan tiến độ thu tiền CĐT và thanh toán Tổ đội.' };
-      case '/users':
+      case 'users':
         return { title: 'Quản lý Nhân viên', subtitle: 'Thêm hoặc xóa tài khoản truy cập hệ thống.' };
-      case '/projects':
+      case 'projects':
+      case 'project-detail':
         return { title: 'Quản lý Công Trình', subtitle: 'Quản lý danh sách dự án và thông tin hợp đồng cơ bản.' };
-      case '/teams':
+      case 'teams':
+      case 'manage-teams':
         return { title: 'Quản lý Tổ Đội & Thầu Phụ', subtitle: 'Theo dõi hợp đồng, ứng trước và tiến độ thanh toán từng tổ đội.' };
-      case '/ipc':
+      case 'ipc':
+      case 'ipc-thuc':
+      case 'ipc-du-kien':
         return { title: 'Quản lý Hồ Sơ Thanh Toán (IPC)', subtitle: 'Lập & theo dõi tiến độ nghiệm thu A-B và đợt chi trả B-C.' };
-      case '/materials':
+      case 'materials':
         return { title: 'Quản lý Vật Tư Dự Án', subtitle: 'Theo dõi khối lượng kế hoạch, nhập thực tế và định mức vật tư.' };
+      case 'trash':
+        return { title: 'Thùng rác', subtitle: 'Khôi phục hoặc xóa vĩnh viễn các dữ liệu đã bị xóa.' };
       default:
         return { title: 'Hệ thống Quản lý QS PRO', subtitle: 'Phần mềm chuyên sâu cho Kỹ sư Khối lượng & Quản lý Dự án.' };
     }

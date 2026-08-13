@@ -1,8 +1,7 @@
 'use client';
 
 import React from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useStore } from '@/store/useStore';
 import { 
   Home, 
   Building2, 
@@ -25,7 +24,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar() {
-  const pathname = usePathname();
+  const { activeTab, setActiveTab } = useStore();
 
   const handleLogout = () => {
     document.cookie = 'isAuthenticated=; path=/; max-age=0; samesite=lax';
@@ -33,20 +32,20 @@ export default function Sidebar() {
   };
 
   const mainNavItems = [
-    { label: 'Trang Chủ', href: '/', icon: Home },
-    { label: 'Tổ Đội', href: '/teams', icon: Users },
-    { label: 'IPC Dự Kiến', href: '/ipc-du-kien', icon: FileSpreadsheet },
-    { label: 'IPC Thực', href: '/ipc-thuc', icon: ClipboardList },
+    { label: 'Trang Chủ', id: 'dashboard', icon: Home },
+    { label: 'Tổ Đội', id: 'teams', icon: Users },
+    { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
+    { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList },
   ];
 
   const systemNavItems = [
-    { label: 'QL Công trình', href: '/projects', icon: Building2 },
-    { label: 'QL Nhân viên', href: '/users', icon: Users },
-    { label: 'QL Tổ đội', href: '/manage-teams', icon: Users },
-    { label: 'Thùng rác', href: '/trash', icon: Trash2 },
+    { label: 'QL Công trình', id: 'projects', icon: Building2 },
+    { label: 'QL Nhân viên', id: 'users', icon: Users },
+    { label: 'QL Tổ đội', id: 'manage-teams', icon: Users },
+    { label: 'Thùng rác', id: 'trash', icon: Trash2 },
   ];
 
-  const isActive = (path) => pathname === path;
+  const isActive = (id) => activeTab === id;
 
   return (
     <aside className="w-64 bg-[#0a0a0a] text-zinc-400 min-h-screen flex flex-col justify-between flex-shrink-0 border-r border-zinc-900 shadow-xl relative z-20">
@@ -89,12 +88,13 @@ export default function Sidebar() {
           <div className="px-3 text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 mt-4">Chức năng chính</div>
           {mainNavItems.map((item, idx) => {
             const Icon = item.icon;
-            const active = isActive(item.href);
+            const active = isActive(item.id);
             return (
-              <Link
+              <button
                 key={idx}
-                href={item.href}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
                   active
                     ? 'bg-zinc-800 text-white'
                     : 'text-zinc-400 hover:bg-zinc-900/80 hover:text-white'
@@ -113,7 +113,7 @@ export default function Sidebar() {
                     {item.badge}
                   </span>
                 )}
-              </Link>
+              </button>
             );
           })}
         </div>
@@ -123,12 +123,13 @@ export default function Sidebar() {
           <div className="px-3 text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2">Hệ thống</div>
           {systemNavItems.map((item, idx) => {
             const Icon = item.icon;
-            const active = isActive(item.href);
+            const active = isActive(item.id);
             return (
-              <Link
+              <button
                 key={idx}
-                href={item.href}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
                   active
                     ? 'bg-zinc-800 text-white'
                     : 'text-zinc-400 hover:bg-zinc-900/80 hover:text-white'
@@ -140,7 +141,7 @@ export default function Sidebar() {
                   </div>
                   <span>{item.label}</span>
                 </div>
-              </Link>
+              </button>
             );
           })}
         </div>

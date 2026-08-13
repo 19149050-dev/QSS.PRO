@@ -56,11 +56,14 @@ export const useStore = create(
       isLoading: false,
       error: null,
       activeProject: null,
+      activeTab: 'dashboard',
+      activeViewParams: null,
       viewMode: 'table', // 'table' | 'card'
       ipcSelections: {}, // stores selected cells for IPC: { "projectName_period": { "floor_category": true/false } }
 
       setViewMode: (mode) => set({ viewMode: mode }),
       setActiveProject: (project) => set({ activeProject: project }),
+      setActiveTab: (tab, params = null) => set({ activeTab: tab, activeViewParams: params }),
       toggleIpcSelection: (projectName, period, floor, category) => set((state) => {
         const key = `${projectName}_${period}`;
         const currentSelections = state.ipcSelections[key] || {};
@@ -909,11 +912,13 @@ export const useStore = create(
 
           // Fetch Teams
           const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*');
-          if (!teamsError && teamsData && teamsData.length > 0) {
+          if (!teamsError && teamsData) {
             const mappedTeams = teamsData.map(t => ({
               id: t.id,
               projectId: t.project_id,
               projectName: t.project_name,
+              projects: t.projects,
+              members: t.members,
               teamName: t.team_name,
               leaderName: t.leader_name,
               phone: t.phone,
@@ -930,7 +935,7 @@ export const useStore = create(
 
           // Fetch IPCs
           const { data: ipcsData, error: ipcsError } = await supabase.from('ipcs').select('*');
-          if (!ipcsError && ipcsData && ipcsData.length > 0) {
+          if (!ipcsError && ipcsData) {
             const mappedIpcs = ipcsData.map(ipc => ({
               id: ipc.id,
               type: ipc.type,
@@ -955,7 +960,7 @@ export const useStore = create(
 
           // Fetch Materials
           const { data: matData, error: matError } = await supabase.from('materials').select('*');
-          if (!matError && matData && matData.length > 0) {
+          if (!matError && matData) {
             const mappedMat = matData.map(m => ({
               id: m.id,
               projectId: m.project_id,

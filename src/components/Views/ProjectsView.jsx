@@ -5,7 +5,6 @@ import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AddProjectModal from '@/components/Modals/AddProjectModal';
 import EditProjectModal from '@/components/Modals/EditProjectModal';
-import Link from 'next/link';
 import { 
   Building2, 
   Plus, 
@@ -24,7 +23,7 @@ import {
 } from 'lucide-react';
 
 export default function ProjectsPage() {
-  const { projects, viewMode, setViewMode, deleteProject, updateProject } = useStore();
+  const { projects, viewMode, setViewMode, deleteProject, updateProject, setActiveTab } = useStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingProject, setEditingProject] = useState(null);
@@ -122,9 +121,9 @@ export default function ProjectsPage() {
                   {filteredProjects.map((proj) => (
                     <tr key={proj.id} className="hover:bg-slate-50 transition">
                       <td>
-                        <Link href={`/projects/${proj.id}`} className="font-extrabold text-gray-900 hover:text-indigo-600 transition flex items-center gap-1.5">
+                        <button onClick={() => setActiveTab('project-detail', { id: proj.id })} className="font-extrabold text-gray-900 hover:text-indigo-600 transition flex items-center gap-1.5 text-left">
                           {proj.name} <ExternalLink className="w-3 h-3 text-gray-400" />
-                        </Link>
+                        </button>
                         <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{proj.orderType}</div>
                         <div className="text-[10px] text-gray-400 font-medium">{proj.subContractorInfo || 'Tổng thầu: N/A'}</div>
                       </td>
@@ -164,13 +163,13 @@ export default function ProjectsPage() {
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          <Link
-                            href={`/projects/${proj.id}`}
+                          <button
+                            onClick={() => setActiveTab('project-detail', { id: proj.id })}
                             title="Xem Ma Trận Thanh Toán"
                             className="p-1.5 text-purple-600 hover:bg-purple-50 rounded-lg transition"
                           >
                             <TableProperties className="w-4 h-4" />
-                          </Link>
+                          </button>
                           <button 
                             title="Sửa" 
                             onClick={() => setEditingProject(proj)}
@@ -208,9 +207,9 @@ export default function ProjectsPage() {
                     </span>
                   </div>
 
-                  <Link href={`/projects/${proj.id}`} className="font-extrabold text-base text-gray-900 hover:text-indigo-600 transition block mb-1">
+                  <button onClick={() => setActiveTab('project-detail', { id: proj.id })} className="text-sm font-black text-gray-900 hover:text-indigo-600 transition truncate block mb-1 text-left">
                     {proj.name}
-                  </Link>
+                  </button>
 
                   <p className="text-xs text-gray-500 flex items-center gap-1 mb-4">
                     <MapPin className="w-3.5 h-3.5 text-gray-400" /> {proj.address}
