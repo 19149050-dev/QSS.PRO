@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import AddUserModal from '@/components/Modals/AddUserModal';
 import EditUserModal from '@/components/Modals/EditUserModal';
+import ConfirmModal from '@/components/Modals/ConfirmModal';
 import { 
   UserPlus, 
   Search, 
@@ -29,6 +30,11 @@ export default function UsersPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedUserToEdit, setSelectedUserToEdit] = useState(null);
   const [selectedUserForSig, setSelectedUserForSig] = useState(null);
+  
+  const [confirmDeleteState, setConfirmDeleteState] = useState({
+    isOpen: false,
+    userToDelete: null
+  });
 
   const getRoleBadgeStyle = (role) => {
     switch (role) {
@@ -194,9 +200,7 @@ export default function UsersPage() {
                                 alert('Không thể xóa tài khoản Quản trị viên (ADMIN)!');
                                 return;
                               }
-                              if (window.confirm(`Bạn có chắc chắn muốn xóa tài khoản của ${user.name} không?`)) {
-                                deleteUser(user.id);
-                              }
+                              setConfirmDeleteState({ isOpen: true, userToDelete: user });
                             }}
                             className="p-1.5 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                           >
@@ -235,6 +239,18 @@ export default function UsersPage() {
 
       <AddUserModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
       <EditUserModal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} userToEdit={selectedUserToEdit} />
+      
+      <ConfirmModal
+        isOpen={confirmDeleteState.isOpen}
+        onClose={() => setConfirmDeleteState({ isOpen: false, userToDelete: null })}
+        onConfirm={() => {
+          if (confirmDeleteState.userToDelete) {
+            deleteUser(confirmDeleteState.userToDelete.id);
+          }
+        }}
+        title="Xác nhận xóa tài khoản"
+        message={`Bạn có chắc chắn muốn xóa tài khoản của nhân viên "${confirmDeleteState.userToDelete?.name}" không? Hành động này không thể hoàn tác.`}
+      />
     </div>
   );
 }
