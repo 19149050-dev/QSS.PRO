@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { X, Building2, Plus } from 'lucide-react';
 
 export default function AddProjectModal({ isOpen, onClose }) {
-  const { addProject } = useStore();
+  const { addProject, users } = useStore();
   const [formData, setFormData] = useState({
     name: '',
     orderType: 'TRỰC TIẾP ORDER',
@@ -29,7 +29,7 @@ export default function AddProjectModal({ isOpen, onClose }) {
 
     addProject({
       ...formData,
-      cht: formData.cht ? formData.cht.split(',').map(c => c.trim()).filter(Boolean) : [],
+      cht: formData.cht ? [formData.cht] : [],
       contractValue: Number(formData.contractValue) || 0,
       addendumValue: Number(formData.addendumValue) || 0,
       advancePayment: Number(formData.advancePayment) || 0,
@@ -114,13 +114,18 @@ export default function AddProjectModal({ isOpen, onClose }) {
             </div>
             <div>
               <label className="block font-semibold text-gray-700 mb-1">CHT, GS</label>
-              <input
-                type="text"
-                placeholder="VD: Huỳnh Văn Trung"
+              <select
                 value={formData.cht}
                 onChange={(e) => setFormData({ ...formData, cht: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
+              >
+                <option value="">-- Chọn Nhân viên --</option>
+                {users.filter(u => u.role !== 'ADMIN').map((u) => (
+                  <option key={u.id} value={u.name}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

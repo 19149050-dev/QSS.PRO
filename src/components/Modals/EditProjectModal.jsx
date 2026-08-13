@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { X, Building2, Save } from 'lucide-react';
 
 export default function EditProjectModal({ project, isOpen, onClose }) {
-  const { updateProject } = useStore();
+  const { updateProject, users } = useStore();
   const [formData, setFormData] = useState({
     name: '',
     orderType: 'TRỰC TIẾP ORDER',
@@ -31,7 +31,7 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
         address: project.address || '',
         contractNo: project.contractNo || '',
         contractDate: project.contractDate || '',
-        cht: project.cht?.join(', ') || '',
+        cht: project.cht && project.cht.length > 0 ? project.cht[0] : '',
         gs: project.gs || '',
         numBlocks: project.numBlocks || project.floors || '1',
         contractValue: project.contractValue || 0,
@@ -48,7 +48,7 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
     e.preventDefault();
     updateProject(project.id, {
       ...formData,
-      cht: formData.cht ? formData.cht.split(',').map(c => c.trim()) : [],
+      cht: formData.cht ? [formData.cht] : [],
       contractValue: Number(formData.contractValue) || 0,
       addendumValue: Number(formData.addendumValue) || 0,
       advancePayment: Number(formData.advancePayment) || 0
@@ -141,12 +141,18 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-gray-700 mb-1">CHT, GS</label>
-              <input
-                type="text"
+              <select
                 value={formData.cht}
                 onChange={(e) => setFormData({ ...formData, cht: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
-              />
+              >
+                <option value="">-- Chọn Nhân viên --</option>
+                {users.filter(u => u.role !== 'ADMIN').map((u) => (
+                  <option key={u.id} value={u.name}>
+                    {u.name} ({u.role})
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
