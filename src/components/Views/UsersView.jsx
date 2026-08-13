@@ -33,18 +33,12 @@ export default function UsersPage() {
         return 'bg-black text-white font-black';
       case 'QS':
         return 'bg-purple-100 text-purple-700 font-bold border border-purple-300';
-      case 'GIÁM ĐỐC':
-        return 'bg-amber-100 text-amber-800 font-bold border border-amber-300';
-      case 'THƯ KÝ':
-        return 'bg-pink-100 text-pink-700 font-bold border border-pink-300';
-      case 'KẾ TOÁN VẬT TƯ':
-        return 'bg-cyan-100 text-cyan-800 font-bold border border-cyan-300';
-      case 'KẾ TOÁN THUẾ':
-        return 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
-      case 'KẾ TOÁN CHI PHÍ':
-        return 'bg-lime-100 text-lime-800 font-bold border border-lime-300';
       case 'CHT':
         return 'bg-sky-100 text-sky-800 font-bold border border-sky-300';
+      case 'GSHT':
+        return 'bg-amber-100 text-amber-800 font-bold border border-amber-300';
+      case 'QSA':
+        return 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
       default:
         return 'bg-gray-100 text-gray-700 font-semibold';
     }

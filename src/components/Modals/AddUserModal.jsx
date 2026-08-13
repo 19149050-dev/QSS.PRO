@@ -9,6 +9,7 @@ export default function AddUserModal({ isOpen, onClose }) {
   const [formData, setFormData] = useState({
     name: '',
     username: '',
+    password: '',
     phone: '',
     role: 'QS',
     status: 'Active'
@@ -17,14 +18,10 @@ export default function AddUserModal({ isOpen, onClose }) {
   if (!isOpen) return null;
 
   const roles = [
-    'ADMIN',
     'QS',
-    'GIÁM ĐỐC',
-    'THƯ KÝ',
-    'KẾ TOÁN VẬT TƯ',
-    'KẾ TOÁN THUẾ',
-    'KẾ TOÁN CHI PHÍ',
-    'CHT'
+    'CHT',
+    'GSHT',
+    'QSA'
   ];
 
   const handleSubmit = (e) => {
@@ -74,6 +71,20 @@ export default function AddUserModal({ isOpen, onClose }) {
               />
             </div>
             <div>
+              <label className="block font-semibold text-gray-700 mb-1">Mật khẩu <span className="text-red-500">*</span></label>
+              <input
+                type="password"
+                required
+                placeholder="Nhập mật khẩu"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
               <label className="block font-semibold text-gray-700 mb-1">Số điện thoại</label>
               <input
                 type="text"
@@ -83,9 +94,6 @@ export default function AddUserModal({ isOpen, onClose }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block font-semibold text-gray-700 mb-1">Chức vụ (Role)</label>
               <select
@@ -98,17 +106,18 @@ export default function AddUserModal({ isOpen, onClose }) {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Trạng thái ban đầu</label>
-              <select
-                value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              >
-                <option value="Active">Đang hoạt động</option>
-                <option value="Locked">Tạm khóa</option>
-              </select>
-            </div>
+          </div>
+
+          <div>
+            <label className="block font-semibold text-gray-700 mb-1">Trạng thái ban đầu</label>
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+            >
+              <option value="Active">Đang hoạt động</option>
+              <option value="Locked">Tạm khóa</option>
+            </select>
           </div>
 
 

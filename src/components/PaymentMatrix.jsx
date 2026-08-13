@@ -7,6 +7,7 @@ import { exportToExcel } from '@/utils/exportUtils';
 
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
   const store = useStore();
+  const isAdminOrQS = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'QS';
   const matrixKey = `${projectName}_${type}`;
   const fallbackBlocks = [{"blockName":"BLOCK A","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 01","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]},{"blockName":"BLOCK B","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]}];
   const fallbackFloors = [];
@@ -281,8 +282,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   const handleCellClick = (floor, cat, currentRawVal, numApts) => {
     if (type === 'team' && selectedTeamFilter === 'ALL') {
-      openConfirm("⚠️ Bảng TỔNG chỉ dùng để xem tổng hợp tất cả các đội. Vui lòng chọn 1 Tổ Đội cụ thể ở menu trên cùng để nhập hoặc chỉnh sửa đợt thi công!", null);
-      return;
+      if (!isAdminOrQS) {
+        openConfirm("⚠️ Bảng TỔNG chỉ dùng để xem tổng hợp tất cả các đội. Vui lòng chọn 1 Tổ Đội cụ thể ở menu trên cùng để nhập hoặc chỉnh sửa đợt thi công!", null);
+        return;
+      }
     }
 
     const hasExistingData = currentRawVal && currentRawVal.trim() !== '';
@@ -556,12 +559,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                             }
                           }}
                           className={`transition-all duration-150 text-center font-bold text-xs text-gray-900 select-none border-r border-gray-200 ${
-                            (type === 'team' && selectedTeamFilter === 'ALL') 
+                            (type === 'team' && selectedTeamFilter === 'ALL' && !isAdminOrQS) 
                               ? 'cursor-not-allowed hover:opacity-100' 
                               : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
                           }`}
                           style={{ backgroundColor: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
-                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? "Chế độ xem TỔNG (Chỉ xem)" : "Nhấp để chỉnh sửa ô")}
+                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdminOrQS ? "Nhấp để chỉnh sửa/xóa (Quyền Admin/QS)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô")}
                         >
                           <div className="flex flex-col items-center justify-center gap-1 min-h-[32px] py-1">
                             {type === 'ipc' ? (
