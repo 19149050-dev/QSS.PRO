@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import { ChevronRight, Zap, ArrowUpRight, TrendingUp, Users, DollarSign, Building2, Clock, FileCheck } from 'lucide-react';
 
 export default function DashboardView() {
-  const { projects, ipcs, teams, materials, setActiveTab } = useStore();
+  const { ipcs, teams, materials, setActiveTab } = useStore();
+  const projects = useAllowedProjects();
   const [searchTerm, setSearchTerm] = useState('');
 
   // Calculations

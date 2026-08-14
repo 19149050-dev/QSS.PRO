@@ -131,19 +131,21 @@ export const initialUsers = [
   }
 ];
 
+const defaultItems = ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'];
+const tuongCanHoItems = ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 01', 'SƠN PHỦ 2'];
+
 export const standardBlocksTemplate = [
   {
     blockName: 'BLOCK A',
     groups: [
-      { groupName: 'CĂN HỘ', items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 01', 'SƠN PHỦ 2'] },
-      { groupName: 'HÀNH LANG', items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'] }
-    ]
-  },
-  {
-    blockName: 'BLOCK B',
-    groups: [
-      { groupName: 'CĂN HỘ', items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'] },
-      { groupName: 'HÀNH LANG', items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'] }
+      { groupName: 'TƯỜNG CĂN HỘ', items: tuongCanHoItems },
+      { groupName: 'HÀNH LANG', items: defaultItems },
+      { groupName: 'LOGIA (TƯỜNG VÀ TRẦN)', items: defaultItems },
+      { groupName: 'MẶT NGOÀI', items: defaultItems },
+      { groupName: 'TRẦN THẠCH CAO CĂN HỘ', items: defaultItems },
+      { groupName: 'TRẦN THẠCH CAO WC', items: defaultItems },
+      { groupName: 'TRẦN BTCT', items: defaultItems },
+      { groupName: 'TƯỜNG VÀ TRẦN PKT', items: defaultItems }
     ]
   }
 ];
@@ -172,12 +174,12 @@ const sunhomeFloors = buildFloorRows(standardBlocksTemplate, [
     floor: 'Tầng 12',
     numApts: '12',
     sampleItems: {
-      'BLOCK A_CĂN HỘ_BẢ LỚP 1': 'ĐỢT 1 (6 căn) (Tổ Sơn Nước Minh Phát)',
-      'BLOCK A_CĂN HỘ_BẢ LỚP 2': 'ĐỢT 1 (6 căn) (Tổ Sơn Nước Minh Phát)'
+      'BLOCK A_TƯỜNG CĂN HỘ_BẢ LỚP 1': 'ĐỢT 1 (6 căn) (Tổ Sơn Nước Minh Phát)',
+      'BLOCK A_TƯỜNG CĂN HỘ_BẢ LỚP 2': 'ĐỢT 1 (6 căn) (Tổ Sơn Nước Minh Phát)'
     }
   },
   { floor: 'Tầng 11', numApts: '12' },
-  { floor: 'Tầng 10', numApts: '12', sampleItems: { 'BLOCK A_CĂN HỘ_BẢ LỚP 1': 'Xong 100%' } },
+  { floor: 'Tầng 10', numApts: '12', sampleItems: { 'BLOCK A_TƯỜNG CĂN HỘ_BẢ LỚP 1': 'Xong 100%' } },
   { floor: 'Tầng 9', numApts: '12' },
   { floor: 'Tầng 8', numApts: '12' }
 ]);
@@ -542,7 +544,7 @@ export const initialPaymentMatrix = {
     floor: row.floor,
     numApts: row.numApts,
     items: {
-      'BLOCK A_CĂN HỘ_BẢ LỚP 1': row.floor === 'Tầng 10' ? 'IPC 01 (12 căn)' : ''
+      'BLOCK A_TƯỜNG CĂN HỘ_BẢ LỚP 1': row.floor === 'Tầng 10' ? 'IPC 01 (12 căn)' : ''
     }
   })),
   'BCONS TĐH': buildFloorRows(standardBlocksTemplate, [

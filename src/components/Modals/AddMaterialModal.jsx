@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import { X, Package, Plus } from 'lucide-react';
 
 export default function AddMaterialModal({ isOpen, onClose }) {
-  const { projects, addMaterial } = useStore();
+  const { addMaterial } = useStore();
+  const projects = useAllowedProjects();
   const [formData, setFormData] = useState({
     name: '',
     code: '',

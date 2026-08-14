@@ -51,8 +51,15 @@ export const useStore = create(
       teams: initialTeams,
       ipcs: initialIPCs,
       materials: initialMaterials,
+      materialSheets: {},
       paymentMatrix: initialPaymentMatrix,
       matrixBlocks: defaultMatrixBlocksLocal,
+      globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text' },
+      openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
+      openGlobalConfirm: (message, onConfirm, title = 'Xác nhận') => set({ globalDialog: { isOpen: true, type: 'confirm', title, message, onConfirm } }),
+      openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', onCancel = null) => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, defaultValue, inputType } }),
+      closeGlobalDialog: () => set((state) => ({ globalDialog: { ...state.globalDialog, isOpen: false } })),
+      
       isLoading: false,
       error: null,
       activeProject: null,
@@ -89,21 +96,78 @@ export const useStore = create(
       }),
 
       // User Actions
-      addUser: (user) => set((state) => ({
-        users: [{ id: `u-${Date.now()}`, status: 'Active', ipHistory: ['1.54.25.78'], ...user }, ...state.users]
-      })),
-      updateUser: (id, updatedData) => set((state) => ({
-        users: state.users.map(u => u.id === id ? { ...u, ...updatedData } : u)
-      })),
-      deleteUser: (id) => set((state) => ({
-        users: state.users.filter(u => u.id !== id)
-      })),
+      addUser: async (user) => {
+        const newUser = { id: `u-${Date.now()}`, status: 'Active', ipHistory: ['1.54.25.78'], ...user };
+        set((state) => ({ users: [newUser, ...state.users] }));
+
+        const dbUser = {
+          name: user.name,
+          username: user.username,
+          phone: user.phone,
+          role: user.role,
+          status: 'Active',
+          last_login: user.lastLogin,
+          ip_login: user.ipLogin,
+          signature_url: user.signature,
+          allow_view_financials: user.allowViewFinancials
+        };
+        try {
+          await supabase.from('users').insert([dbUser]);
+        } catch (error) {
+          console.error("Failed to add user to Supabase:", error);
+        }
+      },
+      updateUser: async (id, updatedData) => {
+        set((state) => ({
+          users: state.users.map(u => u.id === id ? { ...u, ...updatedData } : u)
+        }));
+
+        // Since id might be a local 'u-xxx' or Supabase UUID, we need to map correctly. 
+        // For now, if we match by username since it's unique:
+        try {
+          const userState = get().users.find(u => u.id === id);
+          if (userState && userState.username) {
+             const dbData = {};
+             if (updatedData.name) dbData.name = updatedData.name;
+             if (updatedData.username) dbData.username = updatedData.username;
+             if (updatedData.phone) dbData.phone = updatedData.phone;
+             if (updatedData.role) dbData.role = updatedData.role;
+             if (updatedData.status) dbData.status = updatedData.status;
+             if (updatedData.signature) dbData.signature_url = updatedData.signature;
+             
+             // Update by username since local ids (u-xxx) might not match Supabase uuids easily without fetching
+             await supabase.from('users').update(dbData).eq('username', userState.username);
+          }
+        } catch (error) {
+          console.error("Failed to update user in Supabase:", error);
+        }
+      },
+      deleteUser: async (id) => {
+        const userState = get().users.find(u => u.id === id);
+        set((state) => ({
+          users: state.users.filter(u => u.id !== id)
+        }));
+
+        if (userState && userState.username) {
+          try {
+            await supabase.from('users').delete().eq('username', userState.username);
+          } catch (error) {
+            console.error("Failed to delete user in Supabase:", error);
+          }
+        }
+      },
       toggleUserLock: (id) => set((state) => ({
         users: state.users.map(u => u.id === id ? { ...u, status: u.status === 'Active' ? 'Locked' : 'Active' } : u)
       })),
 
       // Project Actions
       addProject: async (project) => {
+        const state = get();
+        if (state.projects.some(p => p.name.trim().toLowerCase() === project.name.trim().toLowerCase())) {
+          state.openGlobalAlert(`Dự án có tên "${project.name}" đã tồn tại! Vui lòng chọn một tên khác để tránh trùng lặp.`);
+          return false;
+        }
+        
         const count = Math.max(1, parseInt(project.numBlocks || project.floors || '1', 10) || 1);
         const blockLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
         const generatedBlocks = [];
@@ -112,16 +176,7 @@ export const useStore = create(
           const letter = blockLetters[i] || (i + 1);
           generatedBlocks.push({
             blockName: `BLOCK ${letter}`,
-            groups: [
-              {
-                groupName: 'CĂN HỘ',
-                items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 01', 'SƠN PHỦ 2']
-              },
-              {
-                groupName: 'HÀNH LANG',
-                items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2']
-              }
-            ]
+            groups: JSON.parse(JSON.stringify(standardBlocksTemplate[0]?.groups || []))
           });
         }
 
@@ -218,16 +273,7 @@ export const useStore = create(
                 const letter = blockLetters[i] || (i + 1);
                 updatedBlocks.push({
                   blockName: `BLOCK ${letter}`,
-                  groups: [
-                    {
-                      groupName: 'CĂN HỘ',
-                      items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 01', 'SƠN PHỦ 2']
-                    },
-                    {
-                      groupName: 'HÀNH LANG',
-                      items: ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2']
-                    }
-                  ]
+                  groups: JSON.parse(JSON.stringify(standardBlocksTemplate[0]?.groups || []))
                 });
               }
             } else if (count < currentBlocks.length) {
@@ -245,11 +291,75 @@ export const useStore = create(
         const updatedProj = get().projects.find(p => p.id === id);
         if (updatedProj) {
           get().syncMatrixDataToSupabase(updatedProj.name);
+          const dbData = {
+            name: updatedProj.name,
+            order_type: updatedProj.orderType,
+            sub_contractor_info: updatedProj.subContractorInfo,
+            address: updatedProj.address,
+            contract_no: updatedProj.contractNo,
+            cht: updatedProj.cht
+          };
+          if (String(id).startsWith('p-')) {
+            supabase.from('projects').update(dbData).eq('name', updatedProj.name).then();
+          } else {
+            supabase.from('projects').update(dbData).eq('id', id).then();
+          }
         }
       },
-      deleteProject: (id) => set((state) => ({
-        projects: state.projects.filter(p => p.id !== id)
-      })),
+      updateProjectBlocks: (projectName, newBlocks) => { set((state) => ({
+        matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }
+      }));
+        get().syncMatrixDataToSupabase(projectName);
+      },
+      deleteProject: async (id) => {
+        const project = get().projects.find((item) => item.id === id);
+        if (!project) return false;
+
+        try {
+          // Nhờ ON DELETE CASCADE trong Supabase, ta chỉ cần xóa project, 
+          // các bảng liên quan (teams, ipcs, materials, payment_matrix) sẽ tự động bị xóa theo.
+          if (String(id).startsWith('p-')) {
+            const { error } = await supabase.from('projects').delete().eq('name', project.name);
+            if (error) throw error;
+          } else {
+            const { error } = await supabase.from('projects').delete().eq('id', id);
+            if (error) throw error;
+          }
+
+          set((state) => {
+            const paymentMatrix = { ...state.paymentMatrix };
+            const matrixBlocks = { ...state.matrixBlocks };
+            delete paymentMatrix[project.name];
+            delete paymentMatrix[`${project.name}_ipc`];
+            delete paymentMatrix[`${project.name}_team`];
+            delete matrixBlocks[project.name];
+
+            return {
+              projects: state.projects.filter((item) => item.id !== id),
+              teams: state.teams.map((team) => {
+                const updatedTeam = { ...team };
+                if (Array.isArray(updatedTeam.projects)) {
+                  updatedTeam.projects = updatedTeam.projects.filter(p => p !== project.name);
+                }
+                if (updatedTeam.projectName === project.name) {
+                  updatedTeam.projectName = (updatedTeam.projects && updatedTeam.projects.length > 0) ? updatedTeam.projects[0] : '';
+                }
+                return updatedTeam;
+              }).filter(team => team.projectName || (team.projects && team.projects.length > 0)),
+              ipcs: state.ipcs.filter((ipc) => ipc.projectId !== id && ipc.projectName !== project.name),
+              materials: state.materials.filter((material) => material.projectId !== id && material.projectName !== project.name),
+              paymentMatrix,
+              matrixBlocks,
+              activeProject: (state.activeProject === project.name || state.activeProject?.id === id) ? null : state.activeProject
+            };
+          });
+
+          return true;
+        } catch (error) {
+          console.error('Failed to delete project from Supabase:', error);
+          return false;
+        }
+      },
 
       // Team Actions
       addTeam: async (team) => {
@@ -329,7 +439,32 @@ export const useStore = create(
             return t;
           })
         }));
-        // Note: For full Supabase integration, we'd add logic here if teams table stores members or has a relation
+      },
+      updateTeamMember: (teamId, memberId, updatedData) => {
+        set((state) => ({
+          teams: state.teams.map(t => {
+            if (t.id === teamId && t.members) {
+              return {
+                ...t,
+                members: t.members.map(m => m.id === memberId ? { ...m, ...updatedData } : m)
+              };
+            }
+            return t;
+          })
+        }));
+      },
+      deleteTeamMember: (teamId, memberId) => {
+        set((state) => ({
+          teams: state.teams.map(t => {
+            if (t.id === teamId && t.members) {
+              return {
+                ...t,
+                members: t.members.filter(m => m.id !== memberId)
+              };
+            }
+            return t;
+          })
+        }));
       },
 
       // IPC Actions
@@ -431,6 +566,130 @@ export const useStore = create(
         };
         set((state) => ({ materials: [newMat, ...state.materials] }));
       },
+      getMaterialSheet: (projectName) => {
+        const state = get();
+        return state.materialSheets[projectName] || { items: [], rows: [] };
+      },
+      setMaterialSheet: (projectName, sheet) => set((state) => ({
+        materialSheets: {
+          ...state.materialSheets,
+          [projectName]: sheet
+        }
+      })),
+      resetMaterialSheet: (projectName) => set((state) => ({
+        materialSheets: {
+          ...state.materialSheets,
+          [projectName]: { items: [], rows: [] }
+        }
+      })),
+      addMaterialColumn: (projectName, name) => set((state) => {
+        if (!name) return state;
+        const current = state.materialSheets[projectName] || { items: [], rows: [] };
+        const exists = current.items.some((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase());
+        if (exists) return state;
+        const newItem = { id: `mat-${Date.now()}`, name: name.trim() };
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              items: [...current.items, newItem],
+              rows: current.rows.map((row) => ({
+                ...row,
+                values: {
+                  ...(row.values || {}),
+                  [newItem.id]: { order: '', received: '' }
+                }
+              }))
+            }
+          }
+        };
+      }),
+      updateMaterialColumn: (projectName, columnId, name) => set((state) => {
+        const current = state.materialSheets[projectName];
+        if (!current) return state;
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              items: current.items.map((item) => (item.id === columnId ? { ...item, name } : item))
+            }
+          }
+        };
+      }),
+      deleteMaterialColumn: (projectName, columnId) => set((state) => {
+        const current = state.materialSheets[projectName];
+        if (!current) return state;
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              items: current.items.filter((item) => item.id !== columnId),
+              rows: current.rows.map((row) => {
+                const nextValues = { ...(row.values || {}) };
+                delete nextValues[columnId];
+                return { ...row, values: nextValues };
+              })
+            }
+          }
+        };
+      }),
+      addMaterialRow: (projectName, row = {}) => set((state) => {
+        const current = state.materialSheets[projectName] || { items: [], rows: [] };
+        const values = {};
+        current.items.forEach((item) => {
+          values[item.id] = { order: '', received: '' };
+        });
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              rows: [...current.rows, { id: `row-${Date.now()}`, date: '', values, ...row }]
+            }
+          }
+        };
+      }),
+      updateMaterialRow: (projectName, rowId, field, value) => set((state) => {
+        const current = state.materialSheets[projectName];
+        if (!current) return state;
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              rows: current.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+            }
+          }
+        };
+      }),
+      updateMaterialCell: (projectName, rowId, columnId, field, value) => set((state) => {
+        const current = state.materialSheets[projectName];
+        if (!current) return state;
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...current,
+              rows: current.rows.map((row) => {
+                if (row.id !== rowId) return row;
+                return {
+                  ...row,
+                  values: {
+                    ...(row.values || {}),
+                    [columnId]: {
+                      ...(row.values?.[columnId] || {}),
+                      [field]: value
+                    }
+                  }
+                };
+              })
+            }
+          }
+        };
+      }),
       updateMaterial: async (id, updatedData) => {
         set((state) => ({
           materials: state.materials.map(m => m.id === id ? { ...m, ...updatedData } : m)
@@ -475,12 +734,39 @@ export const useStore = create(
           return row;
         });
 
-        return {
+        let newState = {
           paymentMatrix: {
             ...state.paymentMatrix,
             [key]: newMatrix
           }
         };
+
+        // Auto append "Đã lên HS" to ipc_select when ipc is updated
+        if (key.endsWith('_ipc') && value && value.trim() !== '') {
+          const selectKey = `${projectName}_ipc_select`;
+          const selectMatrix = (state.paymentMatrix[selectKey] && state.paymentMatrix[selectKey].length > 0)
+            ? state.paymentMatrix[selectKey]
+            : JSON.parse(JSON.stringify(baseMatrix));
+            
+          const newSelectMatrix = selectMatrix.map(row => {
+            if (row.floor === floor) {
+              let existingVal = row.items[itemKey] || '';
+              if (existingVal && !existingVal.includes('Đã lên HS')) {
+                 const parts = existingVal.split(' + ');
+                 parts[parts.length - 1] = `${parts[parts.length - 1]} - Đã lên HS`;
+                 existingVal = parts.join(' + ');
+                 return {
+                   ...row,
+                   items: { ...row.items, [itemKey]: existingVal }
+                 };
+              }
+            }
+            return row;
+          });
+          newState.paymentMatrix[selectKey] = newSelectMatrix;
+        }
+
+        return newState;
       });
         const projName = key.includes('_') ? key.split('_')[0] : key;
         get().syncMatrixDataToSupabase(projName);
@@ -863,6 +1149,7 @@ export const useStore = create(
         teams: initialTeams,
         ipcs: initialIPCs,
         materials: initialMaterials,
+        materialSheets: {},
         paymentMatrix: initialPaymentMatrix,
         matrixBlocks: defaultMatrixBlocksLocal
       }),
@@ -871,6 +1158,54 @@ export const useStore = create(
       fetchSupabaseData: async () => {
         set({ isLoading: true });
         try {
+          // Fetch Users
+          const { data: usersData, error: usersError } = await supabase.from('users').select('*');
+          if (!usersError && usersData && usersData.length > 0) {
+            const currentUsers = get().users;
+            const mappedUsers = usersData.map(u => {
+              const localUser = currentUsers.find(cu => cu.username === u.username);
+              return {
+                id: u.id,
+              name: u.name,
+              username: u.username,
+              phone: u.phone,
+              role: u.role,
+              status: u.status,
+              lastLogin: u.last_login,
+              ipLogin: u.ip_login,
+                ipHistory: u.ip_login ? [u.ip_login] : [],
+                signature: u.signature_url,
+                allowViewFinancials: u.allow_view_financials,
+                password: u.password || (localUser ? localUser.password : undefined)
+              };
+            });
+            
+            // Ensure @admin is always available if missing from DB
+            const mergedUsers = [...mappedUsers];
+            const adminUser = initialUsers.find(u => u.username === '@admin');
+            if (adminUser && !mergedUsers.find(mu => mu.username === '@admin')) {
+              mergedUsers.push(adminUser);
+            }
+            set({ users: mergedUsers });
+          } else if (!usersError && usersData && usersData.length === 0) {
+            // Table is empty, auto-seed with initialUsers!
+            const usersToInsert = initialUsers.map(u => ({
+              name: u.name,
+              username: u.username,
+              phone: u.phone,
+              role: u.role,
+              status: u.status,
+              last_login: u.lastLogin,
+              ip_login: u.ipLogin,
+              signature_url: u.signature,
+              allow_view_financials: u.allowViewFinancials
+            }));
+            supabase.from('users').insert(usersToInsert).then(({ error }) => {
+              if (error) console.error("Failed to auto-seed users:", error);
+              else console.log("Auto-seeded initial users to Supabase");
+            });
+          }
+
           // Fetch Projects
           const { data: projectsData, error: projectsError } = await supabase.from('projects').select('*');
           if (!projectsError && projectsData) {
@@ -1000,15 +1335,26 @@ export const useStore = create(
         };
         
         try {
-          const { error } = await supabase
-            .from('projects')
-            .update({ 
-              matrix_blocks: blocks, 
-              matrix_data: matrixDataObj 
-            })
-            .eq('id', project.id);
-            
-          if (error) console.error('Failed to sync matrix to Supabase:', error);
+          // Đối với các project mock (có id bắt đầu bằng 'p-'), ta phải update theo name vì id trong DB không khớp
+          if (String(project.id).startsWith('p-')) {
+            const { error } = await supabase
+              .from('projects')
+              .update({ 
+                matrix_blocks: blocks, 
+                matrix_data: matrixDataObj 
+              })
+              .eq('name', project.name);
+            if (error) console.error('Failed to sync matrix to Supabase (by name):', error);
+          } else {
+            const { error } = await supabase
+              .from('projects')
+              .update({ 
+                matrix_blocks: blocks, 
+                matrix_data: matrixDataObj 
+              })
+              .eq('id', project.id);
+            if (error) console.error('Failed to sync matrix to Supabase (by id):', error);
+          }
         } catch (err) {
           console.error('Supabase sync error:', err);
         }
@@ -1017,16 +1363,26 @@ export const useStore = create(
     {
       name: 'qss-pro-storage-v2',
       storage: createJSONStorage(() => localStorage),
-      onRehydrateStorage: () => (state) => {
-        if (!state) return;
-        if (!state.projects || state.projects.length === 0) {
-          useStore.setState({
-            projects: initialProjects,
-            paymentMatrix: { ...initialPaymentMatrix, ...state.paymentMatrix },
-            matrixBlocks: { ...defaultMatrixBlocksLocal, ...state.matrixBlocks }
-          });
-        }
-      }
+      partialize: (state) => {
+        return state;
+      },
+      // An empty project list is valid. Do not re-add mock projects after users
+      // intentionally delete every project and refresh the browser.
+      onRehydrateStorage: () => () => {}
     }
   )
 );
+
+export const useAllowedProjects = () => {
+  const projects = useStore((state) => state.projects);
+  const currentUser = useStore((state) => state.currentUser);
+  
+  if (!currentUser) return projects;
+  
+  const role = currentUser.role || '';
+  if (['ADMIN', 'GIÁM ĐỐC', 'QS', 'QSA'].includes(role.toUpperCase())) {
+    return projects;
+  }
+  
+  return projects.filter(p => p.cht && p.cht.includes(currentUser.name));
+};

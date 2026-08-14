@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { X, Building2, Plus } from 'lucide-react';
+import { X, Building2, ChevronDown } from 'lucide-react';
 
 export default function AddProjectModal({ isOpen, onClose }) {
   const { addProject, users } = useStore();
+  const [isChtOpen, setIsChtOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     orderType: 'TRỰC TIẾP ORDER',
@@ -23,11 +24,11 @@ export default function AddProjectModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) return;
 
-    addProject({
+    const success = await addProject({
       ...formData,
       cht: formData.cht || [],
       contractValue: Number(formData.contractValue) || 0,
@@ -35,12 +36,15 @@ export default function AddProjectModal({ isOpen, onClose }) {
       advancePayment: Number(formData.advancePayment) || 0,
       status: 'Doing'
     });
-    onClose();
+    
+    if (success !== false) {
+      onClose();
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl border border-gray-100 overflow-hidden animate-in fade-in zoom-in duration-200">
         <div className="p-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Building2 className="w-5 h-5" />
@@ -78,16 +82,6 @@ export default function AddProjectModal({ isOpen, onClose }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-gray-700 mb-1">Địa chỉ / Khu vực</label>
-              <input
-                type="text"
-                placeholder="VD: PHÚ QUỐC, CẦN THƠ, BÌNH DƯƠNG..."
-                value={formData.address}
-                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
               <label className="block font-semibold text-gray-700 mb-1">Loại Order</label>
               <select
                 value={formData.orderType}
@@ -99,77 +93,48 @@ export default function AddProjectModal({ isOpen, onClose }) {
                 <option value="CHỦ ĐẦU TƯ GIAO">CHỦ ĐẦU TƯ GIAO</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Số Hợp đồng</label>
-              <input
-                type="text"
-                placeholder="VD: 232/2025/HĐ/PCC-QTPK"
-                value={formData.contractNo}
-                onChange={(e) => setFormData({ ...formData, contractNo: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
+            
+            <div className="relative">
               <label className="block font-semibold text-gray-700 mb-1">CHT, GS</label>
-              <div className="w-full h-[84px] overflow-y-auto px-3 py-2 border border-gray-300 rounded-xl bg-white focus-within:ring-2 focus-within:ring-indigo-500">
-                {users.filter(u => u.role !== 'ADMIN').map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 mb-1.5 cursor-pointer hover:bg-gray-50 px-1 rounded transition">
-                    <input
-                      type="checkbox"
-                      checked={formData.cht.includes(u.name)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setFormData(prev => ({
-                          ...prev,
-                          cht: checked 
-                            ? [...prev.cht, u.name]
-                            : prev.cht.filter(n => n !== u.name)
-                        }));
-                      }}
-                      className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-xs text-gray-700">{u.name} ({u.role})</span>
-                  </label>
-                ))}
+              <div 
+                onClick={() => setIsChtOpen(!isChtOpen)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl bg-white cursor-pointer flex justify-between items-center hover:border-indigo-400 transition"
+              >
+                <span className="truncate text-gray-700">
+                  {formData.cht.length > 0 ? formData.cht.join(', ') : 'Chọn CHT, GS...'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
               </div>
+              
+              {isChtOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsChtOpen(false)}></div>
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl max-h-72 overflow-y-auto p-2">
+                    {users.filter(u => u.role !== 'ADMIN').map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 mb-1 cursor-pointer hover:bg-gray-50 px-2 py-1.5 rounded transition">
+                        <input
+                          type="checkbox"
+                          checked={formData.cht.includes(u.name)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setFormData(prev => ({
+                              ...prev,
+                              cht: checked 
+                                ? [...prev.cht, u.name]
+                                : prev.cht.filter(n => n !== u.name)
+                            }));
+                          }}
+                          className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-xs text-gray-700">{u.name} ({u.role})</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Giá trị HĐ (VNĐ)</label>
-              <input
-                type="number"
-                placeholder="2500000000"
-                value={formData.contractValue}
-                onChange={(e) => setFormData({ ...formData, contractValue: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none font-semibold text-indigo-900"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Phụ lục HĐ (VNĐ)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={formData.addendumValue}
-                onChange={(e) => setFormData({ ...formData, addendumValue: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold text-gray-700 mb-1">Tạm ứng (VNĐ)</label>
-              <input
-                type="number"
-                placeholder="0"
-                value={formData.advancePayment}
-                onChange={(e) => setFormData({ ...formData, advancePayment: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-          </div>
 
           <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
             <button

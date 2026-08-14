@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import { X, FileSpreadsheet } from 'lucide-react';
 
 export default function AddIPCModal({ isOpen, onClose }) {
-  const { projects, teams, addIPC } = useStore();
+  const { teams, addIPC } = useStore();
+  const projects = useAllowedProjects();
   const [formData, setFormData] = useState({
     type: 'A-B',
     projectId: projects[0]?.id || '',

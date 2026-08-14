@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Building2, Eye, EyeOff, LockKeyhole, ShieldCheck, Sparkles, Sun, UserRound } from 'lucide-react';
 import { useStore } from '@/store/useStore';
+import { useRouter } from 'next/navigation';
 
 const highlights = [
   { label: 'Hiệu quả', icon: ShieldCheck },
@@ -11,6 +12,7 @@ const highlights = [
 ];
 
 export default function LoginPage() {
+  const router = useRouter();
   const { users, loginUser } = useStore();
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('0000');
@@ -37,7 +39,7 @@ export default function LoginPage() {
       if (password === expectedPassword) {
         document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
         loginUser(user);
-        window.location.assign('/');
+        router.push('/');
         return;
       }
     }

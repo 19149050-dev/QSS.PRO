@@ -116,10 +116,10 @@ ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payment_matrix ENABLE ROW LEVEL SECURITY;
 
 -- Safely recreate policies (Drop policy if exists to avoid 42710 error)
-DROP POLICY IF EXISTS "Allow public read access" ON public.users;
-DROP POLICY IF EXISTS "Allow public insert access" ON public.users;
-CREATE POLICY "Allow public read access" ON public.users FOR SELECT USING (true);
-CREATE POLICY "Allow public insert access" ON public.users FOR INSERT WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow public read users" ON public.users;
+DROP POLICY IF EXISTS "Allow public write users" ON public.users;
+CREATE POLICY "Allow public read users" ON public.users FOR SELECT USING (true);
+CREATE POLICY "Allow public write users" ON public.users FOR ALL USING (true);
 
 DROP POLICY IF EXISTS "Allow public read projects" ON public.projects;
 DROP POLICY IF EXISTS "Allow public write projects" ON public.projects;

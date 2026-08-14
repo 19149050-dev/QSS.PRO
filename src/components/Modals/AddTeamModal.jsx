@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import { X, Users, Edit2 } from 'lucide-react';
 
 export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
-  const { projects, addTeam, updateTeam } = useStore();
+  const { addTeam, updateTeam } = useStore();
+  const projects = useAllowedProjects();
   const [formData, setFormData] = useState({
     teamName: '',
     leaderName: '',

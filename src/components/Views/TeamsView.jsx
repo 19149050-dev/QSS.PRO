@@ -1,17 +1,22 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import PaymentMatrix from '@/components/PaymentMatrix';
 import AddTeamModal from '@/components/Modals/AddTeamModal';
-import { Plus } from 'lucide-react';
+import AssignMemberModal from '@/components/Modals/AssignMemberModal';
+import { Plus, Users } from 'lucide-react';
 
 export default function TeamsPage() {
-  const { projects, teams, activeProject, setActiveProject } = useStore();
-  const selectedProject = activeProject || projects[0]?.name || 'SUNHOME';
+  const { teams, activeProject, setActiveProject } = useStore();
+  const projects = useAllowedProjects();
+  const selectedProject = (activeProject && projects.some(p => p.name === activeProject)) 
+    ? activeProject 
+    : projects[0]?.name || 'SUNHOME';
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('ALL');
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
   // Filter teams that are assigned to the selected project
   const projectTeams = teams.filter(t => {
@@ -53,6 +58,24 @@ export default function TeamsPage() {
                 );
               })}
             </select>
+
+            <button
+              onClick={() => {
+                if (selectedTeamFilter === 'ALL') {
+                  alert('Vui lòng chọn 1 tổ đội cụ thể để phân bổ nhân viên.');
+                  return;
+                }
+                setIsAssignModalOpen(true);
+              }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold shadow-xs transition-colors border ${
+                selectedTeamFilter === 'ALL'
+                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                  : 'bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              Phân bổ nhân viên
+            </button>
           </div>
 
         </div>
@@ -62,6 +85,13 @@ export default function TeamsPage() {
       </div>
 
       <AddTeamModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+      
+      <AssignMemberModal 
+        isOpen={isAssignModalOpen} 
+        onClose={() => setIsAssignModalOpen(false)} 
+        selectedProject={selectedProject}
+        selectedTeamName={selectedTeamFilter}
+      />
     </div>
   );
 }

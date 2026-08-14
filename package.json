@@ -3,12 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tailwindcss -i ./src/app/globals.css -o ./public/output.css && next dev",
+    "dev": "tailwindcss -i ./src/app/globals.css -o ./public/output.css && next dev -p 8888",
     "build": "tailwindcss -i ./src/app/globals.css -o ./public/output.css && next build",
-    "start": "next start"
+    "start": "next start -p 8888"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
+    "@vladmandic/face-api": "^1.7.15",
     "clsx": "^2.1.1",
     "lucide-react": "^0.446.0",
     "next": "14.2.13",

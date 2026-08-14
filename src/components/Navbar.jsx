@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useStore } from '@/store/useStore';
-import { Search, Bell, ShieldCheck, Sparkles, Database } from 'lucide-react';
+import { Search, Sparkles, Database } from 'lucide-react';
 
 export default function Navbar({ onOpenAddModal, searchSearch, onSearchChange }) {
   const { activeTab } = useStore();
@@ -10,25 +10,26 @@ export default function Navbar({ onOpenAddModal, searchSearch, onSearchChange })
   const getHeaderInfo = () => {
     switch (activeTab) {
       case 'dashboard':
-        return { title: 'Trang Chủ Tổng Quan', subtitle: 'Báo cáo tổng quan tiến độ thu tiền CĐT và thanh toán Tổ đội.' };
+        return { title: 'Trang Chu Tong Quan', subtitle: 'Bao cao tong quan tien do thu tien CDT va thanh toan To Doi.' };
       case 'users':
-        return { title: 'Quản lý Nhân viên', subtitle: 'Thêm hoặc xóa tài khoản truy cập hệ thống.' };
+        return { title: 'Quan ly Nhan vien', subtitle: 'Them hoac xoa tai khoan truy cap he thong.' };
       case 'projects':
       case 'project-detail':
-        return { title: 'Quản lý Công Trình', subtitle: 'Quản lý danh sách dự án và thông tin hợp đồng cơ bản.' };
+        return { title: 'Quan ly Cong Trinh', subtitle: 'Quan ly danh sach du an va thong tin hop dong co ban.' };
       case 'teams':
       case 'manage-teams':
-        return { title: 'Quản lý Tổ Đội & Thầu Phụ', subtitle: 'Theo dõi hợp đồng, ứng trước và tiến độ thanh toán từng tổ đội.' };
+        return { title: 'Quan ly To Doi & Thau Phu', subtitle: 'Theo doi hop dong, ung truoc va tien do thanh toan tung to doi.' };
       case 'ipc':
       case 'ipc-thuc':
       case 'ipc-du-kien':
-        return { title: 'Quản lý Hồ Sơ Thanh Toán (IPC)', subtitle: 'Lập & theo dõi tiến độ nghiệm thu A-B và đợt chi trả B-C.' };
+      case 'ipc-vat-tu':
+        return { title: 'Quan ly Ho So Thanh Toan (IPC)', subtitle: 'Lap & theo doi tien do nghiem thu A-B va dot chi tra B-C.' };
       case 'materials':
-        return { title: 'Quản lý Vật Tư Dự Án', subtitle: 'Theo dõi khối lượng kế hoạch, nhập thực tế và định mức vật tư.' };
+        return { title: 'Quan ly Vat Tu Du An', subtitle: 'Theo doi khoi luong ke hoach, nhap thuc te va dinh muc vat tu.' };
       case 'trash':
-        return { title: 'Thùng rác', subtitle: 'Khôi phục hoặc xóa vĩnh viễn các dữ liệu đã bị xóa.' };
+        return { title: 'Thung rac', subtitle: 'Khoi phuc hoac xoa vinh vien cac du lieu da bi xoa.' };
       default:
-        return { title: 'Hệ thống Quản lý QS PRO', subtitle: 'Phần mềm chuyên sâu cho Kỹ sư Khối lượng & Quản lý Dự án.' };
+        return { title: 'He thong Quan ly QS PRO', subtitle: 'Phan mem chuyen sau cho Ky su Khoi luong & Quan ly Du an.' };
     }
   };
 
@@ -47,26 +48,23 @@ export default function Navbar({ onOpenAddModal, searchSearch, onSearchChange })
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Search Bar */}
         <div className="relative min-w-[280px]">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Tìm kiếm công trình, nhân viên, IPC..."
+            placeholder="Tim kiem cong trinh, nhan vien, IPC..."
             value={searchSearch || ''}
             onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
             className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition"
           />
         </div>
 
-
-        {/* Action Button */}
         {onOpenAddModal && (
           <button
             onClick={onOpenAddModal}
             className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-500/20 transition active:scale-95"
           >
-            <Sparkles className="w-4 h-4" /> Thêm Mới
+            <Sparkles className="w-4 h-4" /> Them Moi
           </button>
         )}
       </div>

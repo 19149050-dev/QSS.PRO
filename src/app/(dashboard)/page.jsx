@@ -11,6 +11,7 @@ import TeamsView from '@/components/Views/TeamsView';
 import ManageTeamsView from '@/components/Views/ManageTeamsView';
 import IpcDuKienView from '@/components/Views/IpcDuKienView';
 import IpcThucView from '@/components/Views/IpcThucView';
+import IpcVatTuView from '@/components/Views/IpcVatTuView';
 import IpcView from '@/components/Views/IpcView';
 import UsersView from '@/components/Views/UsersView';
 import TrashView from '@/components/Views/TrashView';
@@ -35,6 +36,8 @@ export default function RootRouter() {
       return <IpcDuKienView />;
     case 'ipc-thuc':
       return <IpcThucView />;
+    case 'ipc-vat-tu':
+      return <IpcVatTuView />;
     case 'ipc':
       return <IpcView />;
     case 'users':

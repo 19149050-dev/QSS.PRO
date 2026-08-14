@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import AddTeamModal from '@/components/Modals/AddTeamModal';
 import AddMemberModal from '@/components/Modals/AddMemberModal';
 import { 
@@ -21,7 +21,8 @@ import {
 import { exportToExcel } from '@/utils/exportUtils';
 
 export default function ManageTeamsPage() {
-  const { projects, teams, deleteTeam, activeProject, addTeamMember } = useStore();
+  const { teams, deleteTeam, activeProject, addTeamMember } = useStore();
+  const projects = useAllowedProjects();
   const selectedProject = activeProject || projects[0]?.name || 'SUNHOME';
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -31,10 +32,39 @@ export default function ManageTeamsPage() {
   // Member Modal State
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [activeTeamIdForMember, setActiveTeamIdForMember] = useState(null);
+  const [memberToEdit, setMemberToEdit] = useState(null);
 
   const handleOpenAddMember = (teamId) => {
     setActiveTeamIdForMember(teamId);
+    setMemberToEdit(null);
     setIsAddMemberModalOpen(true);
+  };
+
+  const handleOpenEditMember = (teamId, member) => {
+    setActiveTeamIdForMember(teamId);
+    setMemberToEdit(member);
+    setIsAddMemberModalOpen(true);
+  };
+
+  const getExpiryStatus = (dateStr) => {
+    if (!dateStr || dateStr.toLowerCase() === 'chưa có') return 'danger';
+    let parts = [];
+    if (dateStr.includes('-')) parts = dateStr.split('-');
+    else if (dateStr.includes('/')) parts = dateStr.split('/');
+    
+    if (parts.length === 3) {
+      let year, month, day;
+      if (parts[0].length === 4) [year, month, day] = parts;
+      else [day, month, year] = parts;
+      const expiry = new Date(year, month - 1, day);
+      const today = new Date();
+      const diffTime = expiry - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 7) return 'danger';
+      return 'safe';
+    }
+    return 'safe'; 
   };
 
   const filteredTeams = teams.filter(t => 
@@ -232,14 +262,15 @@ export default function ManageTeamsPage() {
                                       <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">CCCD</th>
                                       <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Năm sinh</th>
                                       <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Hạn thẻ AT</th>
+                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Hạn BH</th>
                                       <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Ảnh 3x4</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">PDF</th>
+                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Thao tác</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     {(!team.members || team.members.length === 0) ? (
                                       <tr>
-                                        <td colSpan={7} className="py-6 text-center text-xs text-gray-400 font-medium italic">
+                                        <td colSpan={8} className="py-6 text-center text-xs text-gray-400 font-medium italic">
                                           Chưa có dữ liệu thành viên. Vui lòng thêm thành viên vào tổ đội này.
                                         </td>
                                       </tr>
@@ -256,30 +287,48 @@ export default function ManageTeamsPage() {
                                           <td className="py-2 px-4 text-xs font-semibold text-gray-600">{member.cccd}</td>
                                           <td className="py-2 px-4 text-xs font-semibold text-gray-600 text-center">{member.birthYear}</td>
                                           <td className="py-2 px-4 text-xs font-semibold text-center">
-                                            <span className="bg-emerald-50 text-emerald-600 border border-emerald-200 px-2 py-0.5 rounded-md font-bold text-[10px]">
-                                              {member.safetyCardExpiry}
+                                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${getExpiryStatus(member.safetyCardExpiry) === 'danger' ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
+                                              {member.safetyCardExpiry || 'Chưa có'}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 px-4 text-xs font-semibold text-center">
+                                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${getExpiryStatus(member.insuranceExpiry) === 'danger' ? 'bg-red-50 text-red-600 border-red-200 animate-pulse' : 'bg-sky-50 text-sky-600 border-sky-200'}`}>
+                                              {member.insuranceExpiry || 'Chưa có'}
                                             </span>
                                           </td>
                                           <td className="py-2 px-4 text-center">
                                             {member.photo ? (
-                                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-50 text-blue-500 border border-blue-200 cursor-pointer hover:bg-blue-100" title="Xem ảnh 3x4">
-                                                <User className="w-3.5 h-3.5" />
-                                              </span>
+                                              <img src={member.photo} alt="3x4" className="w-8 h-10 object-cover mx-auto rounded shadow-sm border border-gray-200" />
                                             ) : '-'}
                                           </td>
                                           <td className="py-2 px-4 text-center">
-                                            {member.pdf ? (
-                                              <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-rose-50 text-rose-500 border border-rose-200 cursor-pointer hover:bg-rose-100" title="Xem hồ sơ PDF">
-                                                <FileText className="w-3.5 h-3.5" />
-                                              </span>
-                                            ) : '-'}
+                                            <div className="flex items-center justify-center gap-2">
+                                              <button 
+                                                onClick={() => handleOpenEditMember(team.id, member)}
+                                                className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors"
+                                                title="Sửa"
+                                              >
+                                                <Edit2 className="w-3.5 h-3.5" />
+                                              </button>
+                                              <button 
+                                                onClick={() => {
+                                                  useStore.getState().openGlobalConfirm('Bạn có chắc chắn muốn xóa thành viên này?', () => {
+                                                    useStore.getState().deleteTeamMember(team.id, member.id);
+                                                  });
+                                                }}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                                title="Xóa"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
                                           </td>
                                         </tr>
                                       ))
                                     )}
                                     {/* Add Member Row */}
                                     <tr>
-                                      <td colSpan={7} className="py-0">
+                                      <td colSpan={8} className="py-0">
                                         <button 
                                           onClick={() => handleOpenAddMember(team.id)}
                                           className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 transition-colors font-bold text-xs uppercase tracking-wider"
@@ -314,6 +363,7 @@ export default function ManageTeamsPage() {
         isOpen={isAddMemberModalOpen}
         onClose={() => setIsAddMemberModalOpen(false)}
         teamId={activeTeamIdForMember}
+        memberToEdit={memberToEdit}
       />
     </div>
   );

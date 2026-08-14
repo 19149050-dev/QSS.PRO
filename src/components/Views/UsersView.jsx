@@ -120,10 +120,6 @@ export default function UsersPage() {
                     <th>Tài khoản</th>
                     <th>Số ĐT</th>
                     <th>Chức vụ (Role)</th>
-                    <th>Trạng thái</th>
-                    <th>IP Đăng nhập</th>
-                    <th>Lịch sử IP (Gần đây)</th>
-                    <th>Chữ ký</th>
                     <th className="text-right">Thao tác</th>
                   </tr>
                 </thead>
@@ -137,42 +133,6 @@ export default function UsersPage() {
                         <span className={`inline-block px-2.5 py-0.5 text-[10px] rounded-md tracking-wider uppercase ${getRoleBadgeStyle(user.role)}`}>
                           {user.role}
                         </span>
-                      </td>
-                      <td>
-                        <div className="flex flex-col gap-1">
-                          <span className="flex items-center gap-1.5 text-xs text-emerald-600 font-bold">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Đang hoạt động
-                          </span>
-                          <span className="text-[10px] text-gray-400 font-medium">
-                            {user.lastLogin}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="text-xs text-gray-500 font-mono">{user.ipLogin}</td>
-                      <td>
-                        {user.ipHistory && user.ipHistory.length > 0 ? (
-                          <div className="space-y-0.5 max-w-[140px]">
-                            {user.ipHistory.slice(0, 2).map((ip, i) => (
-                              <div key={i} className="text-[10px] bg-gray-100 text-gray-600 font-mono px-1.5 py-0.2 rounded border border-gray-200">
-                                {ip}
-                              </div>
-                            ))}
-                            {user.ipHistory.length > 2 && (
-                              <span className="text-[9px] text-gray-400 italic font-medium">...và {user.ipHistory.length - 2} IP khác</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Chưa có</span>
-                        )}
-                      </td>
-                      <td>
-                        {user.signature ? (
-                          <div className="p-1 border border-gray-200 rounded-lg bg-gray-50 inline-block">
-                            <img src={user.signature} alt="Chữ ký" className="h-6 object-contain" />
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">Chưa có</span>
-                        )}
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5 text-gray-400">

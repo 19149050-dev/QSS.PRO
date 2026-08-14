@@ -4,12 +4,14 @@ import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
+import { standardBlocksTemplate } from '@/lib/mockData';
 
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
   const store = useStore();
-  const isAdminOrQS = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'QS';
+  const isAdmin = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'GIÁM ĐỐC';
+  const isAdminOrQS = isAdmin || store.currentUser?.role === 'QS';
   const matrixKey = `${projectName}_${type}`;
-  const fallbackBlocks = [{"blockName":"BLOCK A","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 01","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]},{"blockName":"BLOCK B","groups":[{"groupName":"CĂN HỘ","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]},{"groupName":"HÀNH LANG","items":["BẢ LỚP 1","BẢ LỚP 2","XẢ NHÁM","SƠN LÓT","SƠN PHỦ 1","SƠN PHỦ 2"]}]}];
+  const fallbackBlocks = JSON.parse(JSON.stringify(standardBlocksTemplate));
   const fallbackFloors = [];
 
   // Master base floors for project
@@ -28,26 +30,36 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       };
     });
     
-    // Only keep floors that have at least one cell with data
+    // Only keep floors that have at least one cell with data (excluding numApts)
     paymentMatrix = fullMatrix.filter(row => {
-      return Object.values(row.items).some(val => val && val.trim() !== '');
+      return Object.entries(row.items).some(([key, val]) => !key.endsWith('_numApts') && val && val.trim() !== '');
     });
   } else {
-    const teamMatrix = store.paymentMatrix[`${projectName}_team`] || [];
-    const sourceMatrix = teamMatrix.length > 0 ? teamMatrix : baseFloors;
+    const targetMatrix = store.paymentMatrix[matrixKey] || [];
+    const sourceMatrix = targetMatrix.length > 0 ? targetMatrix : baseFloors;
     paymentMatrix = baseFloors.map(canonicalRow => {
-      const teamRow = sourceMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
+      const rowData = sourceMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
       return {
         floor: canonicalRow.floor,
         numApts: canonicalRow.numApts,
-        items: teamRow ? (teamRow.items || {}) : {}
+        items: rowData ? (rowData.items || {}) : {}
       };
     });
   }
 
-  const matrixBlocks = (store.matrixBlocks[projectName] && store.matrixBlocks[projectName].length > 0) 
+  const rawBlocks = (store.matrixBlocks[projectName] && store.matrixBlocks[projectName].length > 0) 
     ? store.matrixBlocks[projectName] 
-    : (store.matrixBlocks['BCONS TĐH'] || fallbackBlocks);
+    : fallbackBlocks;
+    
+  // Tự động migrate các dự án cũ đang dùng template 2 nhóm (CĂN HỘ + HÀNH LANG)
+  const isOldFormat = rawBlocks[0]?.groups?.length === 2 && rawBlocks[0]?.groups?.[0]?.groupName === 'CĂN HỘ';
+  const matrixBlocks = isOldFormat ? fallbackBlocks : rawBlocks;
+
+  React.useEffect(() => {
+    if (isOldFormat) {
+      useStore.getState().updateProjectBlocks(projectName, JSON.parse(JSON.stringify(standardBlocksTemplate)));
+    }
+  }, [isOldFormat, projectName]);
   
   const updateMatrixCell = (...args) => store.updateMatrixCell(matrixKey, ...args);
   const updateCategoryName = (...args) => store.updateCategoryName(projectName, ...args);
@@ -68,17 +80,17 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [batchList, setBatchList] = useState([]);
   const [newBatchName, setNewBatchName] = useState('');
   const [newBatchUnits, setNewBatchUnits] = useState('');
+  const [newBatchNote, setNewBatchNote] = useState('');
   const [unitError, setUnitError] = useState('');
   const [activeTeam, setActiveTeam] = useState('');
   
   const [isBOQModalOpen, setIsBOQModalOpen] = useState(false);
   const [boqData, setBoqData] = useState({ blockName: '', groupName: '', itemName: '' });
 
-  const [promptConfig, setPromptConfig] = useState({ isOpen: false, title: '', isConfirm: false, onConfirm: null, onDelete: null });
   const [hiddenColumns, setHiddenColumns] = useState([]);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
-  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, numApts: '', startNumber: 1 });
+  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
 
   const toggleHideColumn = (itemKey) => {
     setHiddenColumns(prev => 
@@ -87,28 +99,17 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey);
-  const [promptInputValue, setPromptInputValue] = useState('');
-
-  const openPrompt = (title, defaultValue, onConfirm, onDelete = null) => {
-    setPromptConfig({ isOpen: true, title, isConfirm: false, onConfirm, onDelete });
-    setPromptInputValue(defaultValue || '');
-  };
-
-  const openConfirm = (title, onConfirm) => {
-    setPromptConfig({ isOpen: true, title, isConfirm: true, onConfirm });
-    setPromptInputValue('');
-  };
 
   const handleEditBlock = (bIdx, oldName) => {
-    openPrompt("Nhập tên BLOCK mới (VD: BLOCK B):", oldName, (newName) => {
+    store.openGlobalPrompt("Nhập tên BLOCK mới (VD: BLOCK B) - Bỏ trống để XÓA BLOCK:", (newName) => {
       if (newName && newName.trim() !== '' && newName !== oldName) {
         updateBlockName(bIdx, newName.trim());
+      } else if (!newName || newName.trim() === '') {
+        store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa BLOCK ${oldName} không? Toàn bộ các nhóm và hạng mục bên trong sẽ bị xóa sạch.`, () => {
+          deleteBlockName(bIdx);
+        });
       }
-    }, () => {
-      openConfirm(`Bạn có chắc chắn muốn xóa BLOCK ${oldName} không? Toàn bộ các nhóm và hạng mục bên trong sẽ bị xóa sạch.`, () => {
-        deleteBlockName(bIdx);
-      });
-    });
+    }, oldName);
   };
 
   const handleCreateBOQ = (e) => {
@@ -120,31 +121,37 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const handleEditGroup = (bIdx, gIdx, oldName) => {
-    openPrompt("Nhập tên nhóm mới:", oldName, (newName) => {
+    store.openGlobalPrompt("Nhập tên nhóm mới - Bỏ trống để XÓA NHÓM:", (newName) => {
       if (newName && newName.trim() !== '' && newName !== oldName) {
         updateGroupName(bIdx, gIdx, newName.trim());
+      } else if (!newName || newName.trim() === '') {
+        store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa NHÓM ${oldName} không? Toàn bộ các hạng mục bên trong sẽ bị xóa sạch.`, () => {
+          deleteGroupName(bIdx, gIdx);
+        });
       }
-    }, () => {
-      openConfirm(`Bạn có chắc chắn muốn xóa NHÓM ${oldName} không? Toàn bộ các hạng mục bên trong sẽ bị xóa sạch.`, () => {
-        deleteGroupName(bIdx, gIdx);
-      });
-    });
+    }, oldName);
   };
 
   const handleEditItem = (bIdx, gIdx, iIdx, oldName) => {
-    openPrompt("Nhập tên hạng mục mới:", oldName, (newName) => {
+    store.openGlobalPrompt("Nhập tên hạng mục mới - Bỏ trống để XÓA HẠNG MỤC:", (newName) => {
       if (newName && newName.trim() !== '' && newName !== oldName) {
         updateCategoryName(bIdx, gIdx, iIdx, oldName, newName.trim());
+      } else if (!newName || newName.trim() === '') {
+        store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa HẠNG MỤC ${oldName} không?`, () => {
+          deleteCategoryName(bIdx, gIdx, iIdx, oldName);
+        });
       }
-    }, () => {
-      openConfirm(`Bạn có chắc chắn muốn xóa HẠNG MỤC ${oldName} không?`, () => {
-        deleteCategoryName(bIdx, gIdx, iIdx);
-      });
+    }, oldName);
+  };
+
+  const handleResetFormat = () => {
+    store.openGlobalConfirm(`Bạn có chắc chắn muốn khôi phục cấu trúc chuẩn 8 NHÓM cho công trình ${projectName}? Toàn bộ các nhóm, hạng mục, số lượng từng nhóm sẽ bị thay đổi về mặc định (Lưu ý: Bạn không mất dữ liệu của các nhóm giữ nguyên).`, () => {
+      store.updateProjectBlocks(projectName, JSON.parse(JSON.stringify(standardBlocksTemplate)));
     });
   };
 
   const handleAddGroup = (bIdx) => {
-    openPrompt("Nhập tên NHÓM mới (VD: HÀNH LANG):", "", (newName) => {
+    store.openGlobalPrompt("Nhập tên NHÓM mới (VD: HÀNH LANG):", (newName) => {
       if (newName && newName.trim() !== '') {
         addCategoryGroup(bIdx, newName.trim());
       }
@@ -152,7 +159,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const handleAddItem = (bIdx, gIdx) => {
-    openPrompt("Nhập tên HẠNG MỤC mới (VD: Bả 1 lớp):", "", (newName) => {
+    store.openGlobalPrompt("Nhập tên HẠNG MỤC mới (VD: Bả 1 lớp):", (newName) => {
       if (newName && newName.trim() !== '') {
         addCategoryItem(bIdx, gIdx, newName.trim());
       }
@@ -168,36 +175,38 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         if (num > maxFloor) maxFloor = num;
       }
     });
+    const defaultApts = {};
+    matrixBlocks.forEach(b => defaultApts[b.blockName] = '');
     setAddFloorData({
       numFloors: 1,
-      numApts: '',
+      blockApts: defaultApts,
       startNumber: maxFloor + 1
     });
     setIsAddFloorModalOpen(true);
   };
 
   const handleEditFloor = (oldName) => {
-    openPrompt("Nhập tên TẦNG mới (VD: Tầng 16 (50%)):", oldName, (newName) => {
+    store.openGlobalPrompt("Nhập tên TẦNG mới (VD: Tầng 16 (50%)) - Bỏ trống để XÓA TẦNG:", (newName) => {
       if (newName && newName.trim() !== '' && newName !== oldName) {
         updateFloorName(oldName, newName.trim());
+      } else if (!newName || newName.trim() === '') {
+        store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa Tầng ${oldName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
+          deleteFloor(oldName);
+        });
       }
-    }, () => {
-      openConfirm(`Bạn có chắc chắn muốn xóa Tầng ${oldName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
-        deleteFloor(oldName);
-      });
-    });
+    }, oldName);
   };
 
-  const handleEditNumApts = (floorName, currentVal) => {
-    openPrompt(`Nhập số căn cho tầng ${floorName}:`, currentVal, (newName) => {
+  const handleEditNumApts = (floorName, blockName, currentVal) => {
+    store.openGlobalPrompt(`Nhập số căn cho ${floorName} - ${blockName}:`, (newName) => {
       if (newName !== null && newName.trim() !== currentVal) {
-        updateFloorNumApts(floorName, newName.trim());
+        store.updateMatrixCell(matrixKey, floorName, `${blockName}_numApts`, newName.trim());
       }
-    });
+    }, currentVal);
   };
 
   const handleDeleteFloor = (floorName) => {
-    openConfirm(`Bạn có chắc chắn muốn xóa Tầng ${floorName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
+    store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa Tầng ${floorName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
       deleteFloor(floorName);
     });
   };
@@ -280,25 +289,25 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     return otherTeamParts.join(' + ');
   };
 
-  const handleCellClick = (floor, cat, currentRawVal, numApts) => {
+  const handleCellClick = (floor, cat, currentRawVal, numAptsStr, teamRawVal = '') => {
     if (type === 'team' && selectedTeamFilter === 'ALL') {
-      if (!isAdminOrQS) {
-        openConfirm("⚠️ Bảng TỔNG chỉ dùng để xem tổng hợp tất cả các đội. Vui lòng chọn 1 Tổ Đội cụ thể ở menu trên cùng để nhập hoặc chỉnh sửa đợt thi công!", null);
+      if (!isAdmin) {
+        store.openGlobalAlert("⚠️ Bảng TỔNG chỉ dùng để xem tổng hợp tất cả các đội. Vui lòng chọn 1 Tổ Đội cụ thể ở menu trên cùng để nhập hoặc chỉnh sửa đợt thi công! (Chỉ Admin mới có quyền sửa TỔNG)");
         return;
       }
     }
 
     const hasExistingData = currentRawVal && currentRawVal.trim() !== '';
-    const totalApts = parseInt(numApts, 10);
-    const isNumAptsMissing = !numApts || isNaN(totalApts) || totalApts <= 0;
+    const totalApts = parseInt(numAptsStr, 10);
+    const isNumAptsMissing = !numAptsStr || isNaN(totalApts) || totalApts <= 0;
 
     // Only block if trying to add new data to an empty cell on a floor with missing numApts
     if (!hasExistingData && isNumAptsMissing) {
-      openConfirm(`⚠️ Tầng ${floor} chưa khai báo Số Căn Tổng (hiện tại là '-'). Vui lòng nhấp vào ô "Số căn" của Tầng ${floor} để nhập số căn tổng trước!`, null);
+      store.openGlobalAlert(`⚠️ ${floor} chưa khai báo Số Căn Tổng (hiện tại là '${numAptsStr || '-'}'). Vui lòng nhấp vào ô "Số căn" của ${floor} để nhập số căn tổng trước!`);
       return;
     }
 
-    setSelectedCell({ floor, category: cat, rawValue: currentRawVal, numApts: numApts || '' });
+    setSelectedCell({ floor, category: cat, rawValue: currentRawVal, numApts: numAptsStr || '', teamRawValue: teamRawVal });
     
     // Parse batches for the currently selected team
     let initialBatches = [];
@@ -317,6 +326,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     setInputValue(initialBatches.join(' + '));
     setNewBatchName('');
     setNewBatchUnits('');
+    setNewBatchNote('');
     setUnitError('');
     setActiveTeam(selectedTeamFilter !== 'ALL' ? selectedTeamFilter : '');
   };
@@ -394,6 +404,13 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       {/* Helper Toolbar */}
       <div className="flex flex-wrap items-center justify-end gap-3 mb-4 text-xs no-print">
         <button 
+          onClick={handleResetFormat}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 font-bold rounded-lg border border-red-200 shadow-sm transition-colors"
+          title="Khôi phục về chuẩn 7 Nhóm mặc định"
+        >
+          Khôi phục Chuẩn
+        </button>
+        <button 
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
         >
@@ -419,7 +436,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           <thead>
             {/* Block level */}
             <tr>
-              <th rowSpan={2} colSpan={2} className="header-green text-sm uppercase font-bold py-2 px-2 whitespace-nowrap min-w-[100px] border-r border-white/20 align-middle">
+              <th rowSpan={2} colSpan={1} className="header-green text-[11px] uppercase font-bold py-2 px-1 whitespace-normal break-words w-[70px] max-w-[70px] border-r border-white/20 align-middle">
                 {projectName}
               </th>
               {matrixBlocks.map((block, bIdx) => {
@@ -431,7 +448,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 if (visibleCountInBlock === 0) return null;
 
                 return (
-                  <th key={bIdx} colSpan={visibleCountInBlock} className="bg-indigo-900 text-white text-sm uppercase font-extrabold py-2 border-b border-white/20 border-r border-white/20">
+                  <th key={bIdx} colSpan={visibleCountInBlock + 1} className="bg-indigo-900 text-white text-sm uppercase font-extrabold py-2 border-b border-white/20 border-r border-white/20">
                     <div className="flex items-center justify-center gap-2 group">
                       <span className="cursor-pointer hover:text-indigo-200 transition-colors" onDoubleClick={() => handleEditBlock(bIdx, block.blockName)} title="Bấm đúp để đổi tên Block">
                         {block.blockName}
@@ -444,8 +461,14 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             </tr>
             {/* Group level */}
             <tr>
-              {matrixBlocks.flatMap((block, bIdx) => 
-                block.groups.map((group, gIdx) => {
+              {matrixBlocks.flatMap((block, bIdx) => {
+                const numAptsHeader = (
+                  <th key={`numapts-${bIdx}`} rowSpan={2} className="bg-slate-200 text-slate-800 text-[10px] font-bold uppercase border-b border-r border-gray-300 w-10 align-middle">
+                    Số căn
+                  </th>
+                );
+                
+                const groupHeaders = block.groups.map((group, gIdx) => {
                   const visItems = group.items.filter(cat => isColumnVisible(`${block.blockName}_${group.groupName}_${cat}`));
                   if (visItems.length === 0 && group.items.length > 0) return null;
                   const isEven = (bIdx + gIdx) % 2 === 0;
@@ -453,21 +476,21 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                     <th 
                       key={`${bIdx}-${gIdx}`} 
                       colSpan={Math.max(visItems.length, 1)} 
-                      className={`${isEven ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'} text-[11px] font-bold uppercase py-1 border-b border-orange-200/60 border-r border-orange-200/60 transition-colors`}
+                      className={`${isEven ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'} text-[10px] font-bold uppercase py-1 px-0.5 border-b border-orange-200/60 border-r border-orange-200/60 transition-colors`}
                     >
-                      <div className="flex items-center justify-center gap-2 group">
-                        <span className="cursor-pointer hover:text-orange-900" onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)} title="Bấm đúp để sửa tên">{group.groupName}</span>
-                        <button onClick={() => handleAddItem(bIdx, gIdx)} className="opacity-0 group-hover:opacity-100 transition-opacity bg-orange-200/60 hover:bg-orange-300 text-orange-900 w-4 h-4 rounded-full flex items-center justify-center text-base leading-none pb-0.5" title="Thêm Hạng Mục (Cột) mới">+</button>
+                      <div className="flex items-center justify-center gap-1 group relative">
+                        <span className="cursor-pointer hover:text-orange-900 truncate max-w-[90%]" onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)} title="Bấm đúp để sửa tên">{group.groupName}</span>
+                        <button onClick={() => handleAddItem(bIdx, gIdx)} className="opacity-0 group-hover:opacity-100 transition-opacity bg-orange-200/60 hover:bg-orange-300 text-orange-900 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[11px] leading-none absolute right-0" title="Thêm Hạng Mục (Cột) mới">+</button>
                       </div>
                     </th>
                   );
-                })
-              )}
+                });
+                return [numAptsHeader, ...groupHeaders];
+              })}
             </tr>
             {/* Item level */}
             <tr className="bg-slate-100 text-slate-800 text-[10px]">
-              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs min-w-[60px]">Tầng</th>
-              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs min-w-[60px]">Số căn</th>
+              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs w-[70px] max-w-[70px]">Tầng</th>
               {matrixBlocks.flatMap((block, bIdx) =>
                 block.groups.flatMap((group, gIdx) => {
                   if (group.items.length === 0) {
@@ -480,15 +503,17 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       <th 
                         key={`${bIdx}-${gIdx}-${iIdx}`} 
                         onDoubleClick={() => handleEditItem(bIdx, gIdx, iIdx, cat)}
-                        className="font-semibold leading-tight py-2 px-1 border-r border-gray-200 break-words max-w-[100px] cursor-pointer hover:bg-slate-300 transition-colors relative group/col"
+                        className="font-semibold leading-none py-1 border-r border-gray-200 cursor-pointer hover:bg-slate-300 transition-colors relative group/col align-middle"
                         title="Bấm đúp để sửa tên"
                       >
-                        <div className="flex items-center justify-between gap-1">
-                          <span>{cat}</span>
+                        <div className="flex justify-center items-center h-[90px] w-[20px] relative mx-auto">
+                          <span className="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[9px] font-extrabold text-slate-700 tracking-tight">
+                            {cat}
+                          </span>
                           <button 
                             type="button"
                             onClick={(e) => { e.stopPropagation(); toggleHideColumn(itemKey); }}
-                            className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-slate-200 rounded transition"
+                            className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-500 hover:text-indigo-600 hover:bg-slate-200 rounded transition absolute -top-1 -right-1 bg-white shadow-sm z-10"
                             title="Ẩn cột này"
                           >
                             <EyeOff className="w-3 h-3" />
@@ -511,15 +536,22 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 >
                   {row.floor}
                 </td>
-                <td 
-                  className="font-bold text-center bg-white border-r border-gray-200 text-slate-900 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors text-xs"
-                  onClick={() => handleEditNumApts(row.floor, row.numApts || '')}
-                  title="Nhấn để nhập số căn"
-                >
-                  {row.numApts || '-'}
-                </td>
-                {matrixBlocks.flatMap((block, bIdx) =>
-                  block.groups.flatMap((group, gIdx) => {
+                {matrixBlocks.flatMap((block, bIdx) => {
+                  const numAptsKey = `${block.blockName}_numApts`;
+                  const blockNumApts = row.items[numAptsKey] || '';
+                  
+                  const numAptsCell = (
+                    <td 
+                      key={`numapts-td-${bIdx}`}
+                      className="font-bold text-center bg-white border-r border-gray-200 text-slate-900 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors text-xs"
+                      onClick={() => handleEditNumApts(row.floor, block.blockName, blockNumApts)}
+                      title="Nhấn để nhập số căn"
+                    >
+                      {blockNumApts || '-'}
+                    </td>
+                  );
+
+                  const groupCells = block.groups.flatMap((group, gIdx) => {
                     if (group.items.length === 0) {
                       return <td key={`empty-td-${bIdx}-${gIdx}`} className="border-r border-gray-200 bg-gray-50/50"></td>;
                     }
@@ -529,7 +561,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       const rawVal = row.items[itemKey];
                       const displayVal = displayCellValue(rawVal, selectedTeamFilter);
                       let ipcRawVal = '';
-                      if (type === 'ipc') {
+                      if (type === 'ipc' || type === 'ipc_select') {
                         const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
                         const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
                         ipcRawVal = ipcRow?.items?.[itemKey] || '';
@@ -553,23 +585,23 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                             if ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal) {
                                // No action if empty
                             } else if (type === 'ipc') {
-                               handleCellClick(row.floor, itemKey, ipcRawVal, row.numApts);
+                               handleCellClick(row.floor, itemKey, ipcRawVal, blockNumApts || row.numApts, rawVal);
                             } else {
-                              handleCellClick(row.floor, itemKey, rawVal, row.numApts);
+                              handleCellClick(row.floor, itemKey, rawVal, blockNumApts || row.numApts);
                             }
                           }}
                           className={`transition-all duration-150 text-center font-bold text-xs text-gray-900 select-none border-r border-gray-200 ${
-                            (type === 'team' && selectedTeamFilter === 'ALL' && !isAdminOrQS) 
+                            (type === 'team' && selectedTeamFilter === 'ALL' && !isAdmin) 
                               ? 'cursor-not-allowed hover:opacity-100' 
                               : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
                           }`}
                           style={{ backgroundColor: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
-                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdminOrQS ? "Nhấp để chỉnh sửa/xóa (Quyền Admin/QS)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô")}
+                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdmin ? "Nhấp để chỉnh sửa/xóa (Quyền Admin)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô")}
                         >
-                          <div className="flex flex-col items-center justify-center gap-1 min-h-[32px] py-1">
+                          <div className="flex flex-col items-center justify-center min-h-[26px] py-0.5">
                             {type === 'ipc' ? (
                               <>
-                                <span className="text-[10px] opacity-70 leading-tight">{displayVal || ''}</span>
+                                <span className="text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px]">{displayVal || ''}</span>
                                 {ipcRawVal && (
                                   <span className="bg-blue-600 text-white border border-blue-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold shadow-sm mt-0.5">
                                     {ipcRawVal}
@@ -577,14 +609,55 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                                 )}
                               </>
                             ) : (
-                              <span>{displayVal || ''}</span>
+                              <div className="flex flex-col items-center justify-center">
+                                <span className="whitespace-normal break-words leading-tight px-1 max-w-[120px]">{displayVal || ''}</span>
+                                {(() => {
+                                  if (type === 'ipc_select' && ipcRawVal) {
+                                    const parseTotalUnits = (str, totalApts) => {
+                                      if (!str) return 0;
+                                      if (str.includes('Xong 100%')) return parseFloat(totalApts) || 0;
+                                      let total = 0;
+                                      str.split('+').forEach(p => {
+                                        if (p.includes('Xong 100%')) {
+                                          total += parseFloat(totalApts) || 0;
+                                        } else {
+                                          const m = p.match(/\((.*?)\)/);
+                                          if (m) {
+                                            const match = m[1].match(/(\d+(\.\d+)?)/);
+                                            if (match) total += parseFloat(match[1]);
+                                          }
+                                        }
+                                      });
+                                      return total;
+                                    };
+                                    
+                                    const teamMax = parseTotalUnits(rawVal, blockNumApts || row.numApts);
+                                    const ipcTotal = parseTotalUnits(ipcRawVal, blockNumApts || row.numApts);
+                                    let badgeText = "ĐÃ LÊN HS";
+                                    let isPartial = false;
+                                    
+                                    if (ipcTotal > 0 && ipcTotal < teamMax) {
+                                      badgeText = `ĐÃ LÊN ${ipcTotal}, CÒN ${teamMax - ipcTotal}`;
+                                      isPartial = true;
+                                    }
+                                    
+                                    return (
+                                      <span className={`text-[9px] font-extrabold mt-1 px-1.5 py-0.5 rounded-sm border whitespace-nowrap text-center ${isPartial ? 'text-amber-700 bg-amber-100 border-amber-200' : 'text-green-700 bg-green-100 border-green-200'}`}>
+                                        {badgeText}
+                                      </span>
+                                    );
+                                  }
+                                  return null;
+                                })()}
+                              </div>
                             )}
                           </div>
                         </td>
                       );
                     });
-                  })
-                )}
+                  });
+                  return [numAptsCell, ...groupCells];
+                })}
               </tr>
             ))}
             {type === 'team' && (
@@ -634,8 +707,35 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 </label>
                 <div className="flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto pr-1">
                   {batchList.map((batch, index) => (
-                    <span key={index} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 shadow-sm">
-                      {batch}
+                    <span key={index} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-indigo-700 text-xs font-bold rounded-lg border border-indigo-200 shadow-sm group">
+                      <span 
+                        className="cursor-pointer group-hover:underline" 
+                        title="Nhấn để sửa đợt này"
+                        onClick={() => {
+                          let name = batch;
+                          let units = '';
+                          let note = '';
+                          
+                          const noteIndex = batch.lastIndexOf(' - ');
+                          if (noteIndex !== -1) {
+                            note = batch.substring(noteIndex + 3).trim();
+                            name = batch.substring(0, noteIndex).trim();
+                          }
+                          
+                          const m = name.match(/^(.*?)\s*\((.*?)\)$/);
+                          if (m) {
+                            name = m[1].trim();
+                            units = m[2].trim();
+                          }
+                          
+                          setNewBatchName(name);
+                          setNewBatchUnits(units);
+                          setNewBatchNote(note);
+                          setBatchList(batchList.filter((_, i) => i !== index));
+                        }}
+                      >
+                        {batch}
+                      </span>
                       <button 
                         type="button"
                         onClick={() => setBatchList(batchList.filter((_, i) => i !== index))}
@@ -679,16 +779,60 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                     />
                   </div>
                 </div>
+                <div>
+                  <span className="text-[10px] font-bold text-gray-500 block mb-1">GHI CHÚ (NẾU CÓ)</span>
+                  <input 
+                    type="text" 
+                    value={newBatchNote}
+                    onChange={(e) => setNewBatchNote(e.target.value)}
+                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    placeholder="VD: Đã thanh toán, Chờ duyệt..."
+                  />
+                </div>
                 <button 
                   type="button"
                   onClick={() => {
                     if (!newBatchName.trim()) return;
-                    const formatted = newBatchUnits.trim() 
+                    
+                    const parseQuantity = (str, totalApts) => {
+                      if (!str) return 0;
+                      if (str.includes('Xong 100%')) return parseFloat(totalApts) || 0;
+                      let total = 0;
+                      str.split('+').forEach(p => {
+                        if (p.includes('Xong 100%')) {
+                          total += parseFloat(totalApts) || 0;
+                        } else {
+                          const m = p.match(/\((.*?)\)/);
+                          if (m) {
+                            const match = m[1].match(/(\d+(\.\d+)?)/);
+                            if (match) total += parseFloat(match[1]);
+                          }
+                        }
+                      });
+                      return total;
+                    };
+
+                    if (type === 'ipc' && selectedCell.teamRawValue) {
+                      const teamMax = parseQuantity(selectedCell.teamRawValue, selectedCell.numApts);
+                      const currentIpcTotal = parseQuantity(batchList.join(' + '), selectedCell.numApts);
+                      const newUnits = parseQuantity(`(${newBatchUnits})`, selectedCell.numApts);
+                      
+                      if (currentIpcTotal + newUnits > teamMax) {
+                        store.openGlobalAlert(`⚠️ Tổng khối lượng IPC (${currentIpcTotal + newUnits}) không được vượt quá số lượng Tổ Đội đã báo cáo (${teamMax}). Vui lòng kiểm tra lại!`);
+                        return;
+                      }
+                    }
+
+                    let formatted = newBatchUnits.trim() 
                       ? `${newBatchName.trim()} (${newBatchUnits.trim()})` 
                       : newBatchName.trim();
+                    if (newBatchNote.trim()) {
+                      formatted += ` - ${newBatchNote.trim()}`;
+                    }
                     setBatchList([...batchList, formatted]);
                     setNewBatchName('');
                     setNewBatchUnits('');
+                    setNewBatchNote('');
                   }}
                   className="w-full py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold border border-indigo-200 transition flex items-center justify-center gap-1"
                 >
@@ -743,7 +887,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                         const remainingAllowed = Math.max(0, maxUnits - (otherTeamUnits + currentSum));
                         const errorMsg = `⚠️ KHÔNG THỂ LƯU (VƯỢT HẠN MỨC): Tổng số căn (${totalProjected} căn) vượt quá số căn tổng của Tầng ${selectedCell.floor} (${maxUnits} căn)! Bạn chỉ có thể nhập tối đa thêm ${remainingAllowed} căn nữa.`;
                         setUnitError(errorMsg);
-                        openConfirm(errorMsg, null);
+                        store.openGlobalAlert(errorMsg);
                         return;
                       }
 
@@ -844,73 +988,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         </div>
       )}
 
-      {/* Custom Prompt/Confirm Modal */}
-      {promptConfig.isOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-[420px] shadow-2xl border border-gray-100 transform transition-all">
-            <h3 className="text-lg font-extrabold text-gray-900 mb-4">{promptConfig.title}</h3>
-            
-            {!promptConfig.isConfirm && (
-              <input
-                type="text"
-                value={promptInputValue}
-                onChange={(e) => setPromptInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && typeof promptConfig.onConfirm === 'function') {
-                    promptConfig.onConfirm(promptInputValue);
-                    setPromptConfig({ ...promptConfig, isOpen: false });
-                  }
-                }}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all mb-6"
-                autoFocus
-              />
-            )}
-            
-            <div className="flex justify-between items-center mt-6 pt-2 border-t border-gray-100">
-              {!promptConfig.isConfirm && promptConfig.onDelete ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const deleteFn = promptConfig.onDelete;
-                    setPromptConfig({ ...promptConfig, isOpen: false });
-                    setTimeout(() => deleteFn(), 50);
-                  }}
-                  className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs border border-red-200 transition active:scale-95 flex items-center gap-1.5 shadow-2xs"
-                >
-                  <Trash2 className="w-3.5 h-3.5 text-red-500" /> Xóa
-                </button>
-              ) : <div />}
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPromptConfig({ ...promptConfig, isOpen: false })}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (typeof promptConfig.onConfirm === 'function') {
-                      promptConfig.onConfirm(promptInputValue);
-                    }
-                    setPromptConfig({ ...promptConfig, isOpen: false });
-                  }}
-                  className={`px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 ${
-                    promptConfig.isConfirm 
-                      ? 'bg-red-600 hover:bg-red-700 shadow-red-600/20' 
-                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
-                  }`}
-                >
-                  {promptConfig.onConfirm ? (promptConfig.isConfirm ? 'Đồng ý xóa' : 'Xác nhận') : 'Đã hiểu'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Modal Thêm Tầng Mới */}
       {isAddFloorModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200">
@@ -940,15 +1017,23 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Số căn mỗi tầng (Không bắt buộc)</label>
-                <input
-                  type="text"
-                  value={addFloorData.numApts}
-                  onChange={(e) => setAddFloorData({ ...addFloorData, numApts: e.target.value })}
-                  placeholder="VD: 10"
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
+              <div className="space-y-3">
+                <label className="block text-xs font-bold text-gray-700">Số căn mỗi tầng theo Block (Không bắt buộc)</label>
+                {matrixBlocks.map((b, idx) => (
+                  <div key={idx} className="flex items-center gap-3">
+                    <span className="text-xs font-bold text-gray-600 w-24 truncate">{b.blockName}</span>
+                    <input
+                      type="text"
+                      value={addFloorData.blockApts[b.blockName] || ''}
+                      onChange={(e) => setAddFloorData({ 
+                        ...addFloorData, 
+                        blockApts: { ...addFloorData.blockApts, [b.blockName]: e.target.value } 
+                      })}
+                      placeholder="VD: 10"
+                      className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                ))}
               </div>
             </div>
             
@@ -965,16 +1050,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 onClick={() => {
                   const numFloors = parseInt(addFloorData.numFloors, 10);
                   const startNum = parseInt(addFloorData.startNumber, 10);
-                  const apts = addFloorData.numApts.trim();
                   
                   if (!isNaN(numFloors) && numFloors > 0 && !isNaN(startNum)) {
                     for (let i = 0; i < numFloors; i++) {
                       const floorName = `Tầng ${startNum + i}`;
                       addFloor(floorName);
-                      if (apts !== '') {
-                        // Thêm timeout nhỏ để đảm bảo addFloor đã update state
-                        setTimeout(() => updateFloorNumApts(floorName, apts), 50);
-                      }
+                      
+                      // Cập nhật số căn cho từng block
+                      setTimeout(() => {
+                        Object.entries(addFloorData.blockApts).forEach(([bName, apts]) => {
+                          if (apts.trim() !== '') {
+                            store.updateMatrixCell(matrixKey, floorName, `${bName}_numApts`, apts.trim());
+                          }
+                        });
+                      }, 50);
                     }
                   }
                   setIsAddFloorModalOpen(false);

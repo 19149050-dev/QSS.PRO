@@ -37,11 +37,14 @@ export default function Sidebar() {
     { label: 'Tổ Đội', id: 'teams', icon: Users },
     { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
     { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList },
+    { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
   ];
+
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
 
   const systemNavItems = [
     { label: 'QL Công trình', id: 'projects', icon: Building2 },
-    { label: 'QL Nhân viên', id: 'users', icon: Users },
+    ...(isAdmin ? [{ label: 'QL Nhân viên', id: 'users', icon: Users }] : []),
     { label: 'QL Tổ đội', id: 'manage-teams', icon: Users },
     { label: 'Thùng rác', id: 'trash', icon: Trash2 },
   ];
@@ -49,7 +52,7 @@ export default function Sidebar() {
   const isActive = (id) => activeTab === id;
 
   return (
-    <aside className="w-64 bg-[#0a0a0a] text-zinc-400 min-h-screen flex flex-col justify-between flex-shrink-0 border-r border-zinc-900 shadow-xl relative z-20">
+    <aside className="w-52 bg-[#0a0a0a] text-zinc-400 min-h-screen flex flex-col justify-between flex-shrink-0 border-r border-zinc-900 shadow-xl relative z-20">
       <div className="relative z-10">
         {/* Brand Header */}
         <div className="p-5 flex items-center gap-3 border-b border-zinc-900 bg-[#0a0a0a]">

@@ -2,13 +2,16 @@
 
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
-import { useStore } from '@/store/useStore';
+import { useStore, useAllowedProjects } from '@/store/useStore';
 import PaymentMatrix from '@/components/PaymentMatrix';
 import { ShieldCheck, CheckCircle2, Clock, FileSpreadsheet, Search, Building2 } from 'lucide-react';
 
 export default function AcceptancePage() {
-  const { projects } = useStore();
-  const [selectedProject, setSelectedProject] = useState(projects[0]?.name || 'SUNHOME');
+  const { activeProject } = useStore();
+  const projects = useAllowedProjects();
+  const [selectedProject, setSelectedProject] = useState((activeProject && projects.some(p => p.name === activeProject)) 
+    ? activeProject 
+    : projects[0]?.name || 'SUNHOME');
   const [searchTerm, setSearchTerm] = useState('');
 
   return (
