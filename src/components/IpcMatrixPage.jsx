@@ -23,7 +23,7 @@ const parseNumber = (value) => {
 const formatCell = (value) => (value === '' || value === null || value === undefined ? '' : value);
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
-  const { activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt } = useStore();
+  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -43,9 +43,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   
   const materialItems = useMemo(() => {
     let items = currentSheet.items || [];
-    if (items.length !== 8) {
+    if (items.length === 0) {
       items = Array.from({ length: 8 }, (_, i) => {
-        return items[i] || { id: `col_${i}`, name: '' };
+        return { id: `col_${i}`, name: '' };
       });
     }
     return items;
@@ -150,6 +150,17 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const resetData = () => {
+    if (currentUser?.role !== 'admin' && currentUser?.username !== '@admin') {
+      alert('Chỉ tài khoản Quản trị (Admin) mới có quyền xóa dữ liệu!');
+      return;
+    }
+    const pwd = window.prompt("Vui lòng nhập mật khẩu Admin để xác nhận xóa dữ liệu:");
+    if (pwd === null) return;
+    if (pwd !== currentUser?.password && pwd !== '0000') {
+      alert('Mật khẩu không đúng!');
+      return;
+    }
+
     if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu của tab này?")) {
       setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
     }
