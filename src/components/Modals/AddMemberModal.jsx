@@ -205,23 +205,43 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-600 mb-1">Hạn thẻ an toàn</label>
-                    <input 
-                      type="text" 
-                      value={member.safetyCardExpiry}
-                      onChange={e => updateMember('safetyCardExpiry', e.target.value)}
-                      className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
-                      placeholder="dd/mm/yyyy"
-                    />
+                    {member.safetyCardExpiry === '00/00/00' || member.safetyCardExpiry === 'Chưa có' ? (
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600">
+                        <span className="text-sm font-semibold italic">Chưa có thẻ</span>
+                        <button type="button" onClick={() => updateMember('safetyCardExpiry', '')} className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded font-bold">Xóa</button>
+                      </div>
+                    ) : !member.safetyCardExpiry ? (
+                      <button type="button" onClick={() => updateMember('safetyCardExpiry', new Date().toISOString().split('T')[0])} className="w-full px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-sm hover:bg-indigo-100 transition-colors">
+                        + Set ngày
+                      </button>
+                    ) : (
+                      <input 
+                        type="date" 
+                        value={member.safetyCardExpiry.includes('/') ? member.safetyCardExpiry.split('/').reverse().join('-') : member.safetyCardExpiry}
+                        onChange={e => updateMember('safetyCardExpiry', e.target.value)}
+                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
+                      />
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-gray-600 mb-1">Hạn bảo hiểm</label>
-                    <input 
-                      type="text" 
-                      value={member.insuranceExpiry}
-                      onChange={e => updateMember('insuranceExpiry', e.target.value)}
-                      className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
-                      placeholder="dd/mm/yyyy"
-                    />
+                    {member.insuranceExpiry === '00/00/00' || member.insuranceExpiry === 'Chưa có' ? (
+                      <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600">
+                        <span className="text-sm font-semibold italic">Chưa có thẻ</span>
+                        <button type="button" onClick={() => updateMember('insuranceExpiry', '')} className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded font-bold">Xóa</button>
+                      </div>
+                    ) : !member.insuranceExpiry ? (
+                      <button type="button" onClick={() => updateMember('insuranceExpiry', new Date().toISOString().split('T')[0])} className="w-full px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-sm hover:bg-indigo-100 transition-colors">
+                        + Set ngày
+                      </button>
+                    ) : (
+                      <input 
+                        type="date" 
+                        value={member.insuranceExpiry.includes('/') ? member.insuranceExpiry.split('/').reverse().join('-') : member.insuranceExpiry}
+                        onChange={e => updateMember('insuranceExpiry', e.target.value)}
+                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
+                      />
+                    )}
                   </div>
                 </div>
                 
