@@ -146,3 +146,25 @@ DROP POLICY IF EXISTS "Allow public write matrix" ON public.payment_matrix;
 CREATE POLICY "Allow public read matrix" ON public.payment_matrix FOR SELECT USING (true);
 CREATE POLICY "Allow public write matrix" ON public.payment_matrix FOR ALL USING (true);
 
+-- Bảng riêng biệt quản lý Nhận/Xuất vật tư
+CREATE TABLE IF NOT EXISTS public.material_sheets (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_name text NOT NULL UNIQUE,
+  items jsonb DEFAULT '[]'::jsonb,
+  receive_rows jsonb DEFAULT '[]'::jsonb,
+  export_rows jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.material_sheets ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow public read material_sheets"
+  ON public.material_sheets
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public write material_sheets"
+  ON public.material_sheets
+  FOR ALL
+  USING (true);

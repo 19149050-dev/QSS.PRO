@@ -230,14 +230,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <Plus className="h-4 w-4" />
                       Thêm dòng
                     </button>
-                    <button
-                      type="button"
-                      onClick={addColumn}
-                      className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-                    >
-                      <Plus className="h-4 w-4" />
-                      Thêm cột
-                    </button>
+                    {!isExport && (
+                      <button
+                        type="button"
+                        onClick={addColumn}
+                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Thêm cột
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={resetData}
@@ -257,8 +259,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             {materialItems.map((item) => (
                               <th key={item.id} colSpan={2} className="border border-slate-800 bg-white p-0">
                                 <div
-                                  onClick={() => handleEditName(item)}
-                                  className="w-full h-full min-w-[120px] p-2 text-center font-bold text-slate-900 cursor-pointer hover:bg-slate-50 uppercase min-h-[40px] flex items-center justify-center"
+                                  onClick={!isExport ? () => handleEditName(item) : undefined}
+                                  className={`w-full h-full min-w-[120px] p-2 text-center font-bold text-slate-900 uppercase min-h-[40px] flex items-center justify-center ${!isExport ? 'cursor-pointer hover:bg-slate-50' : ''}`}
                                 >
                                   {item.name || <span className="text-gray-400 font-normal italic">Tên vật tư</span>}
                                 </div>
