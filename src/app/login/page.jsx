@@ -19,11 +19,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
+  const fetchSupabaseData = useStore((s) => s.fetchSupabaseData);
+
   useEffect(() => {
     if (window.location.pathname !== '/') {
       window.history.replaceState({}, '', '/');
     }
-  }, []);
+    fetchSupabaseData();
+  }, [fetchSupabaseData]);
 
   const handleLogin = (event) => {
     event.preventDefault();
