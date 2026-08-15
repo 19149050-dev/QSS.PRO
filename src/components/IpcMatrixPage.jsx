@@ -460,9 +460,6 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                 </div>
               ) : (
                 <>
-                  <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-medium text-slate-700">
-                    <strong>Hướng dẫn:</strong> Bảng dưới đây dùng để quản lý {activeTab.label.toLowerCase()}. {activeTab.type === 'team' ? 'Các ô có dữ liệu sẽ tự động được đồng bộ vào IPC Dự kiến.' : ''}
-                  </div>
                   <PaymentMatrix 
                     projectName={selectedProject} 
                     type={activeTab.type === 'team' ? 'ipc_select' : 'ipc'} 

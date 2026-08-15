@@ -381,26 +381,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-      {/* Table Title Banner */}
-      <div className="bg-purple-800 text-white p-4 rounded-xl mb-4 shadow-md">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h2 className="font-extrabold text-lg tracking-wide uppercase">
-              {type === 'team' ? 'BẢNG THEO DÕI KẾ HOẠCH THANH TOÁN TỔ ĐỘI' : 'BẢNG THEO DÕI KẾ HOẠCH THANH TOÁN THẦU PHỤ'}
-            </h2>
-            <div className="flex items-center gap-4 text-xs text-purple-200 mt-1">
-              <span><strong>CÔNG TRÌNH:</strong> {projectName}</span>
-              <span><strong>GÓI THẦU:</strong> HOÀN THIỆN</span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs bg-purple-900/70 border border-purple-400/40 text-purple-100 px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1">
-              <Sparkles className="w-3.5 h-3.5 text-yellow-300" /> A. Kế hoạch hồ sơ thanh toán
-            </span>
-          </div>
-        </div>
-      </div>
-
       {/* Helper Toolbar */}
       <div className="flex flex-wrap items-center justify-end gap-3 mb-4 text-xs no-print">
         <button 
