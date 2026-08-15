@@ -73,7 +73,6 @@ export default function LoginPage() {
         {/* Login Card */}
         <form
           onSubmit={handleLogin}
-          autoComplete="off"
           className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-[0_20px_80px_rgba(0,0,0,0.06)] backdrop-blur-2xl"
         >
           {error && (
@@ -91,7 +90,6 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(event) => setUsername(event.target.value)}
-                  autoComplete="off"
                   className="h-12 w-full bg-transparent text-[14px] font-medium text-black outline-none placeholder:text-slate-400"
                   placeholder="Nhập tài khoản..."
                 />
@@ -106,7 +104,6 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="new-password"
                   className="h-12 w-full bg-transparent text-[14px] font-medium text-black outline-none placeholder:text-slate-400"
                   placeholder="Nhập mật khẩu..."
                 />
