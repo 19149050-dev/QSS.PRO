@@ -12,6 +12,7 @@ import ManageTeamsView from '@/components/Views/ManageTeamsView';
 import IpcDuKienView from '@/components/Views/IpcDuKienView';
 import IpcThucView from '@/components/Views/IpcThucView';
 import IpcVatTuView from '@/components/Views/IpcVatTuView';
+import ExportMaterialsView from '@/components/Views/ExportMaterialsView';
 import IpcView from '@/components/Views/IpcView';
 import UsersView from '@/components/Views/UsersView';
 import TrashView from '@/components/Views/TrashView';
@@ -38,6 +39,8 @@ export default function RootRouter() {
       return <IpcThucView />;
     case 'ipc-vat-tu':
       return <IpcVatTuView />;
+    case 'export-materials':
+      return <ExportMaterialsView />;
     case 'ipc':
       return <IpcView />;
     case 'users':

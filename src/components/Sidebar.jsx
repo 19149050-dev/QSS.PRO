@@ -38,6 +38,7 @@ export default function Sidebar() {
     { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
     { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList },
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
+    { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
   ];
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
