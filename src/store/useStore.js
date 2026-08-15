@@ -584,7 +584,7 @@ export const useStore = create(
             [projectName]: sheetData
           }
         }));
-        get().syncMatrixDataToSupabase(projectName);
+        get().syncMaterialSheetToSupabase(projectName);
       },
       resetMaterialSheet: (projectName) => set((state) => {
         const current = state.materialSheets[projectName] || {};
@@ -1295,7 +1295,6 @@ export const useStore = create(
             
             const blocks = {};
             const matrix = {};
-            const mats = {};
             projectsData.forEach(p => {
               if (p.matrix_blocks) blocks[p.name] = p.matrix_blocks;
               if (p.matrix_data) {
@@ -1305,14 +1304,12 @@ export const useStore = create(
                   if (p.matrix_data.base) matrix[p.name] = p.matrix_data.base;
                   if (p.matrix_data.ipc) matrix[`${p.name}_ipc`] = p.matrix_data.ipc;
                   if (p.matrix_data.team) matrix[`${p.name}_team`] = p.matrix_data.team;
-                  if (p.matrix_data.material) mats[p.name] = p.matrix_data.material;
                 }
               }
             });
             set((state) => ({ 
               matrixBlocks: { ...state.matrixBlocks, ...blocks },
-              paymentMatrix: { ...state.paymentMatrix, ...matrix },
-              materialSheets: { ...state.materialSheets, ...mats }
+              paymentMatrix: { ...state.paymentMatrix, ...matrix }
             }));
           }
 
@@ -1383,6 +1380,22 @@ export const useStore = create(
             set({ materials: mappedMat });
           }
 
+          // Fetch Material Sheets
+          const { data: sheetsData, error: sheetsError } = await supabase.from('material_sheets').select('*');
+          if (!sheetsError && sheetsData) {
+            const mats = {};
+            sheetsData.forEach(s => {
+              mats[s.project_name] = {
+                items: s.items || [],
+                rows: s.receive_rows || [],
+                exportRows: s.export_rows || []
+              };
+            });
+            set((state) => ({
+              materialSheets: { ...state.materialSheets, ...mats }
+            }));
+          }
+
         } catch (err) {
           console.log('Using local mock state (Supabase fallback active):', err);
         } finally {
@@ -1399,8 +1412,7 @@ export const useStore = create(
         const matrixDataObj = {
           base: state.paymentMatrix[projectName] || [],
           ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
-          team: state.paymentMatrix[`${projectName}_team`] || [],
-          material: state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] }
+          team: state.paymentMatrix[`${projectName}_team`] || []
         };
         
         try {
@@ -1426,6 +1438,32 @@ export const useStore = create(
           }
         } catch (err) {
           console.error('Supabase sync error:', err);
+        }
+      },
+
+      syncMaterialSheetToSupabase: async (projectName) => {
+        const state = get();
+        const sheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
+        
+        try {
+          const { error } = await supabase
+            .from('material_sheets')
+            .upsert(
+              { 
+                project_name: projectName,
+                items: sheet.items,
+                receive_rows: sheet.rows,
+                export_rows: sheet.exportRows,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'project_name' }
+            );
+          
+          if (error) {
+            console.error('Failed to sync material sheet to Supabase:', error);
+          }
+        } catch (err) {
+          console.error('Supabase material sheet sync error:', err);
         }
       }
     }),
