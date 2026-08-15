@@ -4,6 +4,7 @@ import { Fragment, useMemo } from 'react';
 import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import PaymentMatrix from '@/components/PaymentMatrix';
+import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
 
 const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
@@ -23,6 +24,10 @@ const formatCell = (value) => (value === '' || value === null || value === undef
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
   const { activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt } = useStore();
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+
   const projects = useAllowedProjects();
 
   const selectedProject = (activeProject && projects.some((p) => p.name === activeProject))
@@ -151,20 +156,32 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const totals = useMemo(() => materialItems.reduce((acc, item) => {
-    acc[item.id] = materialRows.reduce((sum, row) => {
+    acc[item.id] = (currentSheet.rows || []).reduce((sum, row) => {
       const value = row.values?.[item.id] || {};
+      // For materials, "received" is the amount received.
       return sum + parseNumber(value.received);
     }, 0);
     return acc;
-  }, {}), [materialItems, materialRows]);
+  }, {}), [materialItems, currentSheet.rows]);
+
+  const exportTotals = useMemo(() => materialItems.reduce((acc, item) => {
+    acc[item.id] = (currentSheet.exportRows || []).reduce((sum, row) => {
+      const cellData = row.values?.[item.id];
+      if (Array.isArray(cellData)) {
+        return sum + cellData.reduce((s, entry) => s + parseNumber(entry.quantity), 0);
+      }
+      return sum;
+    }, 0);
+    return acc;
+  }, {}), [materialItems, currentSheet.exportRows]);
 
   const orderTotals = useMemo(() => materialItems.reduce((acc, item) => {
-    acc[item.id] = materialRows.reduce((sum, row) => {
+    acc[item.id] = (currentSheet.rows || []).reduce((sum, row) => {
       const value = row.values?.[item.id] || {};
       return sum + parseNumber(value.order);
     }, 0);
     return acc;
-  }, {}), [materialItems, materialRows]);
+  }, {}), [materialItems, currentSheet.rows]);
 
   const remainingByMaterial = (itemId) => parseNumber(orderTotals[itemId]) - parseNumber(totals[itemId]);
 
@@ -258,38 +275,101 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           </tr>
                         </thead>
                         <tbody>
-                          {materialRows.map((row) => (
-                            <tr key={row.id}>
-                              <td className="border border-slate-800 p-0">
-                                <div
-                                  onClick={() => handleEditDate(row)}
-                                  className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex items-center justify-center"
-                                >
-                                  {row.date || ''}
-                                </div>
-                              </td>
-                              {materialItems.map((item) => (
-                                <Fragment key={`${row.id}-${item.id}`}>
+                          {materialRows.map((row) => {
+                            if (!isExport) {
+                              return (
+                                <tr key={row.id}>
                                   <td className="border border-slate-800 p-0">
                                     <div
-                                      onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
-                                      className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] bg-[#fff3e0] text-amber-900 min-h-[36px] flex items-center justify-center font-medium"
+                                      onClick={() => handleEditDate(row)}
+                                      className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex items-center justify-center"
                                     >
-                                      {row.values?.[item.id]?.order ?? ''}
+                                      {row.date || ''}
                                     </div>
                                   </td>
-                                  <td className="border border-slate-800 p-0">
-                                    <div
-                                      onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
-                                      className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] bg-[#e8f5e9] text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
-                                    >
-                                      {row.values?.[item.id]?.received ?? ''}
-                                    </div>
-                                  </td>
-                                </Fragment>
-                              ))}
-                            </tr>
-                          ))}
+                                  {materialItems.map((item) => (
+                                    <Fragment key={`${row.id}-${item.id}`}>
+                                      <td className="border border-slate-800 p-0">
+                                        <div
+                                          onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
+                                          className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] bg-[#fff3e0] text-amber-900 min-h-[36px] flex items-center justify-center font-medium"
+                                        >
+                                          {row.values?.[item.id]?.order ?? ''}
+                                        </div>
+                                      </td>
+                                      <td className="border border-slate-800 p-0">
+                                        <div
+                                          onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
+                                          className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] bg-[#e8f5e9] text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
+                                        >
+                                          {row.values?.[item.id]?.received ?? ''}
+                                        </div>
+                                      </td>
+                                    </Fragment>
+                                  ))}
+                                </tr>
+                              );
+                            } else {
+                              // isExport === true
+                              // Compute max entries for this floor
+                              let maxEntries = 1;
+                              materialItems.forEach(item => {
+                                const arr = row.values?.[item.id];
+                                if (Array.isArray(arr) && arr.length > maxEntries) {
+                                  maxEntries = arr.length;
+                                }
+                              });
+                              
+                              const rowSpans = Array.from({ length: maxEntries }).map((_, idx) => (
+                                <tr key={`${row.id}-sub-${idx}`}>
+                                  {idx === 0 && (
+                                    <td rowSpan={maxEntries} className="border border-slate-800 p-0 align-middle">
+                                      <div
+                                        onClick={() => handleEditDate(row)}
+                                        className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex flex-col items-center justify-center font-bold"
+                                      >
+                                        {row.date || ''}
+                                      </div>
+                                    </td>
+                                  )}
+                                  {materialItems.map((item) => {
+                                    const arr = Array.isArray(row.values?.[item.id]) ? row.values?.[item.id] : [];
+                                    const entry = arr[idx] || { quantity: '', date: '' };
+                                    
+                                    return (
+                                      <Fragment key={`${row.id}-${item.id}-sub-${idx}`}>
+                                        <td className="border border-slate-800 p-0">
+                                          <div
+                                            onClick={() => {
+                                              setSelectedRow(row);
+                                              setSelectedItem(item);
+                                              setIsExportModalOpen(true);
+                                            }}
+                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] bg-white text-slate-900 min-h-[36px] flex items-center justify-center font-medium transition-colors"
+                                          >
+                                            {entry.quantity || ''}
+                                          </div>
+                                        </td>
+                                        <td className="border border-slate-800 p-0">
+                                          <div
+                                            onClick={() => {
+                                              setSelectedRow(row);
+                                              setSelectedItem(item);
+                                              setIsExportModalOpen(true);
+                                            }}
+                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] bg-white text-slate-900 min-h-[36px] flex items-center justify-center transition-colors"
+                                          >
+                                            {entry.date || ''}
+                                          </div>
+                                        </td>
+                                      </Fragment>
+                                    );
+                                  })}
+                                </tr>
+                              ));
+                              return rowSpans;
+                            }
+                          })}
                           {materialRows.length === 0 && (
                             <tr>
                               <td colSpan={17} className="border border-slate-800 py-6 text-slate-400">
@@ -297,32 +377,63 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               </td>
                             </tr>
                           )}
-                          <tr className="bg-slate-100 font-bold">
-                            <td className="border border-slate-800 p-2 text-slate-900">TỔNG</td>
-                            {materialItems.map((item) => (
-                              <Fragment key={`${item.id}-totals`}>
-                                <td className="border border-slate-800 p-2 text-amber-900 bg-[#ffe0b2]">{formatCell(orderTotals[item.id] || 0)}</td>
-                                <td className="border border-slate-800 p-2 text-emerald-900 bg-[#c8e6c9]">{formatCell(totals[item.id] || 0)}</td>
-                              </Fragment>
-                            ))}
-                          </tr>
-                          <tr className="font-bold">
-                            <td className="border border-slate-800 p-2 text-slate-900 bg-white">CÒN LẠI</td>
-                            {materialItems.map((item) => {
-                              const remaining = remainingByMaterial(item.id);
-                              // Excel has red if positive (still need to receive), green if 0 or negative
-                              const isShort = remaining > 0;
-                              return (
-                                <td
-                                  key={`${item.id}-remaining`}
-                                  colSpan={2}
-                                  className={`border border-slate-800 p-2 ${isShort ? 'bg-[red] text-white' : 'bg-[#92d050] text-black'}`}
-                                >
-                                  {remaining}
-                                </td>
-                              );
-                            })}
-                          </tr>
+                          {!isExport ? (
+                            <>
+                              <tr className="bg-slate-100 font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900">TỔNG</td>
+                                {materialItems.map((item) => (
+                                  <Fragment key={`${item.id}-totals`}>
+                                    <td className="border border-slate-800 p-2 text-amber-900 bg-[#ffe0b2]">{formatCell(orderTotals[item.id] || 0)}</td>
+                                    <td className="border border-slate-800 p-2 text-emerald-900 bg-[#c8e6c9]">{formatCell(totals[item.id] || 0)}</td>
+                                  </Fragment>
+                                ))}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">CÒN LẠI</td>
+                                {materialItems.map((item) => {
+                                  const remaining = remainingByMaterial(item.id);
+                                  // Excel has red if positive (still need to receive), green if 0 or negative
+                                  const isShort = remaining > 0;
+                                  return (
+                                    <td
+                                      key={`${item.id}-remaining`}
+                                      colSpan={2}
+                                      className={`border border-slate-800 p-2 ${isShort ? 'bg-[red] text-white' : 'bg-[#92d050] text-black'}`}
+                                    >
+                                      {remaining}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            </>
+                          ) : (
+                            <>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">Đã nhập</td>
+                                {materialItems.map((item) => (
+                                  <td
+                                    key={`${item.id}-imported`}
+                                    colSpan={2}
+                                    className="border border-slate-800 p-2 bg-white text-black"
+                                  >
+                                    {formatCell(totals[item.id] || 0)}
+                                  </td>
+                                ))}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">Đã xuất</td>
+                                {materialItems.map((item) => (
+                                  <td
+                                    key={`${item.id}-exported`}
+                                    colSpan={2}
+                                    className="border border-slate-800 p-2 bg-white text-black"
+                                  >
+                                    {formatCell(exportTotals[item.id] || 0)}
+                                  </td>
+                                ))}
+                              </tr>
+                            </>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -343,6 +454,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           )}
         </div>
       </div>
+      <ExportEntriesModal 
+        isOpen={isExportModalOpen}
+        onClose={() => setIsExportModalOpen(false)}
+        project={selectedProject}
+        row={selectedRow}
+        item={selectedItem}
+        isExport={isExport}
+      />
     </div>
   );
 }
