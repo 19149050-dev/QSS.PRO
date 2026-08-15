@@ -23,10 +23,12 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     pdf: [],
     project: ''
   });
+  const [error, setError] = useState('');
 
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
+      setError('');
       if (memberToEdit) {
         setMember(memberToEdit);
       } else {
@@ -88,9 +90,10 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!member.name || !member.cccd) {
-      alert("Vui lòng điền đủ Họ tên và số CCCD.");
+      setError("Vui lòng điền đủ Họ tên và số CCCD.");
       return;
     }
+    setError('');
     
     const memberData = {
       name: member.name,
@@ -129,6 +132,11 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
 
         {/* Body */}
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium animate-in fade-in slide-in-from-top-2">
+              {error}
+            </div>
+          )}
           <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
             <div className="flex flex-col md:flex-row gap-6">
               {/* Avatar Upload */}
