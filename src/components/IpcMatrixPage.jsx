@@ -340,7 +340,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     
                                     return (
                                       <Fragment key={`${row.id}-${item.id}-sub-${idx}`}>
-                                        <td className="border border-slate-800 p-0 bg-[#fafafa]">
+                                        <td className="border border-slate-800 p-0 bg-slate-50">
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
@@ -352,7 +352,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                             {entry.quantity || ''}
                                           </div>
                                         </td>
-                                        <td className="border border-slate-800 p-0 bg-[#fafafa]">
+                                        <td className="border border-slate-800 p-0 bg-slate-50">
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
