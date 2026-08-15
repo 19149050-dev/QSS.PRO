@@ -111,7 +111,7 @@ export default function GlobalDialog() {
                           if (e.key === 'Enter') handleConfirm();
                           if (e.key === 'Escape') handleCancel();
                         }}
-                        placeholder="VD: PO25, Đã giao..."
+                        placeholder="Nhập đợt order"
                         className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
                       />
                     </div>
