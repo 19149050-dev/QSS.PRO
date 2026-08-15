@@ -143,7 +143,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
       }
-    }, currentValue || '');
+    }, currentValue || '', 'Nhập liệu', 'text', true);
   };
 
   const addRow = () => {

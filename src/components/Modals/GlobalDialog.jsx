@@ -5,23 +5,37 @@ import { AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
 export default function GlobalDialog() {
   const { globalDialog, closeGlobalDialog } = useStore();
   const [inputValue, setInputValue] = useState('');
+  const [noteValue, setNoteValue] = useState('');
   const inputRef = useRef(null);
 
   useEffect(() => {
     if (globalDialog.isOpen) {
-      setInputValue(globalDialog.defaultValue || '');
       if (globalDialog.type === 'prompt') {
+        if (globalDialog.allowNote) {
+          const match = (globalDialog.defaultValue || '').match(/^(.*?)(?:\s*\((.*?)\))?$/);
+          setInputValue(match[1]?.trim() || '');
+          setNoteValue(match[2]?.trim() || '');
+        } else {
+          setInputValue(globalDialog.defaultValue || '');
+          setNoteValue('');
+        }
         setTimeout(() => inputRef.current?.focus(), 100);
+      } else {
+        setInputValue(globalDialog.defaultValue || '');
       }
     }
-  }, [globalDialog.isOpen, globalDialog.defaultValue, globalDialog.type]);
+  }, [globalDialog.isOpen, globalDialog.defaultValue, globalDialog.type, globalDialog.allowNote]);
 
   if (!globalDialog.isOpen) return null;
 
   const handleConfirm = () => {
     if (globalDialog.onConfirm) {
       if (globalDialog.type === 'prompt') {
-        globalDialog.onConfirm(inputValue);
+        if (globalDialog.allowNote && noteValue.trim()) {
+          globalDialog.onConfirm(`${inputValue.trim()} (${noteValue.trim()})`);
+        } else {
+          globalDialog.onConfirm(inputValue.trim() || inputValue);
+        }
       } else {
         globalDialog.onConfirm();
       }
@@ -73,7 +87,7 @@ export default function GlobalDialog() {
               </p>
               
               {globalDialog.type === 'prompt' && (
-                <div className="mt-4">
+                <div className="mt-4 space-y-3">
                   <input
                     ref={inputRef}
                     type={globalDialog.inputType || 'text'}
@@ -86,6 +100,22 @@ export default function GlobalDialog() {
                     placeholder={globalDialog.inputPlaceholder || 'Nhập giá trị...'}
                     className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
                   />
+                  {globalDialog.allowNote && (
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 ml-1">Ghi chú (Tùy chọn):</label>
+                      <input
+                        type="text"
+                        value={noteValue}
+                        onChange={(e) => setNoteValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleConfirm();
+                          if (e.key === 'Escape') handleCancel();
+                        }}
+                        placeholder="VD: PO25, Đã giao..."
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
