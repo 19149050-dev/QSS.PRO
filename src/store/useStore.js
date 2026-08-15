@@ -118,25 +118,33 @@ export const useStore = create(
         }
       },
       updateUser: async (id, updatedData) => {
+        const oldUser = get().users.find(u => u.id === id);
+        const oldUsername = oldUser ? oldUser.username : null;
+
         set((state) => ({
           users: state.users.map(u => u.id === id ? { ...u, ...updatedData } : u)
         }));
 
-        // Since id might be a local 'u-xxx' or Supabase UUID, we need to map correctly. 
-        // For now, if we match by username since it's unique:
         try {
-          const userState = get().users.find(u => u.id === id);
-          if (userState && userState.username) {
+          if (oldUsername) {
              const dbData = {};
-             if (updatedData.name) dbData.name = updatedData.name;
-             if (updatedData.username) dbData.username = updatedData.username;
-             if (updatedData.phone) dbData.phone = updatedData.phone;
-             if (updatedData.role) dbData.role = updatedData.role;
-             if (updatedData.status) dbData.status = updatedData.status;
-             if (updatedData.signature) dbData.signature_url = updatedData.signature;
+             if (updatedData.name !== undefined) dbData.name = updatedData.name;
+             if (updatedData.username !== undefined) dbData.username = updatedData.username;
+             if (updatedData.phone !== undefined) dbData.phone = updatedData.phone;
+             if (updatedData.role !== undefined) dbData.role = updatedData.role;
+             if (updatedData.status !== undefined) dbData.status = updatedData.status;
+             if (updatedData.signature !== undefined) dbData.signature_url = updatedData.signature;
+             if (updatedData.password !== undefined && updatedData.password.trim() !== '') {
+               // Optional: If you store password or hash in users table, add it here.
+               // e.g. dbData.password = updatedData.password; 
+               // For now, Supabase auth handles passwords, so this might not be mapped unless a custom column is used.
+             }
              
-             // Update by username since local ids (u-xxx) might not match Supabase uuids easily without fetching
-             await supabase.from('users').update(dbData).eq('username', userState.username);
+             if (id && !String(id).startsWith('u-')) {
+               await supabase.from('users').update(dbData).eq('id', id);
+             } else {
+               await supabase.from('users').update(dbData).eq('username', oldUsername);
+             }
           }
         } catch (error) {
           console.error("Failed to update user in Supabase:", error);
@@ -1364,7 +1372,8 @@ export const useStore = create(
       name: 'qss-pro-storage-v2',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => {
-        return state;
+        const { currentUser, ...rest } = state;
+        return rest;
       },
       // An empty project list is valid. Do not re-add mock projects after users
       // intentionally delete every project and refresh the browser.

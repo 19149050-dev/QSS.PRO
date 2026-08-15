@@ -9,6 +9,7 @@ const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
   actual: { label: 'IPC Thực', icon: ClipboardList, type: 'ipc', hint: 'Hồ sơ thanh toán đã triển khai' },
   materials: { label: 'Nhận Vật Tư', icon: Boxes, type: 'materials', hint: 'Theo dõi vật tư theo từng công trình' },
+  export_materials: { label: 'Xuất Vật Tư', icon: Boxes, type: 'materials', hint: 'Theo dõi xuất vật tư theo từng công trình' },
 };
 
 const parseNumber = (value) => {
@@ -32,7 +33,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const Icon = activeTab.icon;
 
   // Material Logic
-  const currentSheet = materialSheets[selectedProject] || { items: [], rows: [] };
+  const isExport = mode === 'export_materials';
+  const sheetKey = isExport ? `${selectedProject}_export` : selectedProject;
+  const currentSheet = materialSheets[sheetKey] || { items: [], rows: [] };
   
   const materialItems = useMemo(() => {
     let items = currentSheet.items || [];
@@ -48,12 +51,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const handleUpdateName = (colId, newName) => {
     const nextItems = materialItems.map(item => item.id === colId ? { ...item, name: newName } : item);
-    setMaterialSheet(selectedProject, { items: nextItems, rows: materialRows });
+    setMaterialSheet(sheetKey, { items: nextItems, rows: materialRows });
   };
 
   const handleUpdateRowDate = (rowId, date) => {
     const nextRows = materialRows.map(row => row.id === rowId ? { ...row, date } : row);
-    setMaterialSheet(selectedProject, { items: materialItems, rows: nextRows });
+    setMaterialSheet(sheetKey, { items: materialItems, rows: nextRows });
   };
 
   const handleUpdateCell = (rowId, colId, field, value) => {
@@ -72,7 +75,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       }
       return row;
     });
-    setMaterialSheet(selectedProject, { items: materialItems, rows: nextRows });
+    setMaterialSheet(sheetKey, { items: materialItems, rows: nextRows });
   };
 
   const handleEditName = (item) => {
@@ -84,6 +87,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleEditDate = (row) => {
+    if (isExport) {
+      openGlobalPrompt(`Nhập tầng:`, (newVal) => {
+        if (newVal !== null) {
+          handleUpdateRowDate(row.id, newVal);
+        }
+      }, row.date || '', 'Nhập Tầng', 'text');
+      return;
+    }
+
     const toISO = (dateStr) => {
       if (!dateStr) return '';
       const parts = dateStr.split('/');
@@ -115,7 +127,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleEditValue = (row, item, field, currentValue) => {
-    const fieldName = field === 'order' ? 'ORDER' : 'NHẬN';
+    const fieldName = field === 'order' ? 'ORDER' : (isExport ? 'XUẤT' : 'NHẬN');
     openGlobalPrompt(`Nhập số lượng ${fieldName} cho ${item.name || 'vật tư này'}:`, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
@@ -125,17 +137,17 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const addRow = () => {
     const newRow = { id: `row-${Date.now()}`, date: '', values: {} };
-    setMaterialSheet(selectedProject, { items: materialItems, rows: [...materialRows, newRow] });
+    setMaterialSheet(sheetKey, { items: materialItems, rows: [...materialRows, newRow] });
   };
 
   const addColumn = () => {
     const newItem = { id: `mat-${Date.now()}`, name: '' };
-    setMaterialSheet(selectedProject, { items: [...materialItems, newItem], rows: materialRows });
+    setMaterialSheet(sheetKey, { items: [...materialItems, newItem], rows: materialRows });
   };
 
   const resetData = () => {
     if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu vật tư của công trình này?")) {
-      setMaterialSheet(selectedProject, { items: [], rows: [] });
+      setMaterialSheet(sheetKey, { items: [], rows: [] });
     }
   };
 
@@ -185,25 +197,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-black text-white shadow-sm">
-                <Icon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-black">{activeTab.label}</p>
-                <p className="text-sm text-slate-500">{activeTab.hint}</p>
-              </div>
-            </div>
-          </div>
-
           {!selectedProject ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
               Chưa có công trình nào để hiển thị.
             </div>
           ) : (
             <div className="mt-4 border-t border-slate-100 pt-4">
-              {mode === 'materials' ? (
+              {mode === 'materials' || mode === 'export_materials' ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <button
@@ -237,7 +237,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <table className="w-full border-collapse border border-slate-800 text-center text-sm">
                         <thead>
                           <tr>
-                            <th rowSpan={2} className="border border-slate-800 bg-white px-4 py-3 font-bold text-slate-900 w-[160px] whitespace-nowrap">NGÀY (DD/MM/YY)</th>
+                            <th rowSpan={2} className="border border-slate-800 bg-white px-4 py-3 font-bold text-slate-900 w-[160px] whitespace-nowrap">{isExport ? 'TẦNG' : 'NGÀY (DD/MM/YY)'}</th>
                             {materialItems.map((item) => (
                               <th key={item.id} colSpan={2} className="border border-slate-800 bg-white p-0">
                                 <div
@@ -253,7 +253,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
                                 <th className="border border-slate-800 bg-[#fff3e0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">ORDER</th>
-                                <th className="border border-slate-800 bg-[#e8f5e9] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">NHẬN</th>
+                                <th className="border border-slate-800 bg-[#e8f5e9] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'XUẤT' : 'NHẬN'}</th>
                               </Fragment>
                             ))}
                           </tr>
