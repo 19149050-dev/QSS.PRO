@@ -340,26 +340,26 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     
                                     return (
                                       <Fragment key={`${row.id}-${item.id}-sub-${idx}`}>
-                                        <td className="border border-slate-800 p-0">
+                                        <td className="border border-slate-800 p-0 bg-[#fafafa]">
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
                                               setSelectedItem(item);
                                               setIsExportModalOpen(true);
                                             }}
-                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] bg-white text-slate-900 min-h-[36px] flex items-center justify-center font-medium transition-colors"
+                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] text-slate-900 min-h-[36px] flex items-center justify-center font-medium transition-colors"
                                           >
                                             {entry.quantity || ''}
                                           </div>
                                         </td>
-                                        <td className="border border-slate-800 p-0">
+                                        <td className="border border-slate-800 p-0 bg-[#fafafa]">
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
                                               setSelectedItem(item);
                                               setIsExportModalOpen(true);
                                             }}
-                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] bg-white text-slate-900 min-h-[36px] flex items-center justify-center transition-colors"
+                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] text-slate-900 min-h-[36px] flex items-center justify-center transition-colors"
                                           >
                                             {entry.date || ''}
                                           </div>
@@ -411,28 +411,34 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           ) : (
                             <>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">Đã nhập</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100">Đã nhập</td>
                                 {materialItems.map((item) => (
                                   <td
                                     key={`${item.id}-imported`}
                                     colSpan={2}
-                                    className="border border-slate-800 p-2 bg-white text-black"
+                                    className="border border-slate-800 p-2 bg-[#e8f5e9] text-emerald-900"
                                   >
                                     {formatCell(totals[item.id] || 0)}
                                   </td>
                                 ))}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">Đã xuất</td>
-                                {materialItems.map((item) => (
-                                  <td
-                                    key={`${item.id}-exported`}
-                                    colSpan={2}
-                                    className="border border-slate-800 p-2 bg-white text-black"
-                                  >
-                                    {formatCell(exportTotals[item.id] || 0)}
-                                  </td>
-                                ))}
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100">Đã xuất</td>
+                                {materialItems.map((item) => {
+                                  const imported = parseNumber(totals[item.id] || 0);
+                                  const exported = parseNumber(exportTotals[item.id] || 0);
+                                  const isWarning = imported > 0 && exported >= imported * 0.9;
+                                  
+                                  return (
+                                    <td
+                                      key={`${item.id}-exported`}
+                                      colSpan={2}
+                                      className={`border border-slate-800 p-2 ${isWarning ? 'bg-orange-500 text-white' : 'bg-[#fff3e0] text-amber-900'}`}
+                                    >
+                                      {formatCell(exported)}
+                                    </td>
+                                  );
+                                })}
                               </tr>
                             </>
                           )}
