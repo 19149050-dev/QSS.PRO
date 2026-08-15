@@ -34,8 +34,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   // Material Logic
   const isExport = mode === 'export_materials';
-  const sheetKey = isExport ? `${selectedProject}_export` : selectedProject;
-  const currentSheet = materialSheets[sheetKey] || { items: [], rows: [] };
+  const currentSheet = materialSheets[selectedProject] || { items: [], rows: [], exportRows: [] };
   
   const materialItems = useMemo(() => {
     let items = currentSheet.items || [];
@@ -47,16 +46,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     return items;
   }, [currentSheet.items]);
 
-  const materialRows = currentSheet.rows || [];
+  const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
 
   const handleUpdateName = (colId, newName) => {
     const nextItems = materialItems.map(item => item.id === colId ? { ...item, name: newName } : item);
-    setMaterialSheet(sheetKey, { items: nextItems, rows: materialRows });
+    setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
   };
 
   const handleUpdateRowDate = (rowId, date) => {
     const nextRows = materialRows.map(row => row.id === rowId ? { ...row, date } : row);
-    setMaterialSheet(sheetKey, { items: materialItems, rows: nextRows });
+    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
   };
 
   const handleUpdateCell = (rowId, colId, field, value) => {
@@ -75,7 +74,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       }
       return row;
     });
-    setMaterialSheet(sheetKey, { items: materialItems, rows: nextRows });
+    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
   };
 
   const handleEditName = (item) => {
@@ -127,8 +126,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleEditValue = (row, item, field, currentValue) => {
-    const fieldName = field === 'order' ? 'ORDER' : (isExport ? 'XUẤT' : 'NHẬN');
-    openGlobalPrompt(`Nhập số lượng ${fieldName} cho ${item.name || 'vật tư này'}:`, (newVal) => {
+    const fieldName = field === 'order' ? (isExport ? 'SỐ LƯỢNG' : 'ORDER') : (isExport ? 'NGÀY' : 'NHẬN');
+    openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || 'vật tư này'}:`, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
       }
@@ -137,17 +136,17 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const addRow = () => {
     const newRow = { id: `row-${Date.now()}`, date: '', values: {} };
-    setMaterialSheet(sheetKey, { items: materialItems, rows: [...materialRows, newRow] });
+    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
   };
 
   const addColumn = () => {
     const newItem = { id: `mat-${Date.now()}`, name: '' };
-    setMaterialSheet(sheetKey, { items: [...materialItems, newItem], rows: materialRows });
+    setMaterialSheet(selectedProject, { ...currentSheet, items: [...materialItems, newItem] });
   };
 
   const resetData = () => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu vật tư của công trình này?")) {
-      setMaterialSheet(sheetKey, { items: [], rows: [] });
+    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu của tab này?")) {
+      setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
     }
   };
 
@@ -252,8 +251,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <tr>
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
-                                <th className="border border-slate-800 bg-[#fff3e0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">ORDER</th>
-                                <th className="border border-slate-800 bg-[#e8f5e9] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'XUẤT' : 'NHẬN'}</th>
+                                <th className="border border-slate-800 bg-[#fff3e0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isExport ? 'SỐ LƯỢNG' : 'ORDER'}</th>
+                                <th className="border border-slate-800 bg-[#e8f5e9] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'NGÀY' : 'NHẬN'}</th>
                               </Fragment>
                             ))}
                           </tr>

@@ -109,7 +109,8 @@ export const useStore = create(
           last_login: user.lastLogin,
           ip_login: user.ipLogin,
           signature_url: user.signature,
-          allow_view_financials: user.allowViewFinancials
+          allow_view_financials: user.allowViewFinancials,
+          password: user.password
         };
         try {
           await supabase.from('users').insert([dbUser]);
@@ -135,9 +136,7 @@ export const useStore = create(
              if (updatedData.status !== undefined) dbData.status = updatedData.status;
              if (updatedData.signature !== undefined) dbData.signature_url = updatedData.signature;
              if (updatedData.password !== undefined && updatedData.password.trim() !== '') {
-               // Optional: If you store password or hash in users table, add it here.
-               // e.g. dbData.password = updatedData.password; 
-               // For now, Supabase auth handles passwords, so this might not be mapped unless a custom column is used.
+               dbData.password = updatedData.password;
              }
              
              if (id && !String(id).startsWith('u-')) {
@@ -576,7 +575,7 @@ export const useStore = create(
       },
       getMaterialSheet: (projectName) => {
         const state = get();
-        return state.materialSheets[projectName] || { items: [], rows: [] };
+        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
       },
       setMaterialSheet: (projectName, sheet) => set((state) => ({
         materialSheets: {
@@ -584,15 +583,18 @@ export const useStore = create(
           [projectName]: sheet
         }
       })),
-      resetMaterialSheet: (projectName) => set((state) => ({
-        materialSheets: {
-          ...state.materialSheets,
-          [projectName]: { items: [], rows: [] }
-        }
-      })),
+      resetMaterialSheet: (projectName) => set((state) => {
+        const current = state.materialSheets[projectName] || {};
+        return {
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: { ...current, items: [], rows: [], exportRows: [] }
+          }
+        };
+      }),
       addMaterialColumn: (projectName, name) => set((state) => {
         if (!name) return state;
-        const current = state.materialSheets[projectName] || { items: [], rows: [] };
+        const current = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
         const exists = current.items.some((item) => item.name.trim().toLowerCase() === name.trim().toLowerCase());
         if (exists) return state;
         const newItem = { id: `mat-${Date.now()}`, name: name.trim() };
@@ -602,7 +604,14 @@ export const useStore = create(
             [projectName]: {
               ...current,
               items: [...current.items, newItem],
-              rows: current.rows.map((row) => ({
+              rows: (current.rows || []).map((row) => ({
+                ...row,
+                values: {
+                  ...(row.values || {}),
+                  [newItem.id]: { order: '', received: '' }
+                }
+              })),
+              exportRows: (current.exportRows || []).map((row) => ({
                 ...row,
                 values: {
                   ...(row.values || {}),
@@ -629,71 +638,116 @@ export const useStore = create(
       deleteMaterialColumn: (projectName, columnId) => set((state) => {
         const current = state.materialSheets[projectName];
         if (!current) return state;
+        
+        const deleteValue = (rows) => (rows || []).map((row) => {
+          const nextValues = { ...(row.values || {}) };
+          delete nextValues[columnId];
+          return { ...row, values: nextValues };
+        });
+
         return {
           materialSheets: {
             ...state.materialSheets,
             [projectName]: {
               ...current,
               items: current.items.filter((item) => item.id !== columnId),
-              rows: current.rows.map((row) => {
-                const nextValues = { ...(row.values || {}) };
-                delete nextValues[columnId];
-                return { ...row, values: nextValues };
-              })
+              rows: deleteValue(current.rows),
+              exportRows: deleteValue(current.exportRows)
             }
           }
         };
       }),
-      addMaterialRow: (projectName, row = {}) => set((state) => {
-        const current = state.materialSheets[projectName] || { items: [], rows: [] };
+      addMaterialRow: (projectName, row = {}, isExport = false) => set((state) => {
+        const current = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
         const values = {};
         current.items.forEach((item) => {
           values[item.id] = { order: '', received: '' };
         });
+        
+        if (isExport) {
+          return {
+            materialSheets: {
+              ...state.materialSheets,
+              [projectName]: {
+                ...current,
+                exportRows: [...(current.exportRows || []), { id: `export-row-${Date.now()}`, floor: '', values, ...row }]
+              }
+            }
+          };
+        }
+
         return {
           materialSheets: {
             ...state.materialSheets,
             [projectName]: {
               ...current,
-              rows: [...current.rows, { id: `row-${Date.now()}`, date: '', values, ...row }]
+              rows: [...(current.rows || []), { id: `row-${Date.now()}`, date: '', values, ...row }]
             }
           }
         };
       }),
-      updateMaterialRow: (projectName, rowId, field, value) => set((state) => {
+      updateMaterialRow: (projectName, rowId, field, value, isExport = false) => set((state) => {
         const current = state.materialSheets[projectName];
         if (!current) return state;
+        
+        if (isExport) {
+          return {
+            materialSheets: {
+              ...state.materialSheets,
+              [projectName]: {
+                ...current,
+                exportRows: (current.exportRows || []).map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+              }
+            }
+          };
+        }
+
         return {
           materialSheets: {
             ...state.materialSheets,
             [projectName]: {
               ...current,
-              rows: current.rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
+              rows: (current.rows || []).map((row) => (row.id === rowId ? { ...row, [field]: value } : row))
             }
           }
         };
       }),
-      updateMaterialCell: (projectName, rowId, columnId, field, value) => set((state) => {
+      updateMaterialCell: (projectName, rowId, columnId, field, value, isExport = false) => set((state) => {
         const current = state.materialSheets[projectName];
         if (!current) return state;
+        
+        const updateRows = (rows) => (rows || []).map((row) => {
+          if (row.id !== rowId) return row;
+          return {
+            ...row,
+            values: {
+              ...(row.values || {}),
+              [columnId]: {
+                ...(row.values?.[columnId] || {}),
+                [field]: value
+              }
+            }
+          };
+        });
+
+        if (isExport) {
+          return {
+            materialSheets: {
+              ...state.materialSheets,
+              [projectName]: {
+                ...current,
+                exportRows: updateRows(current.exportRows)
+              }
+            }
+          };
+        }
+
         return {
           materialSheets: {
             ...state.materialSheets,
             [projectName]: {
               ...current,
-              rows: current.rows.map((row) => {
-                if (row.id !== rowId) return row;
-                return {
-                  ...row,
-                  values: {
-                    ...(row.values || {}),
-                    [columnId]: {
-                      ...(row.values?.[columnId] || {}),
-                      [field]: value
-                    }
-                  }
-                };
-              })
+              rows: updateRows(current.rows)
             }
           }
         };
