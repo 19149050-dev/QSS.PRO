@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw } from 'lucide-react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import PaymentMatrix from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
@@ -56,6 +56,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const handleUpdateName = (colId, newName) => {
     const nextItems = materialItems.map(item => item.id === colId ? { ...item, name: newName } : item);
     setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
+  };
+
+  const handleRemoveColumn = (colId) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa cột vật tư này? Toàn bộ dữ liệu của cột này sẽ bị mất.")) {
+      const nextItems = materialItems.filter(item => item.id !== colId);
+      setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
+    }
   };
 
   const handleUpdateRowDate = (rowId, date) => {
@@ -271,9 +278,22 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               <th key={item.id} colSpan={2} className="border border-slate-800 bg-white p-0">
                                 <div
                                   onClick={!isExport ? () => handleEditName(item) : undefined}
-                                  className={`w-full h-full min-w-[120px] p-2 text-center font-bold text-slate-900 uppercase min-h-[40px] flex items-center justify-center ${!isExport ? 'cursor-pointer hover:bg-slate-50' : ''}`}
+                                  className={`w-full h-full min-w-[120px] p-2 text-center font-bold text-slate-900 uppercase min-h-[40px] flex items-center justify-center relative group ${!isExport ? 'cursor-pointer hover:bg-slate-50' : ''}`}
                                 >
                                   {item.name || <span className="text-gray-400 font-normal italic">Tên vật tư</span>}
+                                  {!isExport && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRemoveColumn(item.id);
+                                      }}
+                                      className="absolute right-1 top-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Xóa cột này"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  )}
                                 </div>
                               </th>
                             ))}
