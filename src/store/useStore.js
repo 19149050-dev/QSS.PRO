@@ -577,12 +577,15 @@ export const useStore = create(
         const state = get();
         return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
       },
-      setMaterialSheet: (projectName, sheet) => set((state) => ({
-        materialSheets: {
-          ...state.materialSheets,
-          [projectName]: sheet
-        }
-      })),
+      setMaterialSheet: (projectName, sheetData) => {
+        set((state) => ({
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: sheetData
+          }
+        }));
+        get().syncMatrixDataToSupabase(projectName);
+      },
       resetMaterialSheet: (projectName) => set((state) => {
         const current = state.materialSheets[projectName] || {};
         return {
@@ -1292,6 +1295,7 @@ export const useStore = create(
             
             const blocks = {};
             const matrix = {};
+            const mats = {};
             projectsData.forEach(p => {
               if (p.matrix_blocks) blocks[p.name] = p.matrix_blocks;
               if (p.matrix_data) {
@@ -1301,12 +1305,14 @@ export const useStore = create(
                   if (p.matrix_data.base) matrix[p.name] = p.matrix_data.base;
                   if (p.matrix_data.ipc) matrix[`${p.name}_ipc`] = p.matrix_data.ipc;
                   if (p.matrix_data.team) matrix[`${p.name}_team`] = p.matrix_data.team;
+                  if (p.matrix_data.material) mats[p.name] = p.matrix_data.material;
                 }
               }
             });
             set((state) => ({ 
               matrixBlocks: { ...state.matrixBlocks, ...blocks },
-              paymentMatrix: { ...state.paymentMatrix, ...matrix }
+              paymentMatrix: { ...state.paymentMatrix, ...matrix },
+              materialSheets: { ...state.materialSheets, ...mats }
             }));
           }
 
@@ -1393,7 +1399,8 @@ export const useStore = create(
         const matrixDataObj = {
           base: state.paymentMatrix[projectName] || [],
           ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
-          team: state.paymentMatrix[`${projectName}_team`] || []
+          team: state.paymentMatrix[`${projectName}_team`] || [],
+          material: state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] }
         };
         
         try {
