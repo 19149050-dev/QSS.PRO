@@ -57,7 +57,7 @@ export const useStore = create(
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
       openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
       openGlobalConfirm: (message, onConfirm, title = 'Xác nhận') => set({ globalDialog: { isOpen: true, type: 'confirm', title, message, onConfirm } }),
-      openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', allowNote = false, onCancel = null) => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, defaultValue, inputType, allowNote } }),
+      openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', allowNote = false, onCancel = null, onDelete = null) => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, onDelete, defaultValue, inputType, allowNote } }),
       closeGlobalDialog: () => set((state) => ({ globalDialog: { ...state.globalDialog, isOpen: false } })),
       
       isLoading: false,

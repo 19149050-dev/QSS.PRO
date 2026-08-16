@@ -122,21 +122,39 @@ export default function GlobalDialog() {
           </div>
         </div>
 
-        <div className="bg-slate-50 px-6 py-4 flex items-center justify-end gap-3 border-t border-slate-100">
-          {(globalDialog.type === 'confirm' || globalDialog.type === 'prompt') && (
+        <div className="bg-slate-50 px-6 py-4 flex items-center justify-between border-t border-slate-100">
+          <div>
+            {globalDialog.type === 'prompt' && globalDialog.onDelete && (
+              <button
+                onClick={() => {
+                  const deleteFn = globalDialog.onDelete;
+                  closeGlobalDialog();
+                  setTimeout(() => {
+                    if (deleteFn) deleteFn();
+                  }, 200);
+                }}
+                className="px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
+              >
+                Xóa dòng
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {(globalDialog.type === 'confirm' || globalDialog.type === 'prompt') && (
+              <button
+                onClick={handleCancel}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              >
+                Hủy
+              </button>
+            )}
             <button
-              onClick={handleCancel}
-              className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
+              onClick={handleConfirm}
+              className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
             >
-              Hủy
+              {globalDialog.type === 'alert' ? 'Đóng' : 'Xác nhận'}
             </button>
-          )}
-          <button
-            onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
-          >
-            {globalDialog.type === 'alert' ? 'Đóng' : 'Xác nhận'}
-          </button>
+          </div>
         </div>
       </div>
     </div>

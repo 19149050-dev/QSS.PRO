@@ -147,7 +147,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           handleUpdateRowDate(row.id, '');
         }
       }
-    }, toISO(row.date), 'Chọn Ngày', 'date');
+    }, toISO(row.date), 'Chọn Ngày', 'date', false, null, () => {
+      openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng này?', () => {
+        const listKey = isExport ? 'exportRows' : 'rows';
+        const nextRows = (isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])).filter(r => r.id !== row.id);
+        setMaterialSheet(selectedProject, { ...currentSheet, [listKey]: nextRows });
+      }, 'Xác nhận xóa dòng');
+    });
   };
 
   const handleEditValue = (row, item, field, currentValue) => {
