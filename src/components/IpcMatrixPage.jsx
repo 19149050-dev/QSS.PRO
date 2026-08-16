@@ -84,6 +84,23 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleUpdateCell = (rowId, colId, field, value) => {
+    if (field === 'order' && !isExport && value) {
+      const match = String(value).match(/\((PO.*?)\)/i);
+      if (match) {
+        const po = match[1].toUpperCase();
+        const isDuplicate = materialRows.some(r => {
+          if (r.id === rowId) return false;
+          const rVal = String(r.values?.[colId]?.order || '');
+          const rMatch = rVal.match(/\((PO.*?)\)/i);
+          return rMatch && rMatch[1].toUpperCase() === po;
+        });
+        if (isDuplicate) {
+          openGlobalAlert(`Mã ${po} đã tồn tại trong cột này. Mỗi cột không được trùng mã PO.`, 'Lỗi trùng PO');
+          return;
+        }
+      }
+    }
+
     const nextRows = materialRows.map(row => {
       if (row.id === rowId) {
         return {
@@ -485,26 +502,59 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                       {row.date || ''}
                                     </div>
                                   </td>
-                                  {materialItems.map((item) => (
-                                    <Fragment key={`${row.id}-${item.id}`}>
-                                      <td className="border border-slate-800 p-0 bg-[#fffaf0] hover:bg-[#ffecce] transition-colors">
-                                        <div
-                                          onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
-                                          className="w-full h-full p-2 text-center cursor-pointer text-amber-900 min-h-[36px] flex items-center justify-center font-medium"
-                                        >
-                                          {row.values?.[item.id]?.order ?? ''}
-                                        </div>
-                                      </td>
-                                      <td className="border border-slate-800 p-0 bg-[#f2fbf3] hover:bg-[#dcf1dd] transition-colors">
-                                        <div
-                                          onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
-                                          className="w-full h-full p-2 text-center cursor-pointer text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
-                                        >
-                                          {row.values?.[item.id]?.received ?? ''}
-                                        </div>
-                                      </td>
-                                    </Fragment>
-                                  ))}
+                                  {materialItems.map((item) => {
+                                    const orderVal = row.values?.[item.id]?.order || '';
+                                    const match = String(orderVal).match(/\((PO.*?)\)/i);
+                                    let orderBg = 'bg-[#fffaf0] hover:bg-[#ffecce]';
+                                    let orderText = 'text-amber-900';
+                                    
+                                    if (match) {
+                                      const po = match[1].toUpperCase();
+                                      const colors = [
+                                        { bg: 'bg-yellow-200 hover:bg-yellow-300', text: 'text-yellow-900' },
+                                        { bg: 'bg-green-200 hover:bg-green-300', text: 'text-green-900' },
+                                        { bg: 'bg-blue-200 hover:bg-blue-300', text: 'text-blue-900' },
+                                        { bg: 'bg-red-200 hover:bg-red-300', text: 'text-red-900' },
+                                        { bg: 'bg-purple-200 hover:bg-purple-300', text: 'text-purple-900' },
+                                        { bg: 'bg-orange-200 hover:bg-orange-300', text: 'text-orange-900' },
+                                        { bg: 'bg-cyan-200 hover:bg-cyan-300', text: 'text-cyan-900' },
+                                        { bg: 'bg-pink-200 hover:bg-pink-300', text: 'text-pink-900' },
+                                        { bg: 'bg-lime-200 hover:bg-lime-300', text: 'text-lime-900' },
+                                        { bg: 'bg-indigo-200 hover:bg-indigo-300', text: 'text-indigo-900' },
+                                        { bg: 'bg-sky-200 hover:bg-sky-300', text: 'text-sky-900' },
+                                        { bg: 'bg-fuchsia-200 hover:bg-fuchsia-300', text: 'text-fuchsia-900' },
+                                        { bg: 'bg-rose-200 hover:bg-rose-300', text: 'text-rose-900' }
+                                      ];
+                                      let hash = 0;
+                                      for (let i = 0; i < po.length; i++) {
+                                        hash = (hash * 31 + po.charCodeAt(i)) % 1000000007;
+                                      }
+                                      const c = colors[hash % colors.length];
+                                      orderBg = c.bg;
+                                      orderText = c.text;
+                                    }
+
+                                    return (
+                                      <Fragment key={`${row.id}-${item.id}`}>
+                                        <td className={`border border-slate-800 p-0 transition-colors ${orderBg}`}>
+                                          <div
+                                            onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
+                                            className={`w-full h-full p-2 text-center cursor-pointer min-h-[36px] flex items-center justify-center font-medium ${orderText}`}
+                                          >
+                                            {row.values?.[item.id]?.order ?? ''}
+                                          </div>
+                                        </td>
+                                        <td className="border border-slate-800 p-0 bg-[#f2fbf3] hover:bg-[#dcf1dd] transition-colors">
+                                          <div
+                                            onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
+                                            className="w-full h-full p-2 text-center cursor-pointer text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
+                                          >
+                                            {row.values?.[item.id]?.received ?? ''}
+                                          </div>
+                                        </td>
+                                      </Fragment>
+                                    );
+                                  })}
                                 </tr>
                               );
                             } else {
