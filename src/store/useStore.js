@@ -110,6 +110,7 @@ export const useStore = create(
           ip_login: user.ipLogin,
           signature_url: user.signature,
           allow_view_financials: user.allowViewFinancials,
+          allow_view_ipc_thuc: user.allowViewIpcThuc || false,
           password: user.password
         };
         try {
@@ -135,6 +136,7 @@ export const useStore = create(
              if (updatedData.role !== undefined) dbData.role = updatedData.role;
              if (updatedData.status !== undefined) dbData.status = updatedData.status;
              if (updatedData.signature !== undefined) dbData.signature_url = updatedData.signature;
+             if (updatedData.allowViewIpcThuc !== undefined) dbData.allow_view_ipc_thuc = updatedData.allowViewIpcThuc;
              if (updatedData.password !== undefined && updatedData.password.trim() !== '') {
                dbData.password = updatedData.password;
              }

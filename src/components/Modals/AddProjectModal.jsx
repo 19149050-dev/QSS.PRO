@@ -5,7 +5,7 @@ import { useStore } from '@/store/useStore';
 import { X, Building2, ChevronDown } from 'lucide-react';
 
 export default function AddProjectModal({ isOpen, onClose }) {
-  const { addProject, users } = useStore();
+  const { addProject, users, projects, openGlobalAlert } = useStore();
   const [isChtOpen, setIsChtOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -27,6 +27,12 @@ export default function AddProjectModal({ isOpen, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name) return;
+
+    const existingProject = projects.find(p => p.name.trim().toLowerCase() === formData.name.trim().toLowerCase());
+    if (existingProject) {
+      openGlobalAlert("Tên công trình đã tồn tại. Vui lòng chọn tên khác!", "Trùng lặp dữ liệu");
+      return;
+    }
 
     const success = await addProject({
       ...formData,

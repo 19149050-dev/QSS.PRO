@@ -120,6 +120,7 @@ export default function UsersPage() {
                     <th>Tài khoản</th>
                     <th>Số ĐT</th>
                     <th>Chức vụ (Role)</th>
+                    <th className="text-center">Xem IPC Thực</th>
                     <th className="text-right">Thao tác</th>
                   </tr>
                 </thead>
@@ -133,6 +134,15 @@ export default function UsersPage() {
                         <span className={`inline-block px-2.5 py-0.5 text-[10px] rounded-md tracking-wider uppercase ${getRoleBadgeStyle(user.role)}`}>
                           {user.role}
                         </span>
+                      </td>
+                      <td className="text-center">
+                        <button
+                          title={user.allowViewIpcThuc ? "Hủy quyền xem IPC Thực" : "Cấp quyền xem IPC Thực"}
+                          onClick={() => updateUser(user.id, { allowViewIpcThuc: !user.allowViewIpcThuc })}
+                          className={`p-1.5 rounded-lg transition ${user.allowViewIpcThuc ? 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' : 'text-gray-400 bg-gray-50 hover:bg-gray-100'}`}
+                        >
+                          {user.allowViewIpcThuc ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                        </button>
                       </td>
                       <td className="text-right">
                         <div className="flex items-center justify-end gap-1.5 text-gray-400">

@@ -36,7 +36,7 @@ export default function Sidebar() {
     { label: 'Trang Chủ', id: 'dashboard', icon: Home },
     { label: 'Tổ Đội', id: 'teams', icon: Users },
     { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
-    { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList },
+    { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList, requiresPermission: 'allowViewIpcThuc' },
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
   ];
@@ -92,6 +92,9 @@ export default function Sidebar() {
         <div className="px-3 space-y-1">
           <div className="px-3 text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-2 mt-4">Chức năng chính</div>
           {mainNavItems.map((item, idx) => {
+            if (item.requiresPermission && !isAdmin && !currentUser?.[item.requiresPermission]) {
+              return null;
+            }
             const Icon = item.icon;
             const active = isActive(item.id);
             return (

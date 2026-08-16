@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   ip_login VARCHAR(50),
   signature_url TEXT,
   allow_view_financials BOOLEAN DEFAULT TRUE,
+  allow_view_ipc_thuc BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

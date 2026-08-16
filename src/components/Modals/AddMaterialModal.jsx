@@ -5,7 +5,7 @@ import { useStore, useAllowedProjects } from '@/store/useStore';
 import { X, Package, Plus } from 'lucide-react';
 
 export default function AddMaterialModal({ isOpen, onClose }) {
-  const { addMaterial } = useStore();
+  const { addMaterial, materials, openGlobalAlert } = useStore();
   const projects = useAllowedProjects();
   const [formData, setFormData] = useState({
     name: '',
@@ -25,6 +25,14 @@ export default function AddMaterialModal({ isOpen, onClose }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name) return;
+
+    const existingMaterial = materials.find(
+      m => m.name.trim().toLowerCase() === formData.name.trim().toLowerCase() && m.projectId === formData.projectId
+    );
+    if (existingMaterial) {
+      openGlobalAlert("Vật tư này đã tồn tại trong dự án đã chọn. Vui lòng chọn tên khác!", "Trùng lặp dữ liệu");
+      return;
+    }
 
     addMaterial({
       ...formData,

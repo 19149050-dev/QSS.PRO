@@ -146,16 +146,24 @@ export default function ProjectsPage() {
                       </td>
                       <td>
                         <div className="space-y-0.5">
-                          {proj.cht?.map((c, i) => (
+                          {chts.length > 0 ? chts.map((c, i) => (
                             <div key={i} className="text-xs font-bold text-gray-800">
                               {c}
                             </div>
-                          ))}
+                          )) : <div className="text-xs text-gray-400">---</div>}
                         </div>
                       </td>
                       <td>
-                        <div className="text-xs font-extrabold text-indigo-900">
-                          {proj.gs || proj.supervisor || '---'}
+                        <div className="space-y-0.5">
+                          {gss.length > 0 ? gss.map((g, i) => (
+                            <div key={i} className="text-xs font-extrabold text-indigo-900">
+                              {g}
+                            </div>
+                          )) : (
+                            <div className="text-xs font-extrabold text-indigo-900">
+                              {proj.gs || proj.supervisor || '---'}
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="text-center">

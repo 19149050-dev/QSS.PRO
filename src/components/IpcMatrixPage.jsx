@@ -1,8 +1,9 @@
 'use client';
 
-import { Fragment, useMemo, useState } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Fragment, useMemo, useState, useRef } from 'react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
+import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
 
@@ -16,14 +17,14 @@ const TAB_ITEMS = {
 const parseNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
   const normalized = String(value).replace(/,/g, '').trim();
-  const num = Number(normalized);
+  const num = parseFloat(normalized);
   return Number.isFinite(num) ? num : 0;
 };
 
 const formatCell = (value) => (value === '' || value === null || value === undefined ? '' : value);
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
-  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt } = useStore();
+  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -53,16 +54,28 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
 
+  const sortedMaterialRows = [...materialRows].sort((a, b) => {
+    const parseDate = (d) => {
+      if (!d) return Infinity; // Các dòng trống ngày sẽ nằm ở cuối
+      const parts = d.split('/');
+      if (parts.length === 3) {
+        return new Date(`${parts[2]}-${parts[1]}-${parts[0]}`).getTime();
+      }
+      return Infinity;
+    };
+    return parseDate(a.date) - parseDate(b.date);
+  });
+
   const handleUpdateName = (colId, newName) => {
     const nextItems = materialItems.map(item => item.id === colId ? { ...item, name: newName } : item);
     setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
   };
 
   const handleRemoveColumn = (colId) => {
-    if (window.confirm("Bạn có chắc chắn muốn xóa cột vật tư này? Toàn bộ dữ liệu của cột này sẽ bị mất.")) {
+    openGlobalConfirm("Bạn có chắc chắn muốn xóa cột vật tư này? Toàn bộ dữ liệu của cột này sẽ bị mất.", () => {
       const nextItems = materialItems.filter(item => item.id !== colId);
       setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
-    }
+    }, "Xác nhận xóa");
   };
 
   const handleUpdateRowDate = (rowId, date) => {
@@ -123,7 +136,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         if (newDate) {
           const parts = newDate.split('-');
           if (parts.length === 3) {
-             const y = parts[0].slice(-2);
+             const y = parts[0];
              const m = parts[1];
              const d = parts[2];
              handleUpdateRowDate(row.id, `${d}/${m}/${y}`);
@@ -138,7 +151,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleEditValue = (row, item, field, currentValue) => {
-    const fieldName = field === 'order' ? (isExport ? 'SỐ LƯỢNG' : 'ORDER') : (isExport ? 'NGÀY' : 'NHẬN');
+    const fieldName = field === 'order' ? (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)') : (isExport ? 'NGÀY' : 'NHẬN');
     openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || 'vật tư này'}:`, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
@@ -157,20 +170,20 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const resetData = () => {
-    if (currentUser?.role !== 'admin' && currentUser?.username !== '@admin') {
-      alert('Chỉ tài khoản Quản trị (Admin) mới có quyền xóa dữ liệu!');
+    if (currentUser?.role !== 'ADMIN' && currentUser?.role !== 'GIÁM ĐỐC' && currentUser?.username !== '@admin') {
+      openGlobalAlert('Chỉ tài khoản Quản trị mới có quyền xóa dữ liệu!', 'Lỗi phân quyền');
       return;
     }
-    const pwd = window.prompt("Vui lòng nhập mật khẩu Admin để xác nhận xóa dữ liệu:");
-    if (pwd === null) return;
-    if (pwd !== currentUser?.password && pwd !== '0000') {
-      alert('Mật khẩu không đúng!');
-      return;
-    }
-
-    if (window.confirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu của tab này?")) {
-      setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
-    }
+    openGlobalPrompt("Vui lòng nhập mật khẩu Admin để xác nhận xóa dữ liệu:", (pwd) => {
+      if (pwd === null) return;
+      if (pwd !== currentUser?.password && pwd !== '0000') {
+        openGlobalAlert('Mật khẩu không đúng!', 'Lỗi bảo mật');
+        return;
+      }
+      openGlobalConfirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu của tab này?", () => {
+        setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
+      }, "Cảnh báo xóa dữ liệu");
+    }, '', 'Xác thực bảo mật', 'password');
   };
 
   const totals = useMemo(() => materialItems.reduce((acc, item) => {
@@ -203,8 +216,115 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const remainingByMaterial = (itemId) => parseNumber(orderTotals[itemId]) - parseNumber(totals[itemId]);
 
+  const handleExportExcel = () => {
+    const table = document.getElementById('material-table');
+    if (!table) return;
+    const wb = XLSX.utils.table_to_book(table, { sheet: 'Sheet1' });
+    const ws = wb.Sheets['Sheet1'];
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    
+    const headerColors = [
+      "3B82F6", "10B981", "A855F7", "F59E0B",
+      "F43F5E", "06B6D4", "6366F1", "F97316"
+    ];
+
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cellRef = XLSX.utils.encode_cell({ c: C, r: R });
+        const cell = ws[cellRef];
+        if (!cell) continue;
+        
+        const baseStyle = {
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          border: {
+            top: { style: "thin", color: { rgb: "000000" } },
+            bottom: { style: "thin", color: { rgb: "000000" } },
+            left: { style: "thin", color: { rgb: "000000" } },
+            right: { style: "thin", color: { rgb: "000000" } },
+          },
+          font: { sz: 10, name: "Arial" }
+        };
+
+        if (R === 0) {
+          if (C === 0) {
+            cell.s = { ...baseStyle, font: { bold: true }, fill: { fgColor: { rgb: "FFFFFF" } } };
+          } else {
+            const materialIndex = Math.floor((C - 1) / 2);
+            const color = headerColors[materialIndex % headerColors.length];
+            cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: color } } };
+          }
+        } else if (R === 1) {
+          if (C === 0) {
+             cell.s = { ...baseStyle, font: { bold: true } };
+          } else if (C % 2 === 1) {
+             cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "78350F" } }, fill: { fgColor: { rgb: "FFFAF0" } } };
+          } else {
+             cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "064E3B" } }, fill: { fgColor: { rgb: "F2FBF3" } } };
+          }
+        } else if (R === range.e.r - 1) { 
+          if (C === 0) {
+             cell.s = { ...baseStyle, font: { bold: true } };
+          } else if (C % 2 === 1) {
+             cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "78350F" } }, fill: { fgColor: { rgb: "FDE68A" } } };
+          } else {
+             cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "064E3B" } }, fill: { fgColor: { rgb: "A7F3D0" } } };
+          }
+        } else if (R === range.e.r) { 
+          if (C === 0) {
+             cell.s = { ...baseStyle, font: { bold: true } };
+          } else {
+             const val = parseInt(cell.v, 10) || 0;
+             if (val > 0) {
+               cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "F87171" } } };
+             } else {
+               cell.s = { ...baseStyle, font: { bold: true, color: { rgb: "FFFFFF" } }, fill: { fgColor: { rgb: "4ADE80" } } };
+             }
+          }
+        } else {
+          if (C === 0) {
+            cell.s = { ...baseStyle };
+          } else if (C % 2 === 1) {
+            cell.s = { ...baseStyle, font: { color: { rgb: "78350F" } }, fill: { fgColor: { rgb: "FFFAF0" } } };
+          } else {
+            cell.s = { ...baseStyle, font: { color: { rgb: "064E3B" } }, fill: { fgColor: { rgb: "F2FBF3" } } };
+          }
+        }
+      }
+    }
+    
+    ws['!cols'] = [{ wch: 18 }];
+    for (let c = 1; c <= range.e.c; c++) {
+      ws['!cols'].push({ wch: 12 });
+    }
+    
+    XLSX.writeFile(wb, `${activeTab.label}_${selectedProject}.xlsx`);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
     <div className="pb-12">
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          #print-section, #print-section * {
+            visibility: visible;
+          }
+          #print-section {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+          }
+          .overflow-x-auto {
+            overflow: visible !important;
+          }
+        }
+      `}</style>
       <div className="space-y-6 p-8 w-full">
         <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -266,49 +386,88 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <RotateCcw className="h-4 w-4" />
                       Clear dữ liệu
                     </button>
+
+                    <div className="flex-1"></div>
+
+                    <button
+                      type="button"
+                      onClick={handleExportExcel}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden"
+                    >
+                      <FileDown className="h-4 w-4" />
+                      Xuất Excel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrint}
+                      className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden"
+                    >
+                      <Printer className="h-4 w-4" />
+                      In
+                    </button>
                   </div>
                   
-                  <div className="overflow-hidden rounded-lg border border-slate-800 bg-white">
+                  <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white">
                     <div className="overflow-x-auto">
-                      <table className="w-full border-collapse border border-slate-800 text-center text-sm">
+                      <table id="material-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
                         <thead>
                           <tr>
-                            <th rowSpan={2} className="border border-slate-800 bg-white px-4 py-3 font-bold text-slate-900 w-[160px] whitespace-nowrap">{isExport ? 'TẦNG' : 'NGÀY (DD/MM/YY)'}</th>
-                            {materialItems.map((item) => (
-                              <th key={item.id} colSpan={2} className="border border-slate-800 bg-white p-0">
-                                <div
-                                  onClick={!isExport ? () => handleEditName(item) : undefined}
-                                  className={`w-full h-full min-w-[120px] p-2 text-center font-bold text-slate-900 uppercase min-h-[40px] flex items-center justify-center relative group ${!isExport ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-                                >
-                                  {item.name || <span className="text-gray-400 font-normal italic">Tên vật tư</span>}
-                                  {!isExport && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleRemoveColumn(item.id);
-                                      }}
-                                      className="absolute right-1 top-1 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Xóa cột này"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              </th>
-                            ))}
+                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight">
+                              {isExport ? 'TẦNG' : (
+                                <>
+                                  NGÀY<br/>
+                                  <span className="text-[10px] opacity-80">(DD/MM/YYYY)</span>
+                                </>
+                              )}
+                            </th>
+                            {materialItems.map((item, index) => {
+                              const headerColors = [
+                                'bg-blue-500 text-white',
+                                'bg-emerald-500 text-white',
+                                'bg-purple-500 text-white',
+                                'bg-amber-500 text-white',
+                                'bg-rose-500 text-white',
+                                'bg-cyan-500 text-white',
+                                'bg-indigo-500 text-white',
+                                'bg-orange-500 text-white'
+                              ];
+                              const colorClass = headerColors[index % headerColors.length];
+                              return (
+                                <th key={item.id} colSpan={2} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
+                                  <div
+                                    onClick={!isExport ? () => handleEditName(item) : undefined}
+                                    className={`w-full h-full min-w-[120px] p-2 text-center font-bold uppercase min-h-[40px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${!isExport ? 'cursor-pointer hover:brightness-95' : ''}`}
+                                  >
+                                    {item.name || <span className="opacity-50 font-normal italic">Tên vật tư</span>}
+                                    {!isExport && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRemoveColumn(item.id);
+                                        }}
+                                        className="absolute right-1 top-1 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        title="Xóa cột này"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            })}
                           </tr>
                           <tr>
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
-                                <th className="border border-slate-800 bg-[#fff3e0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isExport ? 'SỐ LƯỢNG' : 'ORDER'}</th>
-                                <th className="border border-slate-800 bg-[#e8f5e9] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'NGÀY' : 'NHẬN'}</th>
+                                <th className="border border-slate-800 bg-[#fffaf0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)'}</th>
+                                <th className="border border-slate-800 bg-[#f2fbf3] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'NGÀY' : 'NHẬN'}</th>
                               </Fragment>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
-                          {materialRows.map((row) => {
+                          {sortedMaterialRows.map((row) => {
                             if (!isExport) {
                               return (
                                 <tr key={row.id}>
@@ -322,18 +481,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   </td>
                                   {materialItems.map((item) => (
                                     <Fragment key={`${row.id}-${item.id}`}>
-                                      <td className="border border-slate-800 p-0">
+                                      <td className="border border-slate-800 p-0 bg-[#fffaf0] hover:bg-[#ffecce] transition-colors">
                                         <div
                                           onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
-                                          className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] bg-[#fff3e0] text-amber-900 min-h-[36px] flex items-center justify-center font-medium"
+                                          className="w-full h-full p-2 text-center cursor-pointer text-amber-900 min-h-[36px] flex items-center justify-center font-medium"
                                         >
                                           {row.values?.[item.id]?.order ?? ''}
                                         </div>
                                       </td>
-                                      <td className="border border-slate-800 p-0">
+                                      <td className="border border-slate-800 p-0 bg-[#f2fbf3] hover:bg-[#dcf1dd] transition-colors">
                                         <div
                                           onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
-                                          className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] bg-[#e8f5e9] text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
+                                          className="w-full h-full p-2 text-center cursor-pointer text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
                                         >
                                           {row.values?.[item.id]?.received ?? ''}
                                         </div>
@@ -416,13 +575,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 <td className="border border-slate-800 p-2 text-slate-900">TỔNG</td>
                                 {materialItems.map((item) => (
                                   <Fragment key={`${item.id}-totals`}>
-                                    <td className="border border-slate-800 p-2 text-amber-900 bg-[#ffe0b2]">{formatCell(orderTotals[item.id] || 0)}</td>
-                                    <td className="border border-slate-800 p-2 text-emerald-900 bg-[#c8e6c9]">{formatCell(totals[item.id] || 0)}</td>
+                                    <td className="border border-slate-800 p-2 text-amber-900 bg-amber-200 font-extrabold text-sm">{formatCell(orderTotals[item.id] || 0)}</td>
+                                    <td className="border border-slate-800 p-2 text-emerald-900 bg-emerald-200 font-extrabold text-sm">{formatCell(totals[item.id] || 0)}</td>
                                   </Fragment>
                                 ))}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white">CÒN LẠI</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase">Vật tư chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
                                   // Excel has red if positive (still need to receive), green if 0 or negative
@@ -431,7 +590,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     <td
                                       key={`${item.id}-remaining`}
                                       colSpan={2}
-                                      className={`border border-slate-800 p-2 ${isShort ? 'bg-[red] text-white' : 'bg-[#92d050] text-black'}`}
+                                      className={`border border-slate-800 p-2 ${isShort ? 'bg-red-400 text-white' : 'bg-green-400 text-white'}`}
                                     >
                                       {remaining}
                                     </td>
