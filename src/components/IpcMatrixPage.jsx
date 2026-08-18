@@ -6,6 +6,7 @@ import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
+import EnterPOModal from '@/components/Modals/EnterPOModal';
 
 const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
@@ -26,6 +27,7 @@ const formatCell = (value) => (value === '' || value === null || value === undef
 export default function IpcMatrixPage({ mode = 'planned' }) {
   const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isPOModalOpen, setIsPOModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
@@ -185,6 +187,35 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const addRow = () => {
     const newRow = { id: `row-${Date.now()}`, date: '', values: {} };
     setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
+  };
+
+  const handlePOModalSubmit = (poName, quantities, date) => {
+    let newDate = '';
+    if (date) {
+      const parts = date.split('-');
+      if (parts.length === 3) {
+        newDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+      }
+    }
+
+    const newRowId = `row-${Date.now()}`;
+    const values = {};
+    materialItems.forEach(item => {
+      const q = quantities[item.id];
+      if (q) {
+        values[item.id] = {
+          order: `${q} (${poName})`,
+          received: ''
+        };
+      }
+    });
+
+    const newRow = { id: newRowId, date: newDate, values };
+    const listKey = isExport ? 'exportRows' : 'rows';
+    setMaterialSheet(selectedProject, { 
+      ...currentSheet, 
+      [listKey]: [...(isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])), newRow] 
+    });
   };
 
   const addColumn = () => {
@@ -409,6 +440,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <RotateCcw className="h-4 w-4" />
                       Clear dữ liệu
                     </button>
+
+                    {!isExport && (
+                      <button
+                        type="button"
+                        onClick={() => setIsPOModalOpen(true)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
+                      >
+                        NHẬP PO
+                      </button>
+                    )}
 
                     <div className="flex-1"></div>
 
@@ -707,11 +748,21 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       </div>
       <ExportEntriesModal 
         isOpen={isExportModalOpen}
-        onClose={() => setIsExportModalOpen(false)}
+        onClose={() => {
+          setIsExportModalOpen(false);
+          setSelectedRow(null);
+          setSelectedItem(null);
+        }}
         project={selectedProject}
         row={selectedRow}
         item={selectedItem}
         isExport={isExport}
+      />
+      <EnterPOModal
+        isOpen={isPOModalOpen}
+        onClose={() => setIsPOModalOpen(false)}
+        materialItems={materialItems}
+        onSubmit={handlePOModalSubmit}
       />
     </div>
   );

@@ -8,40 +8,39 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
   const team = teams.find(t => t.id === teamId);
   const leaderName = team?.leaderName || '';
   
-  // Find all projects that this leader is involved in
   const leaderProjects = [...new Set(
     teams.filter(t => t.leaderName === leaderName).map(t => t.projectName).filter(Boolean)
   )];
 
-  const [member, setMember] = useState({
+  const defaultMember = {
     name: '',
+    position: '',
+    age: '',
     cccd: '',
     birthYear: '',
+    issueDate: '',
+    address: '',
+    vocationalCertificate: '',
     safetyCardExpiry: '',
     insuranceExpiry: '',
+    healthCertificate: '',
+    contract: '',
+    notes: '',
     photo: '',
     pdf: [],
     project: ''
-  });
+  };
+
+  const [member, setMember] = useState(defaultMember);
   const [error, setError] = useState('');
 
-  // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
       setError('');
       if (memberToEdit) {
-        setMember(memberToEdit);
+        setMember({ ...defaultMember, ...memberToEdit });
       } else {
-        setMember({
-          name: '',
-          cccd: '',
-          birthYear: '',
-          safetyCardExpiry: '',
-          insuranceExpiry: '',
-          photo: '',
-          pdf: [],
-          project: ''
-        });
+        setMember(defaultMember);
       }
     }
   }, [isOpen, memberToEdit]);
@@ -50,6 +49,32 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
 
   const updateMember = (field, value) => {
     setMember(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleBirthDateChange = (dateStr) => {
+    let ageStr = '';
+    let formattedDate = dateStr;
+    if (dateStr) {
+      const birthDate = new Date(dateStr);
+      const today = new Date();
+      let years = today.getFullYear() - birthDate.getFullYear();
+      let months = today.getMonth() - birthDate.getMonth();
+      
+      if (months < 0 || (months === 0 && today.getDate() < birthDate.getDate())) {
+        years--;
+        months += 12;
+      }
+      
+      if (years > 0) {
+        ageStr = months > 0 ? `${years} tuổi ${months} tháng` : `${years} tuổi`;
+      } else if (months > 0) {
+        ageStr = `${months} tháng tuổi`;
+      }
+
+      const [y, m, d] = dateStr.split('-');
+      formattedDate = `${d}/${m}/${y}`;
+    }
+    setMember(prev => ({ ...prev, birthYear: formattedDate, age: ageStr }));
   };
 
   const handlePhotoUpload = (e) => {
@@ -96,14 +121,9 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     setError('');
     
     const memberData = {
-      name: member.name,
-      cccd: member.cccd,
-      birthYear: member.birthYear,
+      ...member,
       safetyCardExpiry: member.safetyCardExpiry || 'Chưa có',
       insuranceExpiry: member.insuranceExpiry || 'Chưa có',
-      photo: member.photo || '',
-      pdf: member.pdf || [],
-      project: member.project || ''
     };
 
     if (memberToEdit) {
@@ -119,8 +139,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
       
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        {/* Header */}
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         <div className="bg-indigo-600 px-6 py-4 flex items-center justify-between shrink-0">
           <h3 className="text-white font-extrabold text-sm uppercase tracking-wide">
             Thêm Thành Viên Mới
@@ -130,7 +149,6 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 overflow-y-auto flex-1 bg-slate-50">
           {error && (
             <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-medium animate-in fade-in slide-in-from-top-2">
@@ -160,54 +178,76 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 mb-1">Họ và tên *</label>
-                    <input 
-                      type="text" 
-                      value={member.name}
-                      onChange={e => updateMember('name', e.target.value)}
-                      className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-800 transition-all placeholder:font-normal"
-                      placeholder="Nhập họ tên"
-                    />
+                    <input type="text" value={member.name} onChange={e => updateMember('name', e.target.value)} className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-800" placeholder="Nhập họ tên" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Số CCCD *</label>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Chức vụ</label>
+                    <input type="text" value={member.position} onChange={e => updateMember('position', e.target.value)} className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-700" placeholder="Nhập chức vụ" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Số CCCD *</label>
+                    <input type="text" value={member.cccd} onChange={e => updateMember('cccd', e.target.value)} className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-700" placeholder="Nhập CCCD" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Tuổi</label>
+                    <input type="text" readOnly value={member.age} className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-100 border border-gray-300 font-medium text-gray-600" placeholder="Tự động tính" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Năm sinh</label>
                     <input 
-                      type="text" 
-                      value={member.cccd}
-                      onChange={e => updateMember('cccd', e.target.value)}
-                      className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-700 transition-all placeholder:font-normal"
-                      placeholder="Nhập CCCD"
+                      type="date" 
+                      value={member.birthYear?.includes('/') ? member.birthYear.split('/').reverse().join('-') : member.birthYear} 
+                      onChange={e => handleBirthDateChange(e.target.value)} 
+                      className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" 
                     />
                   </div>
                 </div>
-                <div className="mb-4">
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Công trình</label>
-                  <select
-                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                    value={member.project}
-                    onChange={(e) => setMember({...member, project: e.target.value})}
-                  >
-                    <option value="">-- Chọn công trình --</option>
-                    {leaderProjects.map((p, idx) => (
-                      <option key={idx} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-3 gap-4">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Năm sinh</label>
-                    <input 
-                      type="text" 
-                      value={member.birthYear}
-                      onChange={e => updateMember('birthYear', e.target.value)}
-                      className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
-                      placeholder="Ví dụ: 1990"
-                    />
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Ngày cấp CCCD</label>
+                    <input type="date" value={member.issueDate} onChange={e => updateMember('issueDate', e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Hạn thẻ an toàn</label>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Địa chỉ</label>
+                    <input type="text" value={member.address} onChange={e => updateMember('address', e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" placeholder="Nhập địa chỉ" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Bằng cấp nghề</label>
+                    <select
+                      value={member.vocationalCertificate}
+                      onChange={e => updateMember('vocationalCertificate', e.target.value)}
+                      className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700"
+                    >
+                      <option value="">-- Chọn --</option>
+                      <option value="Công nhân">Công nhân</option>
+                      <option value="Nhóm 2">Nhóm 2</option>
+                      <option value="Nhóm 3">Nhóm 3</option>
+                      <option value="Khác">Khác</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Giấy khám sức khỏe</label>
+                    <input type="date" value={member.healthCertificate} onChange={e => updateMember('healthCertificate', e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">HĐLĐ</label>
+                    <input type="date" value={member.contract} onChange={e => updateMember('contract', e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Chứng chỉ AT (Ngày hết hạn)</label>
                     {member.safetyCardExpiry === '00/00/00' || member.safetyCardExpiry === 'Chưa có' ? (
                       <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600">
-                        <span className="text-sm font-semibold italic">Chưa có thẻ</span>
+                        <span className="text-sm font-semibold italic">Chưa có</span>
                         <button type="button" onClick={() => updateMember('safetyCardExpiry', '')} className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded font-bold">Xóa</button>
                       </div>
                     ) : !member.safetyCardExpiry ? (
@@ -219,15 +259,15 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                         type="date" 
                         value={member.safetyCardExpiry.includes('/') ? member.safetyCardExpiry.split('/').reverse().join('-') : member.safetyCardExpiry}
                         onChange={e => updateMember('safetyCardExpiry', e.target.value)}
-                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
+                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700"
                       />
                     )}
                   </div>
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-600 mb-1">Hạn bảo hiểm</label>
+                    <label className="block text-[11px] font-bold text-gray-600 mb-1">BH Tai nạn (Ngày hết hạn)</label>
                     {member.insuranceExpiry === '00/00/00' || member.insuranceExpiry === 'Chưa có' ? (
                       <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600">
-                        <span className="text-sm font-semibold italic">Chưa có thẻ</span>
+                        <span className="text-sm font-semibold italic">Chưa có</span>
                         <button type="button" onClick={() => updateMember('insuranceExpiry', '')} className="text-xs px-2 py-1 bg-red-100 hover:bg-red-200 rounded font-bold">Xóa</button>
                       </div>
                     ) : !member.insuranceExpiry ? (
@@ -239,10 +279,15 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                         type="date" 
                         value={member.insuranceExpiry.includes('/') ? member.insuranceExpiry.split('/').reverse().join('-') : member.insuranceExpiry}
                         onChange={e => updateMember('insuranceExpiry', e.target.value)}
-                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700 transition-all"
+                        className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700"
                       />
                     )}
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 mb-1">Ghi chú</label>
+                  <textarea value={member.notes} onChange={e => updateMember('notes', e.target.value)} className="w-full text-sm px-3 py-2 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-medium text-gray-700" rows="2" placeholder="Ghi chú thêm..."></textarea>
                 </div>
                 
                 {/* PDF Upload Area */}
@@ -264,7 +309,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                                   <FileText className="w-4 h-4 text-red-500 shrink-0" />
                                   <span className="text-xs text-gray-700 truncate font-medium">{p.name}</span>
                               </div>
-                              <button onClick={() => removePdf(idx)} className="text-gray-400 hover:text-red-500 p-1" title="Xóa file">
+                              <button type="button" onClick={() => removePdf(idx)} className="text-gray-400 hover:text-red-500 p-1" title="Xóa file">
                                   <X className="w-4 h-4" />
                               </button>
                             </div>
@@ -277,7 +322,6 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           </div>
         </div>
 
-        {/* Footer */}
         <div className="bg-white px-6 py-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
           <button 
             type="button"
