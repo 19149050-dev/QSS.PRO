@@ -9,7 +9,7 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
   const [isChtOpen, setIsChtOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    orderType: 'TRỰC TIẾP ORDER',
+    projectType: 'Sơn nước',
     subContractorInfo: '',
     address: '',
     contractNo: '',
@@ -27,7 +27,7 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
     if (project) {
       setFormData({
         name: project.name || '',
-        orderType: project.orderType || 'TRỰC TIẾP ORDER',
+        projectType: project.projectType || 'Sơn nước',
         subContractorInfo: project.subContractorInfo || '',
         address: project.address || '',
         contractNo: project.contractNo || '',
@@ -96,15 +96,14 @@ export default function EditProjectModal({ project, isOpen, onClose }) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-gray-700 mb-1">Loại Order</label>
+              <label className="block font-semibold text-gray-700 mb-1">Loại Công Trình</label>
               <select
-                value={formData.orderType}
-                onChange={(e) => setFormData({ ...formData, orderType: e.target.value })}
+                value={formData.projectType}
+                onChange={(e) => setFormData({ ...formData, projectType: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500"
               >
-                <option value="TRỰC TIẾP ORDER">TRỰC TIẾP ORDER</option>
-                <option value="TỔNG THẦU MUA HỘ">TỔNG THẦU MUA HỘ</option>
-                <option value="CHỦ ĐẦU TƯ GIAO">CHỦ ĐẦU TƯ GIAO</option>
+                <option value="Sơn nước">Sơn nước</option>
+                <option value="Thạch cao">Thạch cao</option>
               </select>
             </div>
             

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 export default function ProjectsPage() {
-  const { viewMode, setViewMode, deleteProject, updateProject, setActiveTab, users, currentUser } = useStore();
+  const { viewMode, setViewMode, deleteProject, updateProject, setActiveTab, users, currentUser, openGlobalPrompt, openGlobalAlert } = useStore();
   const projects = useAllowedProjects();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -31,12 +31,19 @@ export default function ProjectsPage() {
   const [editingProject, setEditingProject] = useState(null);
 
   const handleDeleteProject = (id) => {
-    const pwd = window.prompt("Nhập mật khẩu Admin để xóa công trình:");
-    if (pwd === '0000') {
-      deleteProject(id);
-    } else if (pwd !== null) {
-      alert("Mật khẩu không đúng!");
-    }
+    openGlobalPrompt(
+      "Nhập mật khẩu Admin để xóa công trình:",
+      (pwd) => {
+        if (pwd === '0000') {
+          deleteProject(id);
+        } else if (pwd !== null && pwd !== '') {
+          openGlobalAlert("Mật khẩu không đúng!", "Lỗi xác thực");
+        }
+      },
+      '',
+      'Xác thực quyền Admin',
+      'password'
+    );
   };
 
   const formatVND = (amount) => {
@@ -113,8 +120,6 @@ export default function ProjectsPage() {
                 <thead>
                   <tr>
                     <th>CÔNG TRÌNH</th>
-                    <th>ĐỊA CHỈ</th>
-                    <th>SỐ HĐ</th>
                     <th>CHỈ HUY TRƯỞNG</th>
                     <th>GS (GIÁM SÁT)</th>
                     <th className="text-center">TRẠNG THÁI</th>
@@ -136,13 +141,7 @@ export default function ProjectsPage() {
                         <button onClick={() => setActiveTab('project-detail', { id: proj.id })} className="font-extrabold text-gray-900 hover:text-indigo-600 transition flex items-center gap-1.5 text-left">
                           {proj.name} <ExternalLink className="w-3 h-3 text-gray-400" />
                         </button>
-                        <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{proj.orderType}</div>
-                        <div className="text-[10px] text-gray-400 font-medium">{proj.subContractorInfo || 'Tổng thầu: N/A'}</div>
-                      </td>
-                      <td className="text-xs text-gray-600 font-medium max-w-[160px] truncate">{proj.address || '---'}</td>
-                      <td className="text-xs text-gray-700 font-medium max-w-[180px]">
-                        <div>{proj.contractNo || '---'}</div>
-                        {proj.contractDate && <div className="text-[10px] text-gray-400">Ký ngày: {proj.contractDate}</div>}
+                        <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{proj.projectType}</div>
                       </td>
                       <td>
                         <div className="space-y-0.5">
@@ -236,7 +235,7 @@ export default function ProjectsPage() {
                     </button>
                     <div className="flex items-center gap-2 mt-2">
                       <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded-md">
-                        {proj.orderType}
+                        {proj.projectType}
                       </span>
                     </div>
                   </div>

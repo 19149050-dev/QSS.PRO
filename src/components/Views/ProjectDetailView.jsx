@@ -48,7 +48,7 @@ export default function ProjectDetailView() {
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-[10px] font-extrabold bg-indigo-50 text-indigo-600 px-2.5 py-0.5 rounded-md border border-indigo-100 uppercase">
-                  {proj.orderType}
+                  {proj.projectType}
                 </span>
                 <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200">
                   {proj.status}

@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, useRef } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer } from 'lucide-react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix from '@/components/PaymentMatrix';
@@ -28,6 +28,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
+  const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
+  const [dinhMucDraft, setDinhMucDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
 
@@ -42,6 +44,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   // Material Logic
   const isExport = mode === 'export_materials';
+  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
+  const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
   const currentSheet = materialSheets[selectedProject] || { items: [], rows: [], exportRows: [] };
   
   const materialItems = useMemo(() => {
@@ -442,13 +446,28 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                     </button>
 
                     {!isExport && (
-                      <button
-                        type="button"
-                        onClick={() => setIsPOModalOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
-                      >
-                        NHẬP PO
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setIsPOModalOpen(true)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
+                        >
+                          NHẬP PO
+                        </button>
+                        {isAdminOrQS && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDinhMucDraft(currentSheet.dinhMucMap || {});
+                              setIsDinhMucModalOpen(true);
+                            }}
+                            className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 ml-2 shadow-sm transition"
+                          >
+                            <SlidersHorizontal className="h-4 w-4" />
+                            ĐỊNH MỨC
+                          </button>
+                        )}
+                      </>
                     )}
 
                     <div className="flex-1"></div>
@@ -681,7 +700,6 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase">Vật tư chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
-                                  // Excel has red if positive (still need to receive), green if 0 or negative
                                   const isShort = remaining > 0;
                                   return (
                                     <td
@@ -691,6 +709,26 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     >
                                       {remaining}
                                     </td>
+                                  );
+                                })}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase">Sản lượng</td>
+                                {materialItems.map((item) => {
+                                  const poQty = orderTotals[item.id] || 0;
+                                  const recvQty = totals[item.id] || 0;
+                                  const dinhMucVal = parseNumber(currentSheet.dinhMucMap?.[item.id] || 0);
+                                  const poSanLuong = poQty * dinhMucVal;
+                                  const recvSanLuong = recvQty * dinhMucVal;
+                                  return (
+                                    <Fragment key={`${item.id}-sanluong`}>
+                                      <td className="border border-slate-800 p-2 text-amber-950 bg-amber-100 font-extrabold text-sm text-center">
+                                        {formatCell(poSanLuong ? poSanLuong.toLocaleString('vi-VN') : 0)}
+                                      </td>
+                                      <td className="border border-slate-800 p-2 text-emerald-950 bg-emerald-100 font-extrabold text-sm text-center">
+                                        {formatCell(recvSanLuong ? recvSanLuong.toLocaleString('vi-VN') : 0)}
+                                      </td>
+                                    </Fragment>
                                   );
                                 })}
                               </tr>
@@ -764,6 +802,64 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         materialItems={materialItems}
         onSubmit={handlePOModalSubmit}
       />
+      {/* Modal Cấu Hình Định Mức Vật Tư Theo Tên */}
+      {isDinhMucModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
+            <div className="p-5 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-base">Cấu Hình Định Mức Vật Tư</h3>
+                <p className="text-xs text-indigo-100 mt-0.5">Dự án: <span className="font-bold">{selectedProject}</span></p>
+              </div>
+              <button onClick={() => setIsDinhMucModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
+              {materialItems.map((item, idx) => {
+                const name = item.name || `Cột ${idx + 1}`;
+                return (
+                  <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
+                    <span className="font-bold text-slate-800 text-sm truncate max-w-[240px]">{name}</span>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-slate-500 font-semibold">Định mức:</span>
+                      <input
+                        type="number"
+                        step="any"
+                        placeholder="0"
+                        value={dinhMucDraft[item.id] ?? ''}
+                        onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
+                        className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-b-2xl border-t border-slate-200 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsDinhMucModalOpen(false)}
+                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition text-xs"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft });
+                  setIsDinhMucModalOpen(false);
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition text-xs shadow-md"
+              >
+                Lưu Định Mức
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

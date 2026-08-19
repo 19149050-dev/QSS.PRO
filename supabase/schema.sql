@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name VARCHAR(255) NOT NULL,
   order_type VARCHAR(100) DEFAULT 'TRỰC TIẾP ORDER',
+  project_type VARCHAR(100) DEFAULT 'Sơn nước',
   sub_contractor_count INT DEFAULT 1,
   sub_contractor_info TEXT,
   address TEXT,

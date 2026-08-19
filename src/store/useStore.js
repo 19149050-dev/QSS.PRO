@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate } from '@/lib/mockData';
+import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
 
 const sortFloors = (matrix) => {
@@ -183,15 +183,17 @@ export const useStore = create(
         
         for (let i = 0; i < count; i++) {
           const letter = blockLetters[i] || (i + 1);
+          const isThachCao = project.projectType?.trim() === 'Thạch cao';
+          const template = isThachCao ? thachCaoBlocksTemplate : standardBlocksTemplate;
           generatedBlocks.push({
             blockName: `BLOCK ${letter}`,
-            groups: JSON.parse(JSON.stringify(standardBlocksTemplate[0]?.groups || []))
+            groups: JSON.parse(JSON.stringify(template[0]?.groups || []))
           });
         }
 
         const projectData = {
           name: project.name,
-          order_type: project.orderType || 'TRỰC TIẾP ORDER',
+          order_type: project.projectType || 'Sơn nước',
           sub_contractor_count: 1,
           sub_contractor_info: project.subContractorInfo || '',
           address: project.address || '',
@@ -223,13 +225,13 @@ export const useStore = create(
         const newProj = {
           ...project,
           id: data.id,
-          orderType: data.order_type,
           subContractorInfo: data.sub_contractor_info,
           contractNo: data.contract_no,
           contractDate: data.contract_date,
           contractValue: data.contract_value,
           addendumValue: data.addendum_value,
           advancePayment: data.advance_payment,
+          projectType: data.order_type || 'Sơn nước',
           numBlocks: count.toString(),
           status: data.status,
           progress: data.progress
@@ -280,9 +282,11 @@ export const useStore = create(
             if (count > currentBlocks.length) {
               for (let i = currentBlocks.length; i < count; i++) {
                 const letter = blockLetters[i] || (i + 1);
+                const isTC = (updatedData.projectType || proj.projectType)?.trim() === 'Thạch cao';
+                const template = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
                 updatedBlocks.push({
                   blockName: `BLOCK ${letter}`,
-                  groups: JSON.parse(JSON.stringify(standardBlocksTemplate[0]?.groups || []))
+                  groups: JSON.parse(JSON.stringify(template[0]?.groups || []))
                 });
               }
             } else if (count < currentBlocks.length) {
@@ -302,7 +306,7 @@ export const useStore = create(
           get().syncMatrixDataToSupabase(updatedProj.name);
           const dbData = {
             name: updatedProj.name,
-            order_type: updatedProj.orderType,
+            order_type: updatedProj.projectType,
             sub_contractor_info: updatedProj.subContractorInfo,
             address: updatedProj.address,
             contract_no: updatedProj.contractNo,
@@ -372,9 +376,12 @@ export const useStore = create(
 
       // Team Actions
       addTeam: async (team) => {
+        const projNameStr = Array.isArray(team.projects) && team.projects.length > 0 
+          ? team.projects.join(', ') 
+          : (team.projectName || '');
         const teamData = {
           project_id: team.projectId,
-          project_name: team.projectName,
+          project_name: projNameStr,
           team_name: team.teamName,
           leader_name: team.leaderName,
           phone: team.phone,
@@ -394,10 +401,12 @@ export const useStore = create(
           }));
           return;
         }
+        const rawProjects = data.project_name ? data.project_name.split(',').map(s => s.trim()).filter(Boolean) : [];
         const newTeam = {
           id: data.id,
           projectId: data.project_id,
           projectName: data.project_name,
+          projects: rawProjects.length > 0 ? rawProjects : (data.project_name ? [data.project_name] : []),
           teamName: data.team_name,
           leaderName: data.leader_name,
           phone: data.phone,
@@ -417,6 +426,11 @@ export const useStore = create(
         }));
         if (id && !String(id).startsWith('t-')) {
           const dbData = {};
+          if (updatedData.projects !== undefined) {
+            dbData.project_name = Array.isArray(updatedData.projects) ? updatedData.projects.join(', ') : String(updatedData.projects || '');
+          } else if (updatedData.projectName !== undefined) {
+            dbData.project_name = updatedData.projectName;
+          }
           if (updatedData.teamName !== undefined) dbData.team_name = updatedData.teamName;
           if (updatedData.leaderName !== undefined) dbData.leader_name = updatedData.leaderName;
           if (updatedData.phone !== undefined) dbData.phone = updatedData.phone;
@@ -448,6 +462,10 @@ export const useStore = create(
             return t;
           })
         }));
+        const targetTeam = get().teams.find(t => t.id === teamId);
+        if (targetTeam && !String(teamId).startsWith('t-')) {
+          supabase.from('teams').update({ members: targetTeam.members }).eq('id', teamId).then();
+        }
       },
       updateTeamMember: (teamId, memberId, updatedData) => {
         set((state) => ({
@@ -461,6 +479,10 @@ export const useStore = create(
             return t;
           })
         }));
+        const targetTeam = get().teams.find(t => t.id === teamId);
+        if (targetTeam && !String(teamId).startsWith('t-')) {
+          supabase.from('teams').update({ members: targetTeam.members }).eq('id', teamId).then();
+        }
       },
       deleteTeamMember: (teamId, memberId) => {
         set((state) => ({
@@ -474,6 +496,10 @@ export const useStore = create(
             return t;
           })
         }));
+        const targetTeam = get().teams.find(t => t.id === teamId);
+        if (targetTeam && !String(teamId).startsWith('t-')) {
+          supabase.from('teams').update({ members: targetTeam.members }).eq('id', teamId).then();
+        }
       },
 
       // IPC Actions
@@ -1152,18 +1178,20 @@ export const useStore = create(
         const blocks = state.matrixBlocks[projectName] || state.matrixBlocks['BCONS TĐH'] || standardBlocksTemplateLocal;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
-        const default6Steps = ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'];
+        const project = state.projects?.find(p => p.name?.trim() === projectName?.trim());
+        const isThachCao = project?.projectType?.trim() === 'Thạch cao';
+        const initialItems = isThachCao ? [] : ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'];
 
         newBlocks[blockIdx].groups.push({
           groupName,
-          items: default6Steps
+          items: initialItems
         });
 
         const blockName = newBlocks[blockIdx].blockName;
         const matrix = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
         const newMatrix = matrix.map(row => {
           const newItems = { ...row.items };
-          default6Steps.forEach(step => {
+          initialItems.forEach(step => {
             const key = `${blockName}_${groupName}_${step}`;
             if (newItems[key] === undefined) newItems[key] = '';
           });
@@ -1279,7 +1307,7 @@ export const useStore = create(
             const mappedProjects = projectsData.map(p => ({
               id: p.id,
               name: p.name,
-              orderType: p.order_type,
+              projectType: (p.order_type === 'TRỰC TIẾP ORDER' || !p.order_type) ? 'Sơn nước' : p.order_type,
               subContractorCount: p.sub_contractor_count,
               subContractorInfo: p.sub_contractor_info,
               address: p.address,
@@ -1318,23 +1346,26 @@ export const useStore = create(
           // Fetch Teams
           const { data: teamsData, error: teamsError } = await supabase.from('teams').select('*');
           if (!teamsError && teamsData) {
-            const mappedTeams = teamsData.map(t => ({
-              id: t.id,
-              projectId: t.project_id,
-              projectName: t.project_name,
-              projects: t.projects,
-              members: t.members,
-              teamName: t.team_name,
-              leaderName: t.leader_name,
-              phone: t.phone,
-              tradeType: t.trade_type,
-              workerCount: t.worker_count,
-              contractValue: t.contract_value,
-              paidAmount: t.paid_amount,
-              retentionAmount: t.retention_amount,
-              remainingAmount: t.remaining_amount,
-              status: t.status
-            }));
+            const mappedTeams = teamsData.map(t => {
+              const rawProjects = t.project_name ? t.project_name.split(',').map(s => s.trim()).filter(Boolean) : [];
+              return {
+                id: t.id,
+                projectId: t.project_id,
+                projectName: t.project_name,
+                projects: rawProjects.length > 0 ? rawProjects : (t.project_name ? [t.project_name] : []),
+                members: t.members || [],
+                teamName: t.team_name,
+                leaderName: t.leader_name,
+                phone: t.phone,
+                tradeType: t.trade_type,
+                workerCount: t.worker_count,
+                contractValue: t.contract_value,
+                paidAmount: t.paid_amount,
+                retentionAmount: t.retention_amount,
+                remainingAmount: t.remaining_amount,
+                status: t.status
+              };
+            });
             set({ teams: mappedTeams });
           }
 

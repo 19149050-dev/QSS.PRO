@@ -4,14 +4,16 @@ import React, { useState } from 'react';
 import { useStore } from '@/store/useStore';
 import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
-import { standardBlocksTemplate } from '@/lib/mockData';
+import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
   const store = useStore();
   const isAdmin = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || store.currentUser?.role === 'QS';
   const matrixKey = `${projectName}_${type}`;
-  const fallbackBlocks = JSON.parse(JSON.stringify(standardBlocksTemplate));
+  const project = store.projects?.find(p => p.name?.trim() === projectName?.trim());
+  const isThachCao = project?.projectType?.trim() === 'Thạch cao';
+  const fallbackBlocks = JSON.parse(JSON.stringify(isThachCao ? thachCaoBlocksTemplate : standardBlocksTemplate));
   const fallbackFloors = [];
 
   // Master base floors for project
@@ -51,15 +53,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     ? store.matrixBlocks[projectName] 
     : fallbackBlocks;
     
-  // Tự động migrate các dự án cũ đang dùng template 2 nhóm (CĂN HỘ + HÀNH LANG)
-  const isOldFormat = rawBlocks[0]?.groups?.length === 2 && rawBlocks[0]?.groups?.[0]?.groupName === 'CĂN HỘ';
-  const matrixBlocks = isOldFormat ? fallbackBlocks : rawBlocks;
-
-  React.useEffect(() => {
-    if (isOldFormat) {
-      useStore.getState().updateProjectBlocks(projectName, JSON.parse(JSON.stringify(standardBlocksTemplate)));
-    }
-  }, [isOldFormat, projectName]);
+  const matrixBlocks = rawBlocks;
   
   const updateMatrixCell = (...args) => store.updateMatrixCell(matrixKey, ...args);
   const updateCategoryName = (...args) => store.updateCategoryName(projectName, ...args);
@@ -101,15 +95,28 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey);
 
   const handleEditBlock = (bIdx, oldName) => {
-    store.openGlobalPrompt("Nhập tên BLOCK mới (VD: BLOCK B) - Bỏ trống để XÓA BLOCK:", (newName) => {
-      if (newName && newName.trim() !== '' && newName !== oldName) {
-        updateBlockName(bIdx, newName.trim());
-      } else if (!newName || newName.trim() === '') {
+    store.openGlobalPrompt(
+      "Nhập tên BLOCK mới (VD: BLOCK B) - Hoặc bấm XÓA DÒNG để XÓA BLOCK:", 
+      (newName) => {
+        if (newName && newName.trim() !== '' && newName !== oldName) {
+          updateBlockName(bIdx, newName.trim());
+        } else if (!newName || newName.trim() === '') {
+          store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa BLOCK ${oldName} không? Toàn bộ các nhóm và hạng mục bên trong sẽ bị xóa sạch.`, () => {
+            deleteBlockName(bIdx);
+          });
+        }
+      }, 
+      oldName,
+      'Nhập liệu',
+      'text',
+      false,
+      null,
+      () => {
         store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa BLOCK ${oldName} không? Toàn bộ các nhóm và hạng mục bên trong sẽ bị xóa sạch.`, () => {
           deleteBlockName(bIdx);
         });
       }
-    }, oldName);
+    );
   };
 
   const handleCreateBOQ = (e) => {
@@ -121,33 +128,53 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const handleEditGroup = (bIdx, gIdx, oldName) => {
-    store.openGlobalPrompt("Nhập tên nhóm mới - Bỏ trống để XÓA NHÓM:", (newName) => {
-      if (newName && newName.trim() !== '' && newName !== oldName) {
-        updateGroupName(bIdx, gIdx, newName.trim());
-      } else if (!newName || newName.trim() === '') {
+    store.openGlobalPrompt(
+      "Nhập tên nhóm mới - Hoặc bấm XÓA DÒNG để XÓA NHÓM:", 
+      (newName) => {
+        if (newName && newName.trim() !== '' && newName !== oldName) {
+          updateGroupName(bIdx, gIdx, newName.trim());
+        } else if (!newName || newName.trim() === '') {
+          store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa NHÓM ${oldName} không? Toàn bộ các hạng mục bên trong sẽ bị xóa sạch.`, () => {
+            deleteGroupName(bIdx, gIdx);
+          });
+        }
+      }, 
+      oldName,
+      'Nhập liệu',
+      'text',
+      false,
+      null,
+      () => {
         store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa NHÓM ${oldName} không? Toàn bộ các hạng mục bên trong sẽ bị xóa sạch.`, () => {
           deleteGroupName(bIdx, gIdx);
         });
       }
-    }, oldName);
+    );
   };
 
   const handleEditItem = (bIdx, gIdx, iIdx, oldName) => {
-    store.openGlobalPrompt("Nhập tên hạng mục mới - Bỏ trống để XÓA HẠNG MỤC:", (newName) => {
-      if (newName && newName.trim() !== '' && newName !== oldName) {
-        updateCategoryName(bIdx, gIdx, iIdx, oldName, newName.trim());
-      } else if (!newName || newName.trim() === '') {
+    store.openGlobalPrompt(
+      "Nhập tên hạng mục mới - Hoặc bấm XÓA DÒNG để XÓA HẠNG MỤC:", 
+      (newName) => {
+        if (newName && newName.trim() !== '' && newName !== oldName) {
+          updateCategoryName(bIdx, gIdx, iIdx, oldName, newName.trim());
+        } else if (!newName || newName.trim() === '') {
+          store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa HẠNG MỤC ${oldName} không?`, () => {
+            deleteCategoryName(bIdx, gIdx, iIdx, oldName);
+          });
+        }
+      }, 
+      oldName,
+      'Nhập liệu',
+      'text',
+      false,
+      null,
+      () => {
         store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa HẠNG MỤC ${oldName} không?`, () => {
           deleteCategoryName(bIdx, gIdx, iIdx, oldName);
         });
       }
-    }, oldName);
-  };
-
-  const handleResetFormat = () => {
-    store.openGlobalConfirm(`Bạn có chắc chắn muốn khôi phục cấu trúc chuẩn 8 NHÓM cho công trình ${projectName}? Toàn bộ các nhóm, hạng mục, số lượng từng nhóm sẽ bị thay đổi về mặc định (Lưu ý: Bạn không mất dữ liệu của các nhóm giữ nguyên).`, () => {
-      store.updateProjectBlocks(projectName, JSON.parse(JSON.stringify(standardBlocksTemplate)));
-    });
+    );
   };
 
   const handleAddGroup = (bIdx) => {
@@ -384,13 +411,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       {/* Helper Toolbar */}
       <div className="flex flex-wrap items-center justify-end gap-3 mb-4 text-xs no-print">
         <button 
-          onClick={handleResetFormat}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 font-bold rounded-lg border border-red-200 shadow-sm transition-colors"
-          title="Khôi phục về chuẩn 7 Nhóm mặc định"
-        >
-          Khôi phục Chuẩn
-        </button>
-        <button 
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
         >
@@ -483,11 +503,11 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       <th 
                         key={`${bIdx}-${gIdx}-${iIdx}`} 
                         onDoubleClick={() => handleEditItem(bIdx, gIdx, iIdx, cat)}
-                        className="font-semibold leading-none py-1 border-r border-gray-200 cursor-pointer hover:bg-slate-300 transition-colors relative group/col align-middle"
+                        className={`font-semibold leading-none py-1 border-r border-gray-200 cursor-pointer hover:bg-slate-300 transition-colors relative group/col align-middle ${isThachCao ? 'px-2' : ''}`}
                         title="Bấm đúp để sửa tên"
                       >
-                        <div className="flex justify-center items-center h-[90px] w-[20px] relative mx-auto">
-                          <span className="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[9px] font-extrabold text-slate-700 tracking-tight">
+                        <div className={`flex justify-center items-center relative mx-auto ${isThachCao ? 'h-[40px] w-[90px] text-center whitespace-normal' : 'h-[90px] w-[20px]'}`}>
+                          <span className={`${isThachCao ? 'text-[9px] leading-[1.2]' : '[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[9px]'} font-extrabold text-slate-700 tracking-tight`}>
                             {cat}
                           </span>
                           <button 

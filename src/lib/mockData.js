@@ -150,6 +150,20 @@ export const standardBlocksTemplate = [
   }
 ];
 
+const canHoItemsTC = ['XƯƠNG CĂN HỘ', 'TẤM CĂN HỘ', 'XƯƠNG WC', 'TẤM WC'];
+const hanhLangItemsTC = ['XƯƠNG HL', 'TẤM HL'];
+const sanhTMItemsTC = ['XƯƠNG SẢNH TM', 'TẤM SẢNH TM'];
+
+export const thachCaoBlocksTemplate = [
+  {
+    blockName: 'BLOCK A',
+    groups: [
+      { groupName: 'CĂN HỘ', items: canHoItemsTC },
+      { groupName: 'HÀNH LANG', items: hanhLangItemsTC }
+    ]
+  }
+];
+
 const buildEmptyItems = (blocks) => {
   const items = {};
   blocks.forEach((block) => {
@@ -188,7 +202,7 @@ export const initialProjects = [
   {
     id: 'p-7',
     name: 'SUNHOME',
-    orderType: 'TRỰC TIẾP ORDER',
+    projectType: 'Sơn nước',
     subContractorInfo: 'Sun Group / PCC',
     address: 'PHÚ QUỐC, KIÊN GIANG',
     contractNo: '232/2025/HĐ/PCC-QTPK',
@@ -205,7 +219,7 @@ export const initialProjects = [
   {
     id: 'p-1',
     name: 'MINI HOTEL ỐP LÁT',
-    orderType: 'CHỦ ĐẦU TƯ GIAO',
+    projectType: 'Sơn nước',
     subContractorInfo: 'Chủ đầu tư Mini Hotel PQ',
     address: 'PHÚ QUỐC',
     contractNo: '145/2025/HĐ/HT-PQ',
@@ -222,7 +236,7 @@ export const initialProjects = [
   {
     id: 'p-8',
     name: 'CARA RIVER PARK',
-    orderType: 'TỔNG THẦU MUA HỘ',
+    projectType: 'Thạch cao',
     subContractorInfo: 'Cara Land',
     address: 'CẦN THƠ',
     contractNo: '89/2025/HĐ/CARA-QSS',
@@ -239,7 +253,7 @@ export const initialProjects = [
   {
     id: 'p-9',
     name: 'EATON PARK PHASE I',
-    orderType: 'TRỰC TIẾP ORDER',
+    projectType: 'Sơn nước',
     subContractorInfo: 'Mapletree / Frasers',
     address: 'TP. HỒ CHÍ MINH',
     contractNo: '312/2025/HĐ/EP-QSS',
@@ -256,7 +270,7 @@ export const initialProjects = [
   {
     id: 'p-2',
     name: 'BCONS TĐH',
-    orderType: 'TRỰC TIẾP ORDER',
+    projectType: 'Sơn nước',
     subContractorInfo: 'Bcons Group',
     address: 'BÌNH DƯƠNG',
     contractNo: '78/2025/HĐ/BCONS-QSS',
@@ -273,7 +287,7 @@ export const initialProjects = [
   {
     id: 'p-3',
     name: 'PICITY SKY PARK',
-    orderType: 'TRỰC TIẾP ORDER',
+    projectType: 'Sơn nước',
     subContractorInfo: 'Pi Group',
     address: 'BÌNH DƯƠNG',
     contractNo: '156/2025/HĐ/PIC-QSS',
