@@ -154,6 +154,22 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     setMaterialSheet(selectedProject, { ...currentSheet, ipcMap: nextIpcMap });
   };
 
+  const handleEditIpc = (item, field, currentValue) => {
+    const label = field === 'order' ? 'PO' : 'NHẬN';
+    openGlobalPrompt(
+      `Nhập khối lượng IPC (${label}) cho ${item.name || 'vật tư này'}:`,
+      (newVal) => {
+        if (newVal !== null) {
+          handleUpdateIpc(item.id, field, newVal);
+        }
+      },
+      currentValue || '',
+      'Nhập IPC',
+      'text',
+      true
+    );
+  };
+
   const handleEditName = (item) => {
     openGlobalPrompt(`Nhập tên vật tư:`, (newName) => {
       if (newName !== null) {
@@ -778,25 +794,21 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   const recvIpc = currentSheet.ipcMap?.[item.id]?.received ?? '';
                                   return (
                                     <Fragment key={`${item.id}-ipc`}>
-                                      <td className="border border-slate-800 p-1 text-center bg-amber-50">
-                                        <input
-                                          type="number"
-                                          step="any"
-                                          placeholder="0"
-                                          value={orderIpc}
-                                          onChange={(e) => handleUpdateIpc(item.id, 'order', e.target.value)}
-                                          className="w-full text-center bg-transparent font-extrabold text-amber-950 outline-none focus:bg-amber-100/80 rounded py-1 text-sm"
-                                        />
+                                      <td className="border border-slate-800 p-0 transition-colors bg-amber-50 hover:bg-amber-100 cursor-pointer">
+                                        <div
+                                          onClick={() => handleEditIpc(item, 'order', orderIpc)}
+                                          className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-amber-950 text-sm"
+                                        >
+                                          {formatCell(orderIpc !== '' ? parseNumber(orderIpc).toLocaleString('vi-VN') : 0)}
+                                        </div>
                                       </td>
-                                      <td className="border border-slate-800 p-1 text-center bg-emerald-50">
-                                        <input
-                                          type="number"
-                                          step="any"
-                                          placeholder="0"
-                                          value={recvIpc}
-                                          onChange={(e) => handleUpdateIpc(item.id, 'received', e.target.value)}
-                                          className="w-full text-center bg-transparent font-extrabold text-emerald-950 outline-none focus:bg-emerald-100/80 rounded py-1 text-sm"
-                                        />
+                                      <td className="border border-slate-800 p-0 transition-colors bg-emerald-50 hover:bg-emerald-100 cursor-pointer">
+                                        <div
+                                          onClick={() => handleEditIpc(item, 'received', recvIpc)}
+                                          className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-emerald-950 text-sm"
+                                        >
+                                          {formatCell(recvIpc !== '' ? parseNumber(recvIpc).toLocaleString('vi-VN') : 0)}
+                                        </div>
                                       </td>
                                     </Fragment>
                                   );

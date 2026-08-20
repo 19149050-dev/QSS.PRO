@@ -2023,10 +2023,6 @@ video {
   background-color: rgb(15 23 42 / 0.6);
 }
 
-.bg-transparent {
-  background-color: transparent;
-}
-
 .bg-white {
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
@@ -3247,6 +3243,18 @@ body {
   color: #0f172a;
 }
 
+/* Hide spin buttons in number inputs */
+
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
 /* Custom Scrollbar */
 
 ::-webkit-scrollbar {
@@ -3870,14 +3878,6 @@ body {
 
 .focus\:border-transparent:focus {
   border-color: transparent;
-}
-
-.focus\:bg-amber-100\/80:focus {
-  background-color: rgb(254 243 199 / 0.8);
-}
-
-.focus\:bg-emerald-100\/80:focus {
-  background-color: rgb(209 250 229 / 0.8);
 }
 
 .focus\:bg-white:focus {
