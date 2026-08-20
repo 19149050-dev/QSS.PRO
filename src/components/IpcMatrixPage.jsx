@@ -22,6 +22,23 @@ const parseNumber = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const getDefaultDinhMuc = (name = '') => {
+  if (!name) return '';
+  const upper = name.trim().toUpperCase();
+  
+  if (upper.includes('BỘT') || upper.includes('BOT')) {
+    return '25';
+  }
+  if (upper.includes('LÓT') || upper.includes('LOT')) {
+    if (upper.includes('A300')) return '300';
+    return '200';
+  }
+  if (upper.includes('PHỦ') || upper.includes('PHU') || upper.includes('SƠN PHỦ') || upper.includes('SON PHU')) {
+    return '100';
+  }
+  return '';
+};
+
 const formatCell = (value) => (value === '' || value === null || value === undefined ? '' : value);
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
@@ -46,7 +63,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const isExport = mode === 'export_materials';
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
-  const currentSheet = materialSheets[selectedProject] || { items: [], rows: [], exportRows: [] };
+  const currentSheet = materialSheets[selectedProject] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
   
   const materialItems = useMemo(() => {
     let items = currentSheet.items || [];
@@ -123,6 +140,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       return row;
     });
     setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
+  };
+
+  const handleUpdateIpc = (colId, field, value) => {
+    const currentIpcMap = currentSheet.ipcMap || {};
+    const nextIpcMap = {
+      ...currentIpcMap,
+      [colId]: {
+        ...(currentIpcMap[colId] || { order: '', received: '' }),
+        [field]: value
+      }
+    };
+    setMaterialSheet(selectedProject, { ...currentSheet, ipcMap: nextIpcMap });
   };
 
   const handleEditName = (item) => {
@@ -458,7 +487,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <button
                             type="button"
                             onClick={() => {
-                              setDinhMucDraft(currentSheet.dinhMucMap || {});
+                              const initialDraft = { ...(currentSheet.dinhMucMap || {}) };
+                              materialItems.forEach(item => {
+                                if (initialDraft[item.id] === undefined || initialDraft[item.id] === '') {
+                                  const defaultVal = getDefaultDinhMuc(item.name);
+                                  if (defaultVal) {
+                                    initialDraft[item.id] = defaultVal;
+                                  }
+                                }
+                              });
+                              setDinhMucDraft(initialDraft);
                               setIsDinhMucModalOpen(true);
                             }}
                             className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 ml-2 shadow-sm transition"
@@ -717,7 +755,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 {materialItems.map((item) => {
                                   const poQty = orderTotals[item.id] || 0;
                                   const recvQty = totals[item.id] || 0;
-                                  const dinhMucVal = parseNumber(currentSheet.dinhMucMap?.[item.id] || 0);
+                                  const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
+                                  const dinhMucVal = parseNumber(rawDinhMuc || 0);
                                   const poSanLuong = poQty * dinhMucVal;
                                   const recvSanLuong = recvQty * dinhMucVal;
                                   return (
@@ -727,6 +766,65 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                       </td>
                                       <td className="border border-slate-800 p-2 text-emerald-950 bg-emerald-100 font-extrabold text-sm text-center">
                                         {formatCell(recvSanLuong ? recvSanLuong.toLocaleString('vi-VN') : 0)}
+                                      </td>
+                                    </Fragment>
+                                  );
+                                })}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase">IPC</td>
+                                {materialItems.map((item) => {
+                                  const orderIpc = currentSheet.ipcMap?.[item.id]?.order ?? '';
+                                  const recvIpc = currentSheet.ipcMap?.[item.id]?.received ?? '';
+                                  return (
+                                    <Fragment key={`${item.id}-ipc`}>
+                                      <td className="border border-slate-800 p-1 text-center bg-amber-50">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          placeholder="0"
+                                          value={orderIpc}
+                                          onChange={(e) => handleUpdateIpc(item.id, 'order', e.target.value)}
+                                          className="w-full text-center bg-transparent font-extrabold text-amber-950 outline-none focus:bg-amber-100/80 rounded py-1 text-sm"
+                                        />
+                                      </td>
+                                      <td className="border border-slate-800 p-1 text-center bg-emerald-50">
+                                        <input
+                                          type="number"
+                                          step="any"
+                                          placeholder="0"
+                                          value={recvIpc}
+                                          onChange={(e) => handleUpdateIpc(item.id, 'received', e.target.value)}
+                                          className="w-full text-center bg-transparent font-extrabold text-emerald-950 outline-none focus:bg-emerald-100/80 rounded py-1 text-sm"
+                                        />
+                                      </td>
+                                    </Fragment>
+                                  );
+                                })}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase">%</td>
+                                {materialItems.map((item) => {
+                                  const poQty = orderTotals[item.id] || 0;
+                                  const recvQty = totals[item.id] || 0;
+                                  const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
+                                  const dinhMucVal = parseNumber(rawDinhMuc || 0);
+                                  const poSanLuong = poQty * dinhMucVal;
+                                  const recvSanLuong = recvQty * dinhMucVal;
+
+                                  const orderIpcVal = parseNumber(currentSheet.ipcMap?.[item.id]?.order);
+                                  const recvIpcVal = parseNumber(currentSheet.ipcMap?.[item.id]?.received);
+
+                                  const orderPercent = poSanLuong > 0 ? (orderIpcVal / poSanLuong) * 100 : 0;
+                                  const recvPercent = recvSanLuong > 0 ? (recvIpcVal / recvSanLuong) * 100 : 0;
+
+                                  return (
+                                    <Fragment key={`${item.id}-percent`}>
+                                      <td className="border border-slate-800 p-2 text-amber-950 bg-amber-200 font-extrabold text-sm text-center">
+                                        {poSanLuong > 0 && orderIpcVal > 0 ? `${orderPercent.toFixed(1)}%` : '0%'}
+                                      </td>
+                                      <td className="border border-slate-800 p-2 text-emerald-950 bg-emerald-200 font-extrabold text-sm text-center">
+                                        {recvSanLuong > 0 && recvIpcVal > 0 ? `${recvPercent.toFixed(1)}%` : '0%'}
                                       </td>
                                     </Fragment>
                                   );
@@ -819,6 +917,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
             <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
               {materialItems.map((item, idx) => {
                 const name = item.name || `Cột ${idx + 1}`;
+                const defaultVal = getDefaultDinhMuc(name);
+                const currentVal = dinhMucDraft[item.id] ?? defaultVal;
                 return (
                   <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
                     <span className="font-bold text-slate-800 text-sm truncate max-w-[240px]">{name}</span>
@@ -827,8 +927,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <input
                         type="number"
                         step="any"
-                        placeholder="0"
-                        value={dinhMucDraft[item.id] ?? ''}
+                        placeholder={defaultVal || "0"}
+                        value={currentVal}
                         onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
                         className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none"
                       />
@@ -851,6 +951,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                 onClick={() => {
                   setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft });
                   setIsDinhMucModalOpen(false);
+                  openGlobalAlert('Đã lưu cấu hình định mức vật tư thành công!', 'Thành công');
                 }}
                 className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition text-xs shadow-md"
               >

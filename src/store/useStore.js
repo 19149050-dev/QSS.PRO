@@ -603,7 +603,7 @@ export const useStore = create(
       },
       getMaterialSheet: (projectName) => {
         const state = get();
-        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
+        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
       },
       setMaterialSheet: (projectName, sheetData) => {
         set((state) => ({
@@ -619,7 +619,7 @@ export const useStore = create(
         return {
           materialSheets: {
             ...state.materialSheets,
-            [projectName]: { ...current, items: [], rows: [], exportRows: [] }
+            [projectName]: { ...current, items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} }
           }
         };
       }),
@@ -1421,7 +1421,9 @@ export const useStore = create(
               mats[s.project_name] = {
                 items: s.items || [],
                 rows: s.receive_rows || [],
-                exportRows: s.export_rows || []
+                exportRows: s.export_rows || [],
+                dinhMucMap: s.dinh_muc_map || {},
+                ipcMap: s.ipc_map || {}
               };
             });
             set((state) => ({
@@ -1476,7 +1478,7 @@ export const useStore = create(
 
       syncMaterialSheetToSupabase: async (projectName) => {
         const state = get();
-        const sheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [] };
+        const sheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
         
         try {
           const { error } = await supabase
@@ -1487,6 +1489,8 @@ export const useStore = create(
                 items: sheet.items,
                 receive_rows: sheet.rows,
                 export_rows: sheet.exportRows,
+                dinh_muc_map: sheet.dinhMucMap || {},
+                ipc_map: sheet.ipcMap || {},
                 updated_at: new Date().toISOString()
               },
               { onConflict: 'project_name' }

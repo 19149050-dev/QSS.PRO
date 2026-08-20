@@ -155,11 +155,19 @@ CREATE TABLE IF NOT EXISTS public.material_sheets (
   items jsonb DEFAULT '[]'::jsonb,
   receive_rows jsonb DEFAULT '[]'::jsonb,
   export_rows jsonb DEFAULT '[]'::jsonb,
+  dinh_muc_map jsonb DEFAULT '{}'::jsonb,
+  ipc_map jsonb DEFAULT '{}'::jsonb,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
 
+ALTER TABLE public.material_sheets ADD COLUMN IF NOT EXISTS dinh_muc_map jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE public.material_sheets ADD COLUMN IF NOT EXISTS ipc_map jsonb DEFAULT '{}'::jsonb;
+
 ALTER TABLE public.material_sheets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read material_sheets" ON public.material_sheets;
+DROP POLICY IF EXISTS "Allow public write material_sheets" ON public.material_sheets;
 
 CREATE POLICY "Allow public read material_sheets"
   ON public.material_sheets
