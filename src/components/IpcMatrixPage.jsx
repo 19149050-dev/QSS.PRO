@@ -166,7 +166,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       currentValue || '',
       'Nhập IPC',
       'text',
-      true
+      false
     );
   };
 
