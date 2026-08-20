@@ -830,13 +830,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   const orderPercent = poSanLuong > 0 ? (orderIpcVal / poSanLuong) * 100 : 0;
                                   const recvPercent = recvSanLuong > 0 ? (recvIpcVal / recvSanLuong) * 100 : 0;
 
+                                  const isOrderRed = poSanLuong > 0 && orderPercent < 80;
+                                  const isRecvRed = recvSanLuong > 0 && recvPercent < 80;
+
                                   return (
                                     <Fragment key={`${item.id}-percent`}>
-                                      <td className="border border-slate-800 p-2 text-amber-950 bg-amber-200 font-extrabold text-sm text-center">
-                                        {poSanLuong > 0 && orderIpcVal > 0 ? `${orderPercent.toFixed(1)}%` : '0%'}
+                                      <td className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${isOrderRed ? 'bg-red-500 text-white' : 'bg-amber-200 text-amber-950'}`}>
+                                        {poSanLuong > 0 ? `${orderPercent.toFixed(1)}%` : '0%'}
                                       </td>
-                                      <td className="border border-slate-800 p-2 text-emerald-950 bg-emerald-200 font-extrabold text-sm text-center">
-                                        {recvSanLuong > 0 && recvIpcVal > 0 ? `${recvPercent.toFixed(1)}%` : '0%'}
+                                      <td className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${isRecvRed ? 'bg-red-500 text-white' : 'bg-emerald-200 text-emerald-950'}`}>
+                                        {recvSanLuong > 0 ? `${recvPercent.toFixed(1)}%` : '0%'}
                                       </td>
                                     </Fragment>
                                   );
