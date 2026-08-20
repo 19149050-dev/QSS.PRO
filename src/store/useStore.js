@@ -1418,12 +1418,13 @@ export const useStore = create(
           if (!sheetsError && sheetsData) {
             const mats = {};
             sheetsData.forEach(s => {
+              const localSheet = get().materialSheets?.[s.project_name] || {};
               mats[s.project_name] = {
                 items: s.items || [],
                 rows: s.receive_rows || [],
                 exportRows: s.export_rows || [],
-                dinhMucMap: s.dinh_muc_map || {},
-                ipcMap: s.ipc_map || {}
+                dinhMucMap: { ...(localSheet.dinhMucMap || {}), ...(s.dinh_muc_map || {}) },
+                ipcMap: { ...(localSheet.ipcMap || {}), ...(s.ipc_map || {}) }
               };
             });
             set((state) => ({

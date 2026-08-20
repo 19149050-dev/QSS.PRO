@@ -142,25 +142,21 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
   };
 
-  const handleUpdateIpc = (colId, field, value) => {
+  const handleUpdateIpc = (colId, value) => {
     const currentIpcMap = currentSheet.ipcMap || {};
     const nextIpcMap = {
       ...currentIpcMap,
-      [colId]: {
-        ...(currentIpcMap[colId] || { order: '', received: '' }),
-        [field]: value
-      }
+      [colId]: value
     };
     setMaterialSheet(selectedProject, { ...currentSheet, ipcMap: nextIpcMap });
   };
 
-  const handleEditIpc = (item, field, currentValue) => {
-    const label = field === 'order' ? 'PO' : 'NHẬN';
+  const handleEditIpc = (item, currentValue) => {
     openGlobalPrompt(
-      `Nhập khối lượng IPC (${label}) cho ${item.name || 'vật tư này'}:`,
+      `Nhập khối lượng IPC cho ${item.name || 'vật tư này'}:`,
       (newVal) => {
         if (newVal !== null) {
-          handleUpdateIpc(item.id, field, newVal);
+          handleUpdateIpc(item.id, newVal);
         }
       },
       currentValue || '',
@@ -790,58 +786,48 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               <tr className="font-bold">
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase">IPC</td>
                                 {materialItems.map((item) => {
-                                  const orderIpc = currentSheet.ipcMap?.[item.id]?.order ?? '';
-                                  const recvIpc = currentSheet.ipcMap?.[item.id]?.received ?? '';
+                                  const rawIpc = currentSheet.ipcMap?.[item.id];
+                                  const ipcVal = typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order ?? '') : (rawIpc ?? '');
                                   return (
-                                    <Fragment key={`${item.id}-ipc`}>
-                                      <td className="border border-slate-800 p-0 transition-colors bg-amber-50 hover:bg-amber-100 cursor-pointer">
-                                        <div
-                                          onClick={() => handleEditIpc(item, 'order', orderIpc)}
-                                          className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-amber-950 text-sm"
-                                        >
-                                          {formatCell(orderIpc !== '' ? parseNumber(orderIpc).toLocaleString('vi-VN') : 0)}
-                                        </div>
-                                      </td>
-                                      <td className="border border-slate-800 p-0 transition-colors bg-emerald-50 hover:bg-emerald-100 cursor-pointer">
-                                        <div
-                                          onClick={() => handleEditIpc(item, 'received', recvIpc)}
-                                          className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-emerald-950 text-sm"
-                                        >
-                                          {formatCell(recvIpc !== '' ? parseNumber(recvIpc).toLocaleString('vi-VN') : 0)}
-                                        </div>
-                                      </td>
-                                    </Fragment>
+                                    <td
+                                      key={`${item.id}-ipc`}
+                                      colSpan={2}
+                                      className="border border-slate-800 p-0 transition-colors bg-emerald-50 hover:bg-emerald-100 cursor-pointer"
+                                    >
+                                      <div
+                                        onClick={() => handleEditIpc(item, ipcVal)}
+                                        className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-emerald-950 text-sm"
+                                      >
+                                        {formatCell(ipcVal !== '' ? parseNumber(ipcVal).toLocaleString('vi-VN') : '')}
+                                      </div>
+                                    </td>
                                   );
                                 })}
                               </tr>
                               <tr className="font-bold">
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase">%</td>
                                 {materialItems.map((item) => {
-                                  const poQty = orderTotals[item.id] || 0;
                                   const recvQty = totals[item.id] || 0;
                                   const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
                                   const dinhMucVal = parseNumber(rawDinhMuc || 0);
-                                  const poSanLuong = poQty * dinhMucVal;
                                   const recvSanLuong = recvQty * dinhMucVal;
 
-                                  const orderIpcVal = parseNumber(currentSheet.ipcMap?.[item.id]?.order);
-                                  const recvIpcVal = parseNumber(currentSheet.ipcMap?.[item.id]?.received);
+                                  const rawIpc = currentSheet.ipcMap?.[item.id];
+                                  const ipcVal = parseNumber(typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order) : rawIpc);
 
-                                  const orderPercent = poSanLuong > 0 ? (orderIpcVal / poSanLuong) * 100 : 0;
-                                  const recvPercent = recvSanLuong > 0 ? (recvIpcVal / recvSanLuong) * 100 : 0;
-
-                                  const isOrderRed = poSanLuong > 0 && orderPercent < 80;
-                                  const isRecvRed = recvSanLuong > 0 && recvPercent < 80;
+                                  const percent = recvSanLuong > 0 ? (ipcVal / recvSanLuong) * 100 : 0;
+                                  const isRed = recvSanLuong > 0 && percent < 80;
 
                                   return (
-                                    <Fragment key={`${item.id}-percent`}>
-                                      <td className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${isOrderRed ? 'bg-red-500 text-white' : 'bg-amber-200 text-amber-950'}`}>
-                                        {poSanLuong > 0 ? `${orderPercent.toFixed(1)}%` : '0%'}
-                                      </td>
-                                      <td className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${isRecvRed ? 'bg-red-500 text-white' : 'bg-emerald-200 text-emerald-950'}`}>
-                                        {recvSanLuong > 0 ? `${recvPercent.toFixed(1)}%` : '0%'}
-                                      </td>
-                                    </Fragment>
+                                    <td
+                                      key={`${item.id}-percent`}
+                                      colSpan={2}
+                                      className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${
+                                        isRed ? 'bg-red-500 text-white' : 'bg-emerald-100 text-emerald-950'
+                                      }`}
+                                    >
+                                      {recvSanLuong > 0 ? `${percent.toFixed(1)}%` : '0%'}
+                                    </td>
                                   );
                                 })}
                               </tr>
