@@ -21,7 +21,8 @@ import {
   LogOut,
   FolderGit2,
   ClipboardList,
-  UserCheck
+  UserCheck,
+  X
 } from 'lucide-react';
 
 export default function Sidebar({ onCloseMobile }) {
@@ -63,16 +64,27 @@ export default function Sidebar({ onCloseMobile }) {
     <aside className="w-52 bg-[#0a0a0a] text-zinc-400 min-h-screen flex flex-col justify-between flex-shrink-0 border-r border-zinc-900 shadow-xl relative z-20">
       <div className="relative z-10">
         {/* Brand Header */}
-        <div className="p-5 flex items-center gap-3 border-b border-zinc-900 bg-[#0a0a0a]">
-          <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-black font-black text-xl shadow-md shadow-white/10">
-            Q
+        <div className="p-5 flex items-center justify-between border-b border-zinc-900 bg-[#0a0a0a]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-black font-black text-xl shadow-md shadow-white/10">
+              Q
+            </div>
+            <div>
+              <h1 className="font-black text-lg tracking-wider text-white flex items-center gap-1">
+                QSS
+                <span className="text-zinc-500">PRO</span>
+              </h1>
+              <p className="text-[10px] text-zinc-500 font-bold tracking-widest mt-0.5 uppercase">MANAGEMENT SYSTEM</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-black text-lg tracking-wider text-white flex items-center gap-1">
-              QSS PRO
-            </h1>
-            <p className="text-[10px] text-zinc-500 font-bold tracking-widest mt-0.5 uppercase">MANAGEMENT SYSTEM</p>
-          </div>
+          {onCloseMobile && (
+            <button 
+              onClick={onCloseMobile}
+              className="md:hidden p-2 rounded-lg bg-zinc-900 text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         {/* User Card Box */}
