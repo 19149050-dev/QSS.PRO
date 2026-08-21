@@ -20,10 +20,14 @@ export default function TeamsPage() {
 
   // Filter teams that are assigned to the selected project
   const projectTeams = teams.filter(t => {
+    let projs = [];
     if (Array.isArray(t.projects) && t.projects.length > 0) {
-      return t.projects.includes(selectedProject);
+      projs = t.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean);
+    } else {
+      const nameStr = t.projectName || t.project_name || '';
+      projs = nameStr.split(',').map(s => s.trim()).filter(Boolean);
     }
-    return t.projectName === selectedProject || t.project_name === selectedProject;
+    return projs.includes(selectedProject);
   });
 
   return (

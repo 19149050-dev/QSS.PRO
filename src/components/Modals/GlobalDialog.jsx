@@ -135,7 +135,7 @@ export default function GlobalDialog() {
                 }}
                 className="px-4 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
               >
-                Xóa dòng
+                {globalDialog.deleteLabel || 'Xóa dòng'}
               </button>
             )}
           </div>

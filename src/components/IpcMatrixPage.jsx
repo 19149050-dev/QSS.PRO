@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState, useRef } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal } from 'lucide-react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix from '@/components/PaymentMatrix';
@@ -13,6 +13,7 @@ const TAB_ITEMS = {
   actual: { label: 'IPC Thực', icon: ClipboardList, type: 'ipc', hint: 'Hồ sơ thanh toán đã triển khai' },
   materials: { label: 'Nhận Vật Tư', icon: Boxes, type: 'materials', hint: 'Theo dõi vật tư theo từng công trình' },
   export_materials: { label: 'Xuất Vật Tư', icon: Boxes, type: 'materials', hint: 'Theo dõi xuất vật tư theo từng công trình' },
+  attendance: { label: 'Điểm Danh Đội', icon: UserCheck, type: 'materials', hint: 'Theo dõi điểm danh tổ đội theo từng công trình' }
 };
 
 const parseNumber = (value) => {
@@ -42,7 +43,7 @@ const getDefaultDinhMuc = (name = '') => {
 const formatCell = (value) => (value === '' || value === null || value === undefined ? '' : value);
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
-  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm } = useStore();
+  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm, teams } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
   const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
@@ -59,21 +60,45 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const activeTab = useMemo(() => TAB_ITEMS[mode] || TAB_ITEMS.planned, [mode]);
   const Icon = activeTab.icon;
 
-  // Material Logic
+  // Material / Attendance Logic
   const isExport = mode === 'export_materials';
+  const isAttendance = mode === 'attendance';
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
-  const currentSheet = materialSheets[selectedProject] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
   
+  const sheetKey = isAttendance ? `attendance_${selectedProject}` : selectedProject;
+  const currentSheet = materialSheets[sheetKey] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+
+  const projectTeams = useMemo(() => {
+    if (!teams) return [];
+    return teams.filter(t => {
+      let projs = [];
+      if (Array.isArray(t.projects) && t.projects.length > 0) {
+        projs = t.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean);
+      } else {
+        const nameStr = t.projectName || t.project_name || '';
+        projs = nameStr.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return projs.includes(selectedProject);
+    });
+  }, [teams, selectedProject]);
+
   const materialItems = useMemo(() => {
     let items = currentSheet.items || [];
     if (items.length === 0) {
-      items = Array.from({ length: 8 }, (_, i) => {
-        return { id: `col_${i}`, name: '' };
-      });
+      if (isAttendance && projectTeams.length > 0) {
+        items = projectTeams.map((t, idx) => ({
+          id: t.id || `team_${t.teamName || t.team_name || idx}`,
+          name: (t.teamName || t.team_name || 'ĐỘI THI CÔNG').toUpperCase()
+        }));
+      } else {
+        items = Array.from({ length: 8 }, (_, i) => {
+          return { id: `col_${i}`, name: '' };
+        });
+      }
     }
     return items;
-  }, [currentSheet.items]);
+  }, [currentSheet.items, isAttendance, projectTeams]);
 
   const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
 
@@ -91,19 +116,19 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const handleUpdateName = (colId, newName) => {
     const nextItems = materialItems.map(item => item.id === colId ? { ...item, name: newName } : item);
-    setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
+    setMaterialSheet(sheetKey, { ...currentSheet, items: nextItems });
   };
 
   const handleRemoveColumn = (colId) => {
-    openGlobalConfirm("Bạn có chắc chắn muốn xóa cột vật tư này? Toàn bộ dữ liệu của cột này sẽ bị mất.", () => {
+    openGlobalConfirm("Bạn có chắc chắn muốn xóa cột này? Toàn bộ dữ liệu của cột này sẽ bị mất.", () => {
       const nextItems = materialItems.filter(item => item.id !== colId);
-      setMaterialSheet(selectedProject, { ...currentSheet, items: nextItems });
+      setMaterialSheet(sheetKey, { ...currentSheet, items: nextItems });
     }, "Xác nhận xóa");
   };
 
   const handleUpdateRowDate = (rowId, date) => {
     const nextRows = materialRows.map(row => row.id === rowId ? { ...row, date } : row);
-    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
+    setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
   };
 
   const handleUpdateCell = (rowId, colId, field, value) => {
@@ -139,7 +164,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       }
       return row;
     });
-    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
+    setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: nextRows });
   };
 
   const handleUpdateIpc = (colId, value) => {
@@ -148,12 +173,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       ...currentIpcMap,
       [colId]: value
     };
-    setMaterialSheet(selectedProject, { ...currentSheet, ipcMap: nextIpcMap });
+    setMaterialSheet(sheetKey, { ...currentSheet, ipcMap: nextIpcMap });
   };
 
   const handleEditIpc = (item, currentValue) => {
     openGlobalPrompt(
-      `Nhập khối lượng IPC cho ${item.name || 'vật tư này'}:`,
+      `Nhập khối lượng IPC cho ${item.name || (isAttendance ? 'tổ đội này' : 'vật tư này')}:`,
       (newVal) => {
         if (newVal !== null) {
           handleUpdateIpc(item.id, newVal);
@@ -167,7 +192,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleEditName = (item) => {
-    openGlobalPrompt(`Nhập tên vật tư:`, (newName) => {
+    openGlobalPrompt(isAttendance ? 'Nhập tên tổ đội:' : 'Nhập tên vật tư:', (newName) => {
       if (newName !== null) {
         handleUpdateName(item.id, newName);
       }
@@ -215,14 +240,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng này?', () => {
         const listKey = isExport ? 'exportRows' : 'rows';
         const nextRows = (isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])).filter(r => r.id !== row.id);
-        setMaterialSheet(selectedProject, { ...currentSheet, [listKey]: nextRows });
+        setMaterialSheet(sheetKey, { ...currentSheet, [listKey]: nextRows });
       }, 'Xác nhận xóa dòng');
     });
   };
 
   const handleEditValue = (row, item, field, currentValue) => {
-    const fieldName = field === 'order' ? (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)') : (isExport ? 'NGÀY' : 'NHẬN');
-    openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || 'vật tư này'}:`, (newVal) => {
+    const fieldName = field === 'order' ? (isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)')) : (isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN'));
+    openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || (isAttendance ? 'tổ đội này' : 'vật tư này')}:`, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
       }
@@ -231,7 +256,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const addRow = () => {
     const newRow = { id: `row-${Date.now()}`, date: '', values: {} };
-    setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
+    setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
   };
 
   const handlePOModalSubmit = (poName, quantities, date) => {
@@ -257,7 +282,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
     const newRow = { id: newRowId, date: newDate, values };
     const listKey = isExport ? 'exportRows' : 'rows';
-    setMaterialSheet(selectedProject, { 
+    setMaterialSheet(sheetKey, { 
       ...currentSheet, 
       [listKey]: [...(isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])), newRow] 
     });
@@ -265,7 +290,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const addColumn = () => {
     const newItem = { id: `mat-${Date.now()}`, name: '' };
-    setMaterialSheet(selectedProject, { ...currentSheet, items: [...materialItems, newItem] });
+    setMaterialSheet(sheetKey, { ...currentSheet, items: [...materialItems, newItem] });
   };
 
   const resetData = () => {
@@ -280,7 +305,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         return;
       }
       openGlobalConfirm("Bạn có chắc chắn muốn xóa toàn bộ dữ liệu của tab này?", () => {
-        setMaterialSheet(selectedProject, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
+        setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [] });
       }, "Cảnh báo xóa dữ liệu");
     }, '', 'Xác thực bảo mật', 'password');
   };
@@ -571,7 +596,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     onClick={!isExport ? () => handleEditName(item) : undefined}
                                     className={`w-full h-full min-w-[120px] p-2 text-center font-bold uppercase min-h-[40px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${!isExport ? 'cursor-pointer hover:brightness-95' : ''}`}
                                   >
-                                    {item.name || <span className="opacity-50 font-normal italic">Tên vật tư</span>}
+                                    {item.name || <span className="opacity-50 font-normal italic">{isAttendance ? 'Tên tổ đội' : 'Tên vật tư'}</span>}
                                     {!isExport && (
                                       <button
                                         type="button"
@@ -593,8 +618,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <tr>
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
-                                <th className="border border-slate-800 bg-[#fffaf0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)'}</th>
-                                <th className="border border-slate-800 bg-[#f2fbf3] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isExport ? 'NGÀY' : 'NHẬN'}</th>
+                                <th className="border border-slate-800 bg-[#fffaf0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)')}</th>
+                                <th className="border border-slate-800 bg-[#f2fbf3] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN')}</th>
                               </Fragment>
                             ))}
                           </tr>

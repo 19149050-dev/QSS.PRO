@@ -19,16 +19,25 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
 
   useEffect(() => {
     if (teamToEdit) {
+      let initialProjs = [];
+      if (Array.isArray(teamToEdit.projects) && teamToEdit.projects.length > 0) {
+        initialProjs = teamToEdit.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean);
+      } else if (teamToEdit.projectName || teamToEdit.project_name) {
+        const str = teamToEdit.projectName || teamToEdit.project_name;
+        initialProjs = str.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (initialProjs.length === 0 && projects[0]?.name) {
+        initialProjs = [projects[0].name];
+      }
+
       setFormData({
-        teamName: teamToEdit.teamName || '',
-        leaderName: teamToEdit.leaderName || '',
+        teamName: teamToEdit.teamName || teamToEdit.team_name || '',
+        leaderName: teamToEdit.leaderName || teamToEdit.leader_name || '',
         phone: teamToEdit.phone || '',
-        tradeType: teamToEdit.tradeType || '',
-        projects: Array.isArray(teamToEdit.projects) && teamToEdit.projects.length > 0 
-          ? teamToEdit.projects 
-          : [teamToEdit.projectName || projects[0]?.name].filter(Boolean),
-        workerCount: teamToEdit.workerCount || 10,
-        contractValue: teamToEdit.contractValue || ''
+        tradeType: teamToEdit.tradeType || teamToEdit.trade_type || 'Bả & Sơn Nước Nội/Ngoại thất',
+        projects: initialProjs,
+        workerCount: teamToEdit.workerCount || teamToEdit.worker_count || 10,
+        contractValue: teamToEdit.contractValue || teamToEdit.contract_value || ''
       });
     } else {
       setFormData({
@@ -41,7 +50,7 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
         contractValue: ''
       });
     }
-  }, [teamToEdit, isOpen]);
+  }, [teamToEdit, isOpen, projects]);
 
   if (!isOpen) return null;
 
@@ -50,20 +59,20 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
     if (!formData.teamName || !formData.leaderName) return;
 
     const selectedProjs = (formData.projects && formData.projects.length > 0) 
-      ? formData.projects 
+      ? Array.from(new Set(formData.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean)))
       : [projects[0]?.name || 'SUNHOME'];
 
     if (teamToEdit) {
       updateTeam(teamToEdit.id, {
         ...formData,
         projects: selectedProjs,
-        projectName: selectedProjs[0]
+        projectName: selectedProjs.join(', ')
       });
     } else {
       addTeam({
         ...formData,
         projects: selectedProjs,
-        projectName: selectedProjs[0],
+        projectName: selectedProjs.join(', '),
         contractValue: Number(formData.contractValue) || 0,
         paidAmount: 0,
         remainingAmount: Number(formData.contractValue) || 0,

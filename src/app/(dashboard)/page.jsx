@@ -13,6 +13,7 @@ import IpcDuKienView from '@/components/Views/IpcDuKienView';
 import IpcThucView from '@/components/Views/IpcThucView';
 import IpcVatTuView from '@/components/Views/IpcVatTuView';
 import ExportMaterialsView from '@/components/Views/ExportMaterialsView';
+import TeamAttendanceView from '@/components/Views/TeamAttendanceView';
 import IpcView from '@/components/Views/IpcView';
 import UsersView from '@/components/Views/UsersView';
 import TrashView from '@/components/Views/TrashView';
@@ -41,6 +42,8 @@ export default function RootRouter() {
       return <IpcVatTuView />;
     case 'export-materials':
       return <ExportMaterialsView />;
+    case 'team-attendance':
+      return <TeamAttendanceView />;
     case 'ipc':
       return <IpcView />;
     case 'users':

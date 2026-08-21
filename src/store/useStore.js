@@ -52,12 +52,13 @@ export const useStore = create(
       ipcs: initialIPCs,
       materials: initialMaterials,
       materialSheets: {},
+      attendanceSheets: {},
       paymentMatrix: initialPaymentMatrix,
       matrixBlocks: defaultMatrixBlocksLocal,
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
       openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
       openGlobalConfirm: (message, onConfirm, title = 'Xác nhận') => set({ globalDialog: { isOpen: true, type: 'confirm', title, message, onConfirm } }),
-      openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', allowNote = false, onCancel = null, onDelete = null) => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, onDelete, defaultValue, inputType, allowNote } }),
+      openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', allowNote = false, onCancel = null, onDelete = null, deleteLabel = 'Xóa') => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, onDelete, deleteLabel, defaultValue, inputType, allowNote } }),
       closeGlobalDialog: () => set((state) => ({ globalDialog: { ...state.globalDialog, isOpen: false } })),
       
       isLoading: false,
@@ -421,35 +422,87 @@ export const useStore = create(
         set((state) => ({ teams: [newTeam, ...state.teams] }));
       },
       updateTeam: async (id, updatedData) => {
+        const oldTeam = get().teams.find(t => t.id === id);
+        
+        let finalProjects = updatedData.projects;
+        let finalProjectName = updatedData.projectName;
+
+        if (finalProjects && Array.isArray(finalProjects)) {
+          finalProjects = Array.from(new Set(finalProjects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean)));
+          finalProjectName = finalProjects.join(', ');
+        } else if (finalProjectName && !finalProjects) {
+          finalProjects = finalProjectName.split(',').map(s => s.trim()).filter(Boolean);
+        }
+
+        const dataToSave = {
+          ...updatedData,
+          ...(finalProjects ? { projects: finalProjects } : {}),
+          ...(finalProjectName ? { projectName: finalProjectName } : {})
+        };
+
         set((state) => ({
-          teams: state.teams.map(t => t.id === id ? { ...t, ...updatedData } : t)
+          teams: state.teams.map(t => t.id === id ? { ...t, ...dataToSave } : t)
         }));
-        if (id && !String(id).startsWith('t-')) {
-          const dbData = {};
-          if (updatedData.projects !== undefined) {
-            dbData.project_name = Array.isArray(updatedData.projects) ? updatedData.projects.join(', ') : String(updatedData.projects || '');
-          } else if (updatedData.projectName !== undefined) {
-            dbData.project_name = updatedData.projectName;
+
+        const dbData = {};
+        if (finalProjects !== undefined || finalProjectName !== undefined) {
+          dbData.project_name = finalProjectName || (Array.isArray(finalProjects) ? finalProjects.join(', ') : '');
+        }
+        if (updatedData.teamName !== undefined) dbData.team_name = updatedData.teamName;
+        if (updatedData.leaderName !== undefined) dbData.leader_name = updatedData.leaderName;
+        if (updatedData.phone !== undefined) dbData.phone = updatedData.phone;
+        if (updatedData.tradeType !== undefined) dbData.trade_type = updatedData.tradeType;
+        if (updatedData.workerCount !== undefined) dbData.worker_count = updatedData.workerCount;
+        if (updatedData.contractValue !== undefined) dbData.contract_value = updatedData.contractValue;
+        if (updatedData.paidAmount !== undefined) dbData.paid_amount = updatedData.paidAmount;
+        if (updatedData.retentionAmount !== undefined) dbData.retention_amount = updatedData.retentionAmount;
+        if (updatedData.remainingAmount !== undefined) dbData.remaining_amount = updatedData.remainingAmount;
+        if (updatedData.status !== undefined) dbData.status = updatedData.status;
+
+        try {
+          if (id && !String(id).startsWith('t-')) {
+            const { error } = await supabase.from('teams').update(dbData).eq('id', id);
+            if (error) console.error("Failed to update team by id:", error);
+          } else {
+            const searchTeamName = oldTeam?.teamName || updatedData.teamName;
+            if (searchTeamName) {
+              const { data: existing } = await supabase.from('teams').select('id').eq('team_name', searchTeamName);
+              if (existing && existing.length > 0) {
+                await supabase.from('teams').update(dbData).eq('team_name', searchTeamName);
+              } else {
+                await supabase.from('teams').insert([{
+                  project_name: dbData.project_name || '',
+                  team_name: searchTeamName,
+                  leader_name: updatedData.leaderName || oldTeam?.leaderName || '',
+                  phone: updatedData.phone || oldTeam?.phone || '',
+                  trade_type: updatedData.tradeType || oldTeam?.tradeType || '',
+                  worker_count: updatedData.workerCount || oldTeam?.workerCount || 10,
+                  contract_value: updatedData.contractValue || oldTeam?.contractValue || 0,
+                  paid_amount: updatedData.paidAmount || oldTeam?.paidAmount || 0,
+                  retention_amount: updatedData.retentionAmount || oldTeam?.retentionAmount || 0,
+                  remaining_amount: updatedData.remainingAmount || oldTeam?.remainingAmount || 0,
+                  status: updatedData.status || oldTeam?.status || 'Đang thi công'
+                }]);
+              }
+            }
           }
-          if (updatedData.teamName !== undefined) dbData.team_name = updatedData.teamName;
-          if (updatedData.leaderName !== undefined) dbData.leader_name = updatedData.leaderName;
-          if (updatedData.phone !== undefined) dbData.phone = updatedData.phone;
-          if (updatedData.tradeType !== undefined) dbData.trade_type = updatedData.tradeType;
-          if (updatedData.workerCount !== undefined) dbData.worker_count = updatedData.workerCount;
-          if (updatedData.contractValue !== undefined) dbData.contract_value = updatedData.contractValue;
-          if (updatedData.paidAmount !== undefined) dbData.paid_amount = updatedData.paidAmount;
-          if (updatedData.retentionAmount !== undefined) dbData.retention_amount = updatedData.retentionAmount;
-          if (updatedData.remainingAmount !== undefined) dbData.remaining_amount = updatedData.remainingAmount;
-          if (updatedData.status !== undefined) dbData.status = updatedData.status;
-          await supabase.from('teams').update(dbData).eq('id', id);
+        } catch (error) {
+          console.error("Failed to sync team update to Supabase:", error);
         }
       },
       deleteTeam: async (id) => {
+        const teamToDelete = get().teams.find(t => t.id === id);
         set((state) => ({
           teams: state.teams.filter(t => t.id !== id)
         }));
-        if (id && !String(id).startsWith('t-')) {
-          await supabase.from('teams').delete().eq('id', id);
+        try {
+          if (id && !String(id).startsWith('t-')) {
+            await supabase.from('teams').delete().eq('id', id);
+          } else if (teamToDelete?.teamName) {
+            await supabase.from('teams').delete().eq('team_name', teamToDelete.teamName);
+          }
+        } catch (err) {
+          console.error("Failed to delete team in Supabase:", err);
         }
       },
       addTeamMember: (teamId, member) => {
@@ -808,6 +861,86 @@ export const useStore = create(
           await supabase.from('materials').delete().eq('id', id);
         }
       },
+
+      // Team Attendance Actions
+      getAttendanceSheet: (projectName) => {
+        const state = get();
+        return state.attendanceSheets[projectName] || { rows: [] };
+      },
+      setAttendanceSheet: (projectName, sheetData) => {
+        set((state) => ({
+          attendanceSheets: {
+            ...state.attendanceSheets,
+            [projectName]: sheetData
+          }
+        }));
+        get().syncAttendanceSheetToSupabase(projectName);
+      },
+      addAttendanceRow: (projectName, dateStr = '') => set((state) => {
+        const current = state.attendanceSheets[projectName] || { rows: [] };
+        const newRow = {
+          id: `att-row-${Date.now()}`,
+          date: dateStr || '',
+          values: {}
+        };
+        const nextRows = [...(current.rows || []), newRow];
+        const nextSheet = { ...current, rows: nextRows };
+        get().syncAttendanceSheetToSupabase(projectName);
+        return {
+          attendanceSheets: {
+            ...state.attendanceSheets,
+            [projectName]: nextSheet
+          }
+        };
+      }),
+      updateAttendanceCell: (projectName, rowId, teamKey, value) => set((state) => {
+        const current = state.attendanceSheets[projectName] || { rows: [] };
+        const nextRows = (current.rows || []).map(row => {
+          if (row.id !== rowId) return row;
+          return {
+            ...row,
+            values: {
+              ...(row.values || {}),
+              [teamKey]: value
+            }
+          };
+        });
+        const nextSheet = { ...current, rows: nextRows };
+        get().syncAttendanceSheetToSupabase(projectName);
+        return {
+          attendanceSheets: {
+            ...state.attendanceSheets,
+            [projectName]: nextSheet
+          }
+        };
+      }),
+      updateAttendanceRow: (projectName, rowId, field, value) => set((state) => {
+        const current = state.attendanceSheets[projectName] || { rows: [] };
+        const nextRows = (current.rows || []).map(row => {
+          if (row.id !== rowId) return row;
+          return { ...row, [field]: value };
+        });
+        const nextSheet = { ...current, rows: nextRows };
+        get().syncAttendanceSheetToSupabase(projectName);
+        return {
+          attendanceSheets: {
+            ...state.attendanceSheets,
+            [projectName]: nextSheet
+          }
+        };
+      }),
+      deleteAttendanceRow: (projectName, rowId) => set((state) => {
+        const current = state.attendanceSheets[projectName] || { rows: [] };
+        const nextRows = (current.rows || []).filter(row => row.id !== rowId);
+        const nextSheet = { ...current, rows: nextRows };
+        get().syncAttendanceSheetToSupabase(projectName);
+        return {
+          attendanceSheets: {
+            ...state.attendanceSheets,
+            [projectName]: nextSheet
+          }
+        };
+      }),
 
       // Payment Matrix Actions
       updateMatrixCell: (key, floor, itemKey, value) => { set((state) => {
@@ -1502,6 +1635,28 @@ export const useStore = create(
           }
         } catch (err) {
           console.error('Supabase material sheet sync error:', err);
+        }
+      },
+
+      syncAttendanceSheetToSupabase: async (projectName) => {
+        const state = get();
+        const sheet = state.attendanceSheets[projectName] || { rows: [] };
+        try {
+          const { error } = await supabase
+            .from('attendance_sheets')
+            .upsert(
+              { 
+                project_name: projectName,
+                rows: sheet.rows || [],
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'project_name' }
+            );
+          if (error) {
+            console.warn('Supabase attendance sheet sync warning:', error.message);
+          }
+        } catch (err) {
+          // Fall back gracefully if table does not exist
         }
       }
     }),

@@ -20,7 +20,8 @@ import {
   PenTool, 
   LogOut,
   FolderGit2,
-  ClipboardList
+  ClipboardList,
+  UserCheck
 } from 'lucide-react';
 
 export default function Sidebar() {
@@ -39,6 +40,7 @@ export default function Sidebar() {
     { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList, requiresPermission: 'allowViewIpcThuc' },
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
+    { label: 'Điểm danh đội', id: 'team-attendance', icon: UserCheck },
   ];
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
