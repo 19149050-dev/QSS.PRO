@@ -24,13 +24,18 @@ import {
   UserCheck
 } from 'lucide-react';
 
-export default function Sidebar() {
+export default function Sidebar({ onCloseMobile }) {
   const { activeTab, setActiveTab, currentUser, logoutUser } = useStore();
 
   const handleLogout = () => {
     document.cookie = 'isAuthenticated=; path=/; max-age=0; samesite=lax';
     logoutUser();
     window.location.assign('/login');
+  };
+
+  const handleTabClick = (id) => {
+    setActiveTab(id);
+    if (onCloseMobile) onCloseMobile();
   };
 
   const mainNavItems = [
@@ -103,7 +108,7 @@ export default function Sidebar() {
               <button
                 key={idx}
                 type="button"
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleTabClick(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
                   active
                     ? 'bg-zinc-800 text-white'
@@ -138,7 +143,7 @@ export default function Sidebar() {
               <button
                 key={idx}
                 type="button"
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => handleTabClick(item.id)}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
                   active
                     ? 'bg-zinc-800 text-white'

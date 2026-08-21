@@ -360,7 +360,7 @@ export default function TeamAttendanceView() {
         }
       `}</style>
 
-      <div className="p-8 space-y-6 w-full">
+      <div className="p-4 sm:p-8 space-y-4 sm:space-y-6 w-full">
         {/* Top Header Card */}
         <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
@@ -397,11 +397,11 @@ export default function TeamAttendanceView() {
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="print-attendance">
           <div className="space-y-4">
             {/* Action Toolbar (Exact format matching Receive Materials) */}
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide flex-nowrap md:flex-wrap w-full">
               <button
                 type="button"
                 onClick={handleAddRow}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition active:scale-95 shadow-xs"
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 transition active:scale-95 shadow-xs shrink-0 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" />
                 Thêm dòng
@@ -410,7 +410,7 @@ export default function TeamAttendanceView() {
               <button
                 type="button"
                 onClick={handleAddCustomTeam}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition active:scale-95 shadow-xs"
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition active:scale-95 shadow-xs shrink-0 whitespace-nowrap"
               >
                 <Plus className="h-4 w-4" />
                 Thêm cột
@@ -419,7 +419,7 @@ export default function TeamAttendanceView() {
               <button
                 type="button"
                 onClick={handleResetData}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition shadow-xs"
+                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition shadow-xs shrink-0 whitespace-nowrap"
               >
                 <RotateCcw className="h-4 w-4" />
                 Clear dữ liệu
@@ -427,7 +427,7 @@ export default function TeamAttendanceView() {
 
               <div className="flex-1"></div>
 
-              <div className="flex items-center gap-2 mr-2">
+              <div className="flex items-center gap-2 mr-2 shrink-0 whitespace-nowrap">
                 <span className="text-sm font-semibold text-slate-700">Từ:</span>
                 <div 
                   onClick={() => handleEditFilterDate('from')}
@@ -466,7 +466,7 @@ export default function TeamAttendanceView() {
               <button
                 type="button"
                 onClick={handleExportExcel}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden shadow-xs"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden shadow-xs shrink-0 whitespace-nowrap"
               >
                 <FileDown className="h-4 w-4" />
                 Xuất Excel
@@ -475,7 +475,7 @@ export default function TeamAttendanceView() {
               <button
                 type="button"
                 onClick={handlePrint}
-                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden shadow-xs"
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 transition print:hidden shadow-xs shrink-0 whitespace-nowrap"
               >
                 <Printer className="h-4 w-4" />
                 In
