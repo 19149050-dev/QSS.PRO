@@ -7,9 +7,9 @@ export const sortFloors = (matrix) => {
   return [...matrix].sort((a, b) => {
     const parseFloor = (name) => {
       const str = name.toString().toUpperCase().trim();
-      if (str.startsWith('B')) {
+      if (str.startsWith('B') || str.includes('HẦM') || str.includes('HAM')) {
         const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
-        return { type: 1, val: isNaN(num) ? 0 : num, text: str };
+        return { type: -1, val: isNaN(num) ? 0 : num, text: str };
       }
       const num = parseInt(str.replace(/[^0-9]/g, ''), 10);
       return { type: 0, val: isNaN(num) ? 999 : num, text: str };
@@ -22,6 +22,11 @@ export const sortFloors = (matrix) => {
       return parsedA.type - parsedB.type;
     }
 
+    if (parsedA.type === -1) {
+      // Basements sorted descending: B3, B2, B1, B0
+      return parsedB.val - parsedA.val;
+    }
+
     if (parsedA.type === 0) {
       if (parsedA.val !== 999 && parsedB.val !== 999) {
         return parsedA.val - parsedB.val;
@@ -31,9 +36,6 @@ export const sortFloors = (matrix) => {
       return parsedA.text.localeCompare(parsedB.text);
     }
 
-    if (parsedA.type === 1) {
-      return parsedA.val - parsedB.val;
-    }
     return 0;
   });
 };
