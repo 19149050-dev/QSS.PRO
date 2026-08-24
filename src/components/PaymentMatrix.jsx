@@ -514,7 +514,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               {matrixBlocks.map((block, bIdx) => {
                 const visibleCountInBlock = block.groups.reduce((acc, g) => {
                   const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
-                  return acc + Math.max(visG.length, visG.length === 0 ? 0 : 1);
+                  const groupColSpan = (visG.length === 0 && g.items.length > 0) ? 0 : Math.max(visG.length, 1);
+                  return acc + groupColSpan;
                 }, 0);
 
                 if (visibleCountInBlock === 0) return null;
