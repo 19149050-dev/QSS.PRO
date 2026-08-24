@@ -82,19 +82,45 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [isBOQModalOpen, setIsBOQModalOpen] = useState(false);
   const [boqData, setBoqData] = useState({ blockName: '', groupName: '', itemName: '' });
 
-  const [hiddenColumns, setHiddenColumns] = useState([]);
-  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
-  const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
-  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
+  const storageKey = `qss_hidden_cols_${projectName}_${type}_${selectedTeamFilter}`;
+  const [hiddenColumns, setHiddenColumnsState] = useState([]);
 
-  // Paste mode states
-  const [contextMenu, setContextMenu] = useState(null);
-  const [copiedValue, setCopiedValue] = useState(null);
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          setHiddenColumnsState(JSON.parse(saved));
+        } catch(e) {
+          setHiddenColumnsState([]);
+        }
+      } else {
+        setHiddenColumnsState([]);
+      }
+    }
+  }, [storageKey]);
+
+  const setHiddenColumns = (valOrUpdater) => {
+    setHiddenColumnsState(prev => {
+      const next = typeof valOrUpdater === 'function' ? valOrUpdater(prev) : valOrUpdater;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      }
+      return next;
+    });
+  };
 
   const toggleHideColumn = (itemKey) => {
     setHiddenColumns(prev => 
       prev.includes(itemKey) ? prev.filter(k => k !== itemKey) : [...prev, itemKey]
     );
+  };
+
+  const handleHideGroup = (blockName, groupName, items) => {
+    setHiddenColumns(prev => {
+       const next = [...new Set([...prev, ...items.map(cat => `${blockName}_${groupName}_${cat}`)])];
+       return next;
+    });
   };
 
   const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey);
@@ -428,6 +454,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
         </button>
         <button 
+          onClick={() => setIsColumnModalOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 font-bold rounded-lg border border-sky-200 shadow-sm transition-colors"
+        >
+          <Eye className="w-4 h-4" /> Quản lý Ẩn/Hiện
+        </button>
+        <button 
           onClick={() => setIsBOQModalOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 shadow-sm transition-colors"
         >
@@ -479,16 +511,25 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 const groupHeaders = block.groups.map((group, gIdx) => {
                   const visItems = group.items.filter(cat => isColumnVisible(`${block.blockName}_${group.groupName}_${cat}`));
                   if (visItems.length === 0 && group.items.length > 0) return null;
-                  const isEven = (bIdx + gIdx) % 2 === 0;
+                  const visCount = Math.max(visItems.length, 1);
                   return (
                     <th 
-                      key={`${bIdx}-${gIdx}`} 
-                      colSpan={Math.max(visItems.length, 1)} 
-                      className={`${isEven ? 'bg-orange-50 text-orange-900' : 'bg-amber-50 text-amber-900'} text-[10px] font-bold uppercase py-1 px-0.5 border-b border-orange-200/60 border-r border-orange-200/60 transition-colors`}
+                      key={gIdx} 
+                      colSpan={visCount} 
+                      onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)}
+                      className="header-orange text-[10px] uppercase font-bold py-1 px-2 whitespace-nowrap border-r border-orange-200/50 cursor-pointer hover:bg-orange-200/50 transition-colors relative group/col"
+                      title="Bấm đúp để sửa tên nhóm"
                     >
-                      <div className="flex items-center justify-center gap-1 group relative">
-                        <span className="cursor-pointer hover:text-orange-900 truncate max-w-[90%]" onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)} title="Bấm đúp để sửa tên">{group.groupName}</span>
-                        <button onClick={() => handleAddItem(bIdx, gIdx)} className="opacity-0 group-hover:opacity-100 transition-opacity bg-orange-200/60 hover:bg-orange-300 text-orange-900 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[11px] leading-none absolute right-0" title="Thêm Hạng Mục (Cột) mới">+</button>
+                      <div className="flex justify-center items-center relative h-full">
+                        <span>{group.groupName}</span>
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleHideGroup(block.blockName, group.groupName, group.items); }}
+                          className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-500 hover:text-orange-600 hover:bg-orange-100 rounded transition absolute -right-1 bg-white shadow-sm z-10"
+                          title="Ẩn toàn bộ nhóm này"
+                        >
+                          <EyeOff className="w-3 h-3" />
+                        </button>
                       </div>
                     </th>
                   );
