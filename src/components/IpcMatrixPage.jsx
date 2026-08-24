@@ -103,6 +103,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
 
   const sortedMaterialRows = [...materialRows].sort((a, b) => {
+    if (isExport) {
+      const parseFloor = (str) => {
+        if (!str) return -Infinity;
+        const num = parseInt(String(str).replace(/[^0-9]/g, ''), 10);
+        return isNaN(num) ? -Infinity : num;
+      };
+      return parseFloor(a.date) - parseFloor(b.date);
+    }
     const parseDate = (d) => {
       if (!d) return Infinity; // Các dòng trống ngày sẽ nằm ở cuối
       const parts = d.split('/');

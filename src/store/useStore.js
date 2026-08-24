@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
 
-const sortFloors = (matrix) => {
+export const sortFloors = (matrix) => {
   return [...matrix].sort((a, b) => {
     const parseFloor = (name) => {
       const str = name.toString().toUpperCase().trim();
@@ -24,7 +24,7 @@ const sortFloors = (matrix) => {
 
     if (parsedA.type === 0) {
       if (parsedA.val !== 999 && parsedB.val !== 999) {
-        return parsedB.val - parsedA.val;
+        return parsedA.val - parsedB.val;
       }
       if (parsedA.val === 999 && parsedB.val !== 999) return -1;
       if (parsedB.val === 999 && parsedA.val !== 999) return 1;
@@ -1615,20 +1615,26 @@ export const useStore = create(
         const sheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
         
         try {
-          const { error } = await supabase
-            .from('material_sheets')
-            .upsert(
-              { 
-                project_name: projectName,
-                items: sheet.items,
-                receive_rows: sheet.rows,
-                export_rows: sheet.exportRows,
-                dinh_muc_map: sheet.dinhMucMap || {},
-                ipc_map: sheet.ipcMap || {},
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'project_name' }
-            );
+          const payload = {
+            project_name: projectName,
+            items: sheet.items,
+            receive_rows: sheet.rows,
+            export_rows: sheet.exportRows,
+            dinh_muc_map: sheet.dinhMucMap || {},
+            ipc_map: sheet.ipcMap || {},
+            updated_at: new Date().toISOString()
+          };
+          
+          const { data: existing } = await supabase.from('material_sheets').select('id').eq('project_name', projectName).maybeSingle();
+          let error = null;
+          
+          if (existing) {
+            const res = await supabase.from('material_sheets').update(payload).eq('project_name', projectName);
+            error = res.error;
+          } else {
+            const res = await supabase.from('material_sheets').insert([payload]);
+            error = res.error;
+          }
           
           if (error) {
             console.error('Failed to sync material sheet to Supabase:', error);
@@ -1642,16 +1648,23 @@ export const useStore = create(
         const state = get();
         const sheet = state.attendanceSheets[projectName] || { rows: [] };
         try {
-          const { error } = await supabase
-            .from('attendance_sheets')
-            .upsert(
-              { 
-                project_name: projectName,
-                rows: sheet.rows || [],
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'project_name' }
-            );
+          const payload = {
+            project_name: projectName,
+            rows: sheet.rows || [],
+            updated_at: new Date().toISOString()
+          };
+          
+          const { data: existing } = await supabase.from('attendance_sheets').select('id').eq('project_name', projectName).maybeSingle();
+          let error = null;
+          
+          if (existing) {
+            const res = await supabase.from('attendance_sheets').update(payload).eq('project_name', projectName);
+            error = res.error;
+          } else {
+            const res = await supabase.from('attendance_sheets').insert([payload]);
+            error = res.error;
+          }
+          
           if (error) {
             console.warn('Supabase attendance sheet sync warning:', error.message);
           }

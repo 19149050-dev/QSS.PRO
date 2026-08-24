@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { useStore } from '@/store/useStore';
+import { useStore, sortFloors } from '@/store/useStore';
 import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
@@ -48,6 +48,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       };
     });
   }
+  paymentMatrix = sortFloors(paymentMatrix);
 
   const rawBlocks = (store.matrixBlocks[projectName] && store.matrixBlocks[projectName].length > 0) 
     ? store.matrixBlocks[projectName] 
