@@ -251,15 +251,29 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const handleEditFloor = (oldName) => {
-    store.openGlobalPrompt("Nhập tên TẦNG mới (VD: Tầng 16 (50%)) - Bỏ trống để XÓA TẦNG:", (newName) => {
-      if (newName && newName.trim() !== '' && newName !== oldName) {
-        updateFloorName(oldName, newName.trim());
-      } else if (!newName || newName.trim() === '') {
+    store.openGlobalPrompt(
+      "Nhập tên TẦNG mới (VD: Tầng 16 (50%)) - Hoặc bấm XÓA TẦNG để xóa:", 
+      (newName) => {
+        if (newName && newName.trim() !== '' && newName !== oldName) {
+          updateFloorName(oldName, newName.trim());
+        } else if (!newName || newName.trim() === '') {
+          store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa Tầng ${oldName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
+            deleteFloor(oldName);
+          });
+        }
+      }, 
+      oldName,
+      'Nhập liệu',
+      'text',
+      false,
+      null,
+      () => {
         store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa Tầng ${oldName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
           deleteFloor(oldName);
         });
-      }
-    }, oldName);
+      },
+      'Xóa Tầng'
+    );
   };
 
   const handleEditNumApts = (floorName, blockName, currentVal) => {
