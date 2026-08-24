@@ -84,6 +84,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   const storageKey = `qss_hidden_cols_${projectName}_${type}_${selectedTeamFilter}`;
   const [hiddenColumns, setHiddenColumnsState] = useState([]);
+  const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
+  const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
+  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
   
   // Paste mode states
   const [contextMenu, setContextMenu] = useState(null);
