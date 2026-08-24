@@ -1621,7 +1621,6 @@ export const useStore = create(
             receive_rows: sheet.rows,
             export_rows: sheet.exportRows,
             dinh_muc_map: sheet.dinhMucMap || {},
-            ipc_map: sheet.ipcMap || {},
             updated_at: new Date().toISOString()
           };
           
