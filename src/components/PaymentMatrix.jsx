@@ -508,7 +508,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           <thead className="sticky top-0 z-20 shadow-md bg-white">
             {/* Block level */}
             <tr>
-              <th rowSpan={2} colSpan={1} className="header-green text-[11px] uppercase font-bold py-2 px-1 whitespace-normal break-words w-[70px] max-w-[70px] border-r border-white/20 align-middle">
+              <th rowSpan={2} colSpan={1} className="header-green sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.2)] text-[11px] uppercase font-bold py-2 px-1 whitespace-normal break-words w-[70px] max-w-[70px] border-r border-white/20 align-middle">
                 {projectName}
               </th>
               {matrixBlocks.map((block, bIdx) => {
@@ -572,7 +572,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             </tr>
             {/* Item level */}
             <tr className="bg-slate-100 text-slate-800 text-[10px]">
-              <th className="bg-slate-200 border-r border-gray-300 py-2 text-xs w-[70px] max-w-[70px]">Tầng</th>
+              <th className="bg-slate-200 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-gray-300 py-2 text-xs w-[70px] max-w-[70px]">Tầng</th>
               {matrixBlocks.flatMap((block, bIdx) =>
                 block.groups.flatMap((group, gIdx) => {
                   if (group.items.length === 0) {
@@ -612,7 +612,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             {paymentMatrix.map((row, idx) => (
               <tr key={idx} className="hover:bg-slate-50 transition border-b border-gray-200 group">
                 <td 
-                  className="font-bold text-center bg-amber-50/70 border-r border-amber-200 text-slate-900 py-1.5 cursor-pointer hover:bg-amber-100 transition-colors"
+                  className="font-bold text-center bg-amber-100 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-amber-200 text-slate-900 py-1.5 cursor-pointer hover:bg-amber-200 transition-colors"
                   onDoubleClick={() => handleEditFloor(row.floor)}
                   title="Bấm đúp để sửa hoặc xóa tầng"
                 >
