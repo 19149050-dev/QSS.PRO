@@ -69,6 +69,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const updateFloorNumApts = (...args) => store.updateFloorNumApts(projectName, ...args);
   const deleteFloor = (...args) => store.deleteFloor(projectName, ...args);
   const deleteAllFloors = () => store.deleteAllFloors(projectName);
+  const deleteMultipleFloors = (floorNames) => store.deleteMultipleFloors(projectName, floorNames);
   const updateBlockName = (...args) => store.updateBlockName(projectName, ...args);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
   const [selectedCell, setSelectedCell] = useState(null);
@@ -88,6 +89,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
   const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
+  const [isDeleteFloorsModalOpen, setIsDeleteFloorsModalOpen] = useState(false);
+  const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
   
   // Paste mode states
   const [contextMenu, setContextMenu] = useState(null);
@@ -291,10 +294,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     });
   };
 
-  const handleDeleteAllFloors = () => {
-    store.openGlobalConfirm("Bạn có CHẮC CHẮN muốn XÓA TẤT CẢ CÁC TẦNG không? Thao tác này sẽ xóa sạch toàn bộ dữ liệu các tầng hiện có và không thể hoàn tác!", () => {
-      deleteAllFloors();
-    });
+  const openDeleteFloorsModal = () => {
+    setSelectedFloorsToDelete([]);
+    setIsDeleteFloorsModalOpen(true);
   };
 
   const allCategories = matrixBlocks.flatMap(b => b.groups.flatMap(g => g.items));
@@ -776,10 +778,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng Mới
                     </button>
                     <button 
-                      onClick={handleDeleteAllFloors}
+                      onClick={openDeleteFloorsModal}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 font-bold rounded-lg border border-red-200 transition-colors shadow-sm text-xs"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tất Cả Tầng
+                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tầng Tùy Chọn
                     </button>
                   </div>
                 </td>

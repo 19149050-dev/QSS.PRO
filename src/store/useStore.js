@@ -1115,6 +1115,33 @@ export const useStore = create(
       });
         get().syncMatrixDataToSupabase(projectName);
       },
+
+      deleteMultipleFloors: (projectName, floorNamesArray) => { set((state) => {
+        const targetFloors = floorNamesArray.map(f => String(f).trim());
+        const currentBase = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
+        const newBaseMatrix = currentBase.filter(row => !targetFloors.includes(String(row.floor).trim()));
+
+        const newPaymentMatrix = { ...state.paymentMatrix };
+
+        // Clean from all keys for this project
+        Object.keys(newPaymentMatrix).forEach(key => {
+          if (key === projectName || key.startsWith(`${projectName}_`)) {
+            if (Array.isArray(newPaymentMatrix[key])) {
+              newPaymentMatrix[key] = newPaymentMatrix[key].filter(row => !targetFloors.includes(String(row.floor).trim()));
+            }
+          }
+        });
+
+        newPaymentMatrix[projectName] = newBaseMatrix;
+        newPaymentMatrix[`${projectName}_team`] = newBaseMatrix;
+        if (!newPaymentMatrix[`${projectName}_ipc`]) {
+          newPaymentMatrix[`${projectName}_ipc`] = newBaseMatrix.map(r => ({ floor: r.floor, numApts: r.numApts, items: {} }));
+        }
+
+        return { paymentMatrix: newPaymentMatrix };
+      });
+        get().syncMatrixDataToSupabase(projectName);
+      },
       
       
       deleteCategoryName: (projectName, blockIdx, groupIdx, itemIdx) => { set((state) => {
