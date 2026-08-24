@@ -84,6 +84,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   const storageKey = `qss_hidden_cols_${projectName}_${type}_${selectedTeamFilter}`;
   const [hiddenColumns, setHiddenColumnsState] = useState([]);
+  
+  // Paste mode states
+  const [contextMenu, setContextMenu] = useState(null);
+  const [copiedValue, setCopiedValue] = useState(null);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
