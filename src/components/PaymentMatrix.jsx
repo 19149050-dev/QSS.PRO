@@ -621,8 +621,19 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 {matrixBlocks.flatMap((block, bIdx) => {
                   const numAptsKey = `${block.blockName}_numApts`;
                   const blockNumApts = row.items[numAptsKey] || '';
-                  
-                  const numAptsCell = (
+                  const isBasement = String(row.floor).toUpperCase().trim().startsWith('B') || 
+                                     String(row.floor).toUpperCase().trim().includes('HẦM') || 
+                                     String(row.floor).toUpperCase().trim().includes('HAM');
+
+                  const numAptsCell = isBasement ? (
+                    <td 
+                      key={`numapts-td-${bIdx}`}
+                      className="text-center bg-gray-100 border-r border-gray-200 text-gray-400 py-1.5 text-xs select-none cursor-not-allowed"
+                      title="Tầng hầm không có số căn"
+                    >
+                      -
+                    </td>
+                  ) : (
                     <td 
                       key={`numapts-td-${bIdx}`}
                       className="font-bold text-center bg-white border-r border-gray-200 text-slate-900 py-1.5 cursor-pointer hover:bg-gray-100 transition-colors text-xs"
