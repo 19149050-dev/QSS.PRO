@@ -88,7 +88,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [hiddenColumns, setHiddenColumnsState] = useState([]);
   const [isColumnModalOpen, setIsColumnModalOpen] = useState(false);
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
-  const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
+  const [addFloorData, setAddFloorData] = useState({ mode: 'single', customName: '', numFloors: 1, blockApts: {}, startNumber: 1 });
   const [isDeleteFloorsModalOpen, setIsDeleteFloorsModalOpen] = useState(false);
   const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
   
@@ -247,6 +247,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     const defaultApts = {};
     matrixBlocks.forEach(b => defaultApts[b.blockName] = '');
     setAddFloorData({
+      mode: 'single',
+      customName: '',
       numFloors: 1,
       blockApts: defaultApts,
       startNumber: maxFloor + 1
@@ -1143,31 +1145,62 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           <div className="bg-white rounded-2xl p-6 w-full max-w-[420px] shadow-2xl border border-gray-100 transform transition-all">
             <h3 className="text-lg font-extrabold text-gray-900 mb-4">Thêm Tầng Mới</h3>
             
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Số lượng tầng cần thêm</label>
-                <input
-                  type="number"
-                  min="1"
-                  value={addFloorData.numFloors}
-                  onChange={(e) => setAddFloorData({ ...addFloorData, numFloors: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                  autoFocus
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Bắt đầu từ tầng số (tự động tăng)</label>
-                <input
-                  type="number"
-                  value={addFloorData.startNumber}
-                  onChange={(e) => setAddFloorData({ ...addFloorData, startNumber: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
-                />
-              </div>
+            <div className="flex bg-gray-100 rounded-lg p-1 mb-4">
+              <button 
+                type="button"
+                onClick={() => setAddFloorData({ ...addFloorData, mode: 'single' })}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${addFloorData.mode === 'single' ? 'bg-white text-indigo-600 shadow' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                1 Tầng Tùy Chỉnh
+              </button>
+              <button 
+                type="button"
+                onClick={() => setAddFloorData({ ...addFloorData, mode: 'multiple' })}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${addFloorData.mode === 'multiple' ? 'bg-white text-indigo-600 shadow' : 'text-gray-500 hover:text-gray-700'}`}
+              >
+                Hàng Loạt Tầng
+              </button>
+            </div>
 
-              <div className="space-y-3">
-                <label className="block text-xs font-bold text-gray-700">Số căn mỗi tầng theo Block (Không bắt buộc)</label>
+            <div className="space-y-4 mb-6">
+              {addFloorData.mode === 'single' ? (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Tên tầng mới <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    placeholder="VD: Tầng Mái, Tầng Hầm 1..."
+                    value={addFloorData.customName}
+                    onChange={(e) => setAddFloorData({ ...addFloorData, customName: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    autoFocus
+                  />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Số lượng tầng cần thêm</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={addFloorData.numFloors}
+                      onChange={(e) => setAddFloorData({ ...addFloorData, numFloors: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Bắt đầu từ tầng số (tự động tăng)</label>
+                    <input
+                      type="number"
+                      value={addFloorData.startNumber}
+                      onChange={(e) => setAddFloorData({ ...addFloorData, startNumber: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="space-y-3 pt-2">
+                <label className="block text-xs font-bold text-gray-700 border-t border-gray-100 pt-3">Số căn mỗi tầng theo Block (Không bắt buộc)</label>
                 {matrixBlocks.map((b, idx) => (
                   <div key={idx} className="flex items-center gap-3">
                     <span className="text-xs font-bold text-gray-600 w-24 truncate">{b.blockName}</span>
@@ -1197,15 +1230,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               <button
                 type="button"
                 onClick={() => {
-                  const numFloors = parseInt(addFloorData.numFloors, 10);
-                  const startNum = parseInt(addFloorData.startNumber, 10);
-                  
-                  if (!isNaN(numFloors) && numFloors > 0 && !isNaN(startNum)) {
-                    for (let i = 0; i < numFloors; i++) {
-                      const floorName = `Tầng ${startNum + i}`;
+                  if (addFloorData.mode === 'single') {
+                    if (addFloorData.customName && addFloorData.customName.trim() !== '') {
+                      const floorName = addFloorData.customName.trim();
                       addFloor(floorName);
-                      
-                      // Cập nhật số căn cho từng block
                       setTimeout(() => {
                         Object.entries(addFloorData.blockApts).forEach(([bName, apts]) => {
                           if (apts.trim() !== '') {
@@ -1213,9 +1241,30 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                           }
                         });
                       }, 50);
+                      setIsAddFloorModalOpen(false);
+                    } else {
+                      store.openGlobalAlert("Vui lòng nhập tên tầng!");
+                    }
+                  } else {
+                    const numFloors = parseInt(addFloorData.numFloors, 10);
+                    const startNum = parseInt(addFloorData.startNumber, 10);
+                    
+                    if (!isNaN(numFloors) && numFloors > 0 && !isNaN(startNum)) {
+                      for (let i = 0; i < numFloors; i++) {
+                        const floorName = `Tầng ${startNum + i}`;
+                        addFloor(floorName);
+                        
+                        setTimeout(() => {
+                          Object.entries(addFloorData.blockApts).forEach(([bName, apts]) => {
+                            if (apts.trim() !== '') {
+                              store.updateMatrixCell(matrixKey, floorName, `${bName}_numApts`, apts.trim());
+                            }
+                          });
+                        }, 50);
+                      }
+                      setIsAddFloorModalOpen(false);
                     }
                   }
-                  setIsAddFloorModalOpen(false);
                 }}
                 className="px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20"
               >
