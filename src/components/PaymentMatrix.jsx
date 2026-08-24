@@ -1289,6 +1289,79 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           </div>
         </div>
       )}
+
+      {/* Modal Xóa Nhiều Tầng */}
+      {isDeleteFloorsModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-[420px] shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-extrabold text-red-600 mb-2 flex items-center gap-2">
+              <Trash2 className="w-5 h-5" /> Xóa Nhiều Tầng
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">Chọn các tầng bạn muốn xóa khỏi hệ thống. Việc này sẽ xóa toàn bộ dữ liệu của các tầng đã chọn.</p>
+            
+            <div className="mb-4">
+              <label className="flex items-center gap-2 cursor-pointer font-bold text-gray-900 mb-3 p-2 bg-gray-50 rounded-lg">
+                <input 
+                  type="checkbox" 
+                  checked={selectedFloorsToDelete.length === paymentMatrix.length && paymentMatrix.length > 0}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedFloorsToDelete(paymentMatrix.map(r => r.floor));
+                    } else {
+                      setSelectedFloorsToDelete([]);
+                    }
+                  }}
+                  className="w-4 h-4 text-red-600 focus:ring-red-500 rounded border-gray-300"
+                />
+                Chọn tất cả {paymentMatrix.length} tầng
+              </label>
+              
+              <div className="max-h-[250px] overflow-y-auto space-y-1.5 pr-2 border-t border-gray-100 pt-3">
+                {paymentMatrix.map((row, idx) => (
+                  <label key={idx} className="flex items-center gap-2 cursor-pointer text-sm hover:bg-red-50/50 p-1.5 rounded transition">
+                    <input 
+                      type="checkbox"
+                      checked={selectedFloorsToDelete.includes(row.floor)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedFloorsToDelete(prev => [...prev, row.floor]);
+                        } else {
+                          setSelectedFloorsToDelete(prev => prev.filter(f => f !== row.floor));
+                        }
+                      }}
+                      className="w-4 h-4 text-red-600 focus:ring-red-500 rounded border-gray-300"
+                    />
+                    <span className={selectedFloorsToDelete.includes(row.floor) ? 'font-bold text-red-900' : 'text-gray-700'}>{row.floor}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-4 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsDeleteFloorsModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={selectedFloorsToDelete.length === 0}
+                onClick={() => {
+                  store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa ${selectedFloorsToDelete.length} tầng đã chọn? Dữ liệu không thể hoàn tác!`, () => {
+                    deleteMultipleFloors(selectedFloorsToDelete);
+                    setIsDeleteFloorsModalOpen(false);
+                  });
+                }}
+                className="px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 bg-red-600 hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-red-600/20"
+              >
+                Xác nhận xóa ({selectedFloorsToDelete.length})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
