@@ -87,6 +87,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [isAddFloorModalOpen, setIsAddFloorModalOpen] = useState(false);
   const [addFloorData, setAddFloorData] = useState({ numFloors: 1, blockApts: {}, startNumber: 1 });
 
+  // Paste mode states
+  const [contextMenu, setContextMenu] = useState(null);
+  const [copiedValue, setCopiedValue] = useState(null);
+
   const toggleHideColumn = (itemKey) => {
     setHiddenColumns(prev => 
       prev.includes(itemKey) ? prev.filter(k => k !== itemKey) : [...prev, itemKey]
@@ -432,9 +436,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       </div>
 
       {/* Grid Container */}
-      <div className="overflow-x-auto rounded-xl border border-gray-300 shadow-inner">
-        <table className="matrix-table min-w-[1100px] w-full">
-          <thead>
+      <div className="overflow-x-auto overflow-y-auto max-h-[75vh] rounded-xl border border-gray-300 shadow-inner relative"
+           onClick={() => setContextMenu(null)}
+           onScroll={() => setContextMenu(null)}
+      >
+        <table className="matrix-table min-w-[1100px] w-full relative">
+          <thead className="sticky top-0 z-20 shadow-md bg-white">
             {/* Block level */}
             <tr>
               <th rowSpan={2} colSpan={1} className="header-green text-[11px] uppercase font-bold py-2 px-1 whitespace-normal break-words w-[70px] max-w-[70px] border-r border-white/20 align-middle">
@@ -582,7 +589,32 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       return (
                         <td
                           key={`${bIdx}-${gIdx}-${cIdx}`}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (type === 'ipc') return; // maybe don't allow context menu in ipc mode if read-only, but let's allow it for copy
+                            setContextMenu({
+                              x: e.clientX,
+                              y: e.clientY,
+                              floor: row.floor,
+                              itemKey,
+                              rawVal,
+                              blockNumApts: blockNumApts || row.numApts
+                            });
+                          }}
                           onClick={() => {
+                            if (copiedValue !== null) {
+                              // Paste Mode
+                              if (type === 'ipc_select' || type === 'ipc') {
+                                // Ignore paste for IPC if not supported or complex, but let's assume team/base mode for now
+                                if (type === 'ipc' && !ipcRawVal && !rawVal) return;
+                              }
+                              if (type === 'team' && selectedTeamFilter === 'ALL' && !isAdmin) return;
+                              
+                              const mergedVal = mergeCellValue(rawVal, copiedValue, selectedTeamFilter);
+                              updateMatrixCell(row.floor, itemKey, mergedVal);
+                              return;
+                            }
+                            
                             if ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal) {
                                // No action if empty
                             } else if (type === 'ipc') {
@@ -595,9 +627,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                             (type === 'team' && selectedTeamFilter === 'ALL' && !isAdmin) 
                               ? 'cursor-not-allowed hover:opacity-100' 
                               : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
-                          }`}
+                          } ${copiedValue !== null ? 'hover:ring-2 hover:ring-inset hover:ring-indigo-500 hover:bg-indigo-50 cursor-crosshair' : ''}`}
                           style={{ backgroundColor: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
-                          title={(type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdmin ? "Nhấp để chỉnh sửa/xóa (Quyền Admin)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô")}
+                          title={copiedValue !== null ? 'Bấm để dán giá trị' : ((type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdmin ? "Nhấp để chỉnh sửa/xóa (Quyền Admin)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô"))}
                         >
                           <div className="flex flex-col items-center justify-center min-h-[26px] py-0.5">
                             {type === 'ipc' ? (
@@ -679,6 +711,43 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           </tbody>
         </table>
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-white border border-gray-200 shadow-xl rounded-xl py-1 w-48 text-sm overflow-hidden"
+          style={{ top: Math.min(contextMenu.y, window.innerHeight - 100), left: Math.min(contextMenu.x, window.innerWidth - 200) }}
+        >
+          <button 
+            className="w-full text-left px-4 py-2 hover:bg-indigo-50 text-indigo-700 font-medium flex items-center gap-2"
+            onClick={() => {
+              setCopiedValue(contextMenu.rawVal || '');
+              setContextMenu(null);
+            }}
+          >
+            <Sparkles className="w-4 h-4" /> Copy & Bật dán nhanh
+          </button>
+        </div>
+      )}
+
+      {/* Paste Mode Banner */}
+      {copiedValue !== null && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-indigo-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-5">
+          <div className="flex items-center gap-2 font-medium">
+            <Sparkles className="w-5 h-5 text-indigo-200" />
+            <span>Chế độ dán nhanh:</span>
+            <span className="bg-indigo-800 px-2 py-1 rounded text-xs truncate max-w-[200px]">{copiedValue}</span>
+          </div>
+          <div className="h-4 w-px bg-indigo-400"></div>
+          <span className="text-sm text-indigo-200">Click vào ô trống để dán</span>
+          <button 
+            onClick={() => setCopiedValue(null)}
+            className="ml-2 bg-white/20 hover:bg-white/30 p-1 rounded-full transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
 
       {/* Edit Cell Modal */}
       {selectedCell && (
