@@ -1095,6 +1095,27 @@ export const useStore = create(
         get().syncMatrixDataToSupabase(projectName);
       },
       
+      deleteAllFloors: (projectName) => { set((state) => {
+        const newPaymentMatrix = { ...state.paymentMatrix };
+
+        // Clean from all keys for this project
+        Object.keys(newPaymentMatrix).forEach(key => {
+          if (key === projectName || key.startsWith(`${projectName}_`)) {
+            if (Array.isArray(newPaymentMatrix[key])) {
+              newPaymentMatrix[key] = [];
+            }
+          }
+        });
+
+        newPaymentMatrix[projectName] = [];
+        newPaymentMatrix[`${projectName}_team`] = [];
+        newPaymentMatrix[`${projectName}_ipc`] = [];
+
+        return { paymentMatrix: newPaymentMatrix };
+      });
+        get().syncMatrixDataToSupabase(projectName);
+      },
+      
       
       deleteCategoryName: (projectName, blockIdx, groupIdx, itemIdx) => { set((state) => {
         const blocks = state.matrixBlocks[projectName] || [];

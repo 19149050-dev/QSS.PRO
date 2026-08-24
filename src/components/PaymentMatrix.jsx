@@ -68,6 +68,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const updateFloorName = (...args) => store.updateFloorName(projectName, ...args);
   const updateFloorNumApts = (...args) => store.updateFloorNumApts(projectName, ...args);
   const deleteFloor = (...args) => store.deleteFloor(projectName, ...args);
+  const deleteAllFloors = () => store.deleteAllFloors(projectName);
   const updateBlockName = (...args) => store.updateBlockName(projectName, ...args);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
   const [selectedCell, setSelectedCell] = useState(null);
@@ -287,6 +288,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const handleDeleteFloor = (floorName) => {
     store.openGlobalConfirm(`Bạn có chắc chắn muốn xóa Tầng ${floorName} không? Toàn bộ dữ liệu của tầng này sẽ bị mất.`, () => {
       deleteFloor(floorName);
+    });
+  };
+
+  const handleDeleteAllFloors = () => {
+    store.openGlobalConfirm("Bạn có CHẮC CHẮN muốn XÓA TẤT CẢ CÁC TẦNG không? Thao tác này sẽ xóa sạch toàn bộ dữ liệu các tầng hiện có và không thể hoàn tác!", () => {
+      deleteAllFloors();
     });
   };
 
@@ -761,12 +768,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   colSpan={matrixBlocks.reduce((acc, block) => acc + block.groups.reduce((gAcc, g) => gAcc + Math.max(g.items.length, 1), 0), 0) + 2} 
                   className="py-2 px-2 border-t border-gray-200 bg-gray-50/50 text-left"
                 >
-                  <button 
-                    onClick={handleAddFloor}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-xs"
-                  >
-                    <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng Mới
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleAddFloor}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-xs"
+                    >
+                      <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng Mới
+                    </button>
+                    <button 
+                      onClick={handleDeleteAllFloors}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 font-bold rounded-lg border border-red-200 transition-colors shadow-sm text-xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tất Cả Tầng
+                    </button>
+                  </div>
                 </td>
               </tr>
             )}
