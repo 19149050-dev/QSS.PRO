@@ -308,59 +308,89 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   const getCellColor = (val) => {
     if (!val) return '';
-    if (val === 'Xong 100%') return '#6ee7b7'; // emerald-300
-    if (val === 'Tạm dừng') return '#fca5a5'; // red-300
+    if (val === 'Xong 100%') return '#6ee7b7';
+    if (val === 'Tạm dừng') return '#fca5a5';
 
-    // Extract core batch base name (e.g. "ĐỢT 2 (1)" -> "ĐỢT 2")
-    const firstPart = val.split('+')[0].trim();
-    const baseName = firstPart.replace(/\([^)]*\)/g, '').trim().toUpperCase() || firstPart.toUpperCase();
-    
-    // Nếu ở chế độ ipc_select và là "ĐỢT" thì hiển thị màu xám
-    if (type === 'ipc_select' && baseName.includes('ĐỢT')) {
-      return '#e2e8f0'; // slate-200
+    // Split by +, newline, or comma followed by space
+    const parts = val.split(/\+|\n|,\s+/).map(p => p.trim()).filter(Boolean);
+    if (parts.length === 0) return '';
+
+    const getHashColor = (part) => {
+      const upperPart = part.toUpperCase();
+      let textToHash = '';
+      
+      if (upperPart.includes('ĐỢT') || upperPart.includes('DOT')) {
+        const match = upperPart.match(/(ĐỢT|DOT)\s*\d+/);
+        textToHash = match ? match[0].replace(/\s+/g, ' ') : 'ĐỢT';
+      } else if (upperPart.includes('(PO')) {
+        const match = upperPart.match(/\(PO[^)]*\)/);
+        textToHash = match ? match[0] : 'PO';
+      } else if (/^\d/.test(upperPart)) {
+        return '#dbeafe'; // consistent light blue for plain quantities
+      } else {
+        textToHash = upperPart;
+      }
+      
+      let hash = 0;
+      for (let i = 0; i < textToHash.length; i++) {
+        hash = textToHash.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      const h = Math.abs(hash * 137.5) % 360;
+      return `hsl(${h}, 75%, 85%)`;
+    };
+
+    if (parts.length === 1) {
+      return getHashColor(parts[0]);
     }
 
-    // Hash baseName string to HSL color
-    let hash = 0;
-    for (let i = 0; i < baseName.length; i++) {
-      hash = baseName.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    // Multiply by golden angle 137.5 to ensure distinct colors for sequential names (ĐỢT 1, ĐỢT 2...)
-    const h = Math.abs(hash * 137.5) % 360;
-    return `hsl(${h}, 75%, 85%)`;
+    const percentage = 100 / parts.length;
+    let gradientStops = [];
+    parts.forEach((part, index) => {
+      const color = getHashColor(part);
+      const start = index * percentage;
+      const end = (index + 1) * percentage;
+      gradientStops.push(`${color} ${start}%, ${color} ${end}%`);
+    });
+
+    return `linear-gradient(to right, ${gradientStops.join(', ')})`;
   };
 
   const displayCellValue = (rawVal, team) => {
     if (!rawVal) return '';
-    if (type === 'ipc_select' || type === 'ipc') {
-      let display = rawVal;
+
+    let display = rawVal;
+    
+    // Strip team names for specific team view
+    if (team !== 'ALL') {
+      const teamParts = rawVal.split('+').filter(p => p.includes(`(${team})`));
+      if (teamParts.length > 0) {
+        display = teamParts.map(p => p.replace(`(${team})`, '').trim()).join(' + ');
+      } else {
+        return '';
+      }
+    } else if (type === 'ipc_select' || type === 'ipc') {
+      // In IPC mode with ALL teams, strip all team names
       store.teams.forEach(t => {
-        // Escape special characters in team name for regex
         const escapedTeamName = t.teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
       });
-      
-      if (type === 'ipc_select' || type === 'ipc') {
-        const parts = display.split('+').map(p => p.trim());
-        const extractedParts = parts.map(p => {
-          if (p.toUpperCase().includes('ĐỢT')) {
-            const match = p.match(/\(([^)]+)\)/);
-            return match ? match[1] : p;
-          }
-          return p;
-        });
-        return extractedParts.join(' + ');
-      }
-      return display.trim();
     }
-    
-    if (team === 'ALL') return rawVal;
-    const parts = rawVal.split(' + ');
-    const teamParts = parts.filter(p => p.includes(`(${team})`));
-    if (teamParts.length > 0) {
-      return teamParts.map(p => p.replace(`(${team})`, '').trim()).join(', ');
+
+    // Extract quantities ONLY for ipc modes
+    if (type === 'ipc' || type === 'ipc_select') {
+      const parts = display.split('+').map(p => p.trim());
+      const extractedParts = parts.map(p => {
+        const upperP = p.toUpperCase();
+        if (upperP.includes('ĐỢT') || upperP.includes('DOT')) {
+          const match = p.match(/\(([^)]+)\)/);
+          return match ? match[1] : '100%';
+        }
+        return p;
+      });
+      return extractedParts.join(' + ');
     }
-    return '';
+
+    return display;
   };
 
   const mergeCellValue = (rawVal, newVal, team) => {
@@ -714,7 +744,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                           bgColor = '#e2e8f0'; // slate-200 (gray)
                         }
                       } else {
-                        bgColor = getCellColor(displayVal || rawVal);
+                        let valForColor = rawVal || '';
+                        if (selectedTeamFilter !== 'ALL') {
+                          const teamParts = valForColor.split('+').filter(p => p.includes(`(${selectedTeamFilter})`));
+                          valForColor = teamParts.join(' + ');
+                        }
+                        bgColor = getCellColor(valForColor || rawVal);
                       }
                       
                       return (
@@ -759,13 +794,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                               ? 'cursor-not-allowed hover:opacity-100' 
                               : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
                           } ${copiedValue !== null ? 'hover:ring-2 hover:ring-inset hover:ring-indigo-500 hover:bg-indigo-50 cursor-crosshair' : ''}`}
-                          style={{ backgroundColor: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
+                          style={{ background: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
                           title={copiedValue !== null ? 'Bấm để dán giá trị' : ((type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdmin ? "Nhấp để chỉnh sửa/xóa (Quyền Admin)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô"))}
                         >
                           <div className="flex flex-col items-center justify-center min-h-[26px] py-0.5">
                             {type === 'ipc' ? (
                               <>
-                                <span className="text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px]">{displayVal || ''}</span>
+                                {!ipcRawVal && (
+                                  <span className="text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px]">{displayVal || ''}</span>
+                                )}
                                 {ipcRawVal && (
                                   <span className="bg-blue-600 text-white border border-blue-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold shadow-sm mt-0.5">
                                     {ipcRawVal}
@@ -907,6 +944,22 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             <p className="text-[13px] text-gray-500 mb-4">
               Tầng <strong className="text-indigo-600 font-extrabold">{selectedCell.floor}</strong> &bull; <span className="font-medium">{selectedCell.category}</span>
             </p>
+
+            {/* Team assignment info for IPC mode */}
+            {type === 'ipc' && selectedCell.teamRawValue && (
+              <div className="mb-4 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
+                <label className="block text-[11px] font-bold text-emerald-900 uppercase tracking-wider mb-2">
+                  Thông tin thầu phụ đã thực hiện:
+                </label>
+                <div className="flex flex-col gap-1.5">
+                  {selectedCell.teamRawValue.split('+').map(p => p.trim()).filter(Boolean).map((teamInfo, idx) => (
+                    <div key={idx} className="text-xs font-semibold text-emerald-800 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-sm">
+                      {teamInfo}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* List of current batches */}
             {batchList.length > 0 && (
