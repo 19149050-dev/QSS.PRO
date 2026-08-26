@@ -64,6 +64,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const updateGroupName = (...args) => store.updateGroupName(projectName, ...args);
   const addCategoryGroup = (...args) => store.addCategoryGroup(projectName, ...args);
   const addCategoryItem = (...args) => store.addCategoryItem(projectName, ...args);
+  const moveGroup = (...args) => store.moveGroup(projectName, ...args);
+  const moveCategoryItem = (...args) => store.moveCategoryItem(projectName, ...args);
   const addFloor = (...args) => store.addFloor(projectName, ...args);
   const updateFloorName = (...args) => store.updateFloorName(projectName, ...args);
   const updateFloorNumApts = (...args) => store.updateFloorNumApts(projectName, ...args);
@@ -553,16 +555,38 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       className="header-orange text-[10px] uppercase font-bold py-1 px-2 whitespace-nowrap border-r border-orange-200/50 cursor-pointer hover:bg-orange-200/50 transition-colors relative group/col"
                       title="Bấm đúp để sửa tên nhóm"
                     >
-                      <div className="flex justify-center items-center relative h-full">
+                      <div className="flex justify-center items-center relative h-full px-4 w-full">
+                        {gIdx > 0 && (
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); moveGroup(bIdx, gIdx, -1); }} 
+                            className="absolute left-0 opacity-0 group-hover/col:opacity-100 p-0.5 text-orange-400 hover:text-orange-600 hover:bg-orange-100 rounded transition z-10" 
+                            title="Di chuyển nhóm sang trái"
+                          >
+                            &lt;
+                          </button>
+                        )}
                         <span>{group.groupName}</span>
-                        <button 
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); handleHideGroup(block.blockName, group.groupName, group.items); }}
-                          className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-500 hover:text-orange-600 hover:bg-orange-100 rounded transition absolute -right-1 bg-white shadow-sm z-10"
-                          title="Ẩn toàn bộ nhóm này"
-                        >
-                          <EyeOff className="w-3 h-3" />
-                        </button>
+                        <div className="absolute right-0 flex items-center opacity-0 group-hover/col:opacity-100 bg-white/80 backdrop-blur-sm shadow-sm rounded z-10">
+                          {gIdx < block.groups.length - 1 && (
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); moveGroup(bIdx, gIdx, 1); }} 
+                              className="p-0.5 text-orange-400 hover:text-orange-600 hover:bg-orange-100 rounded transition" 
+                              title="Di chuyển nhóm sang phải"
+                            >
+                              &gt;
+                            </button>
+                          )}
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleHideGroup(block.blockName, group.groupName, group.items); }}
+                            className="p-0.5 text-gray-400 hover:text-orange-600 hover:bg-orange-100 rounded transition"
+                            title="Ẩn toàn bộ nhóm này"
+                          >
+                            <EyeOff className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </th>
                   );
@@ -588,18 +612,40 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                         className={`font-semibold leading-none py-1 border-r border-gray-200 cursor-pointer hover:bg-slate-300 transition-colors relative group/col align-middle ${isThachCao ? 'px-2' : ''}`}
                         title="Bấm đúp để sửa tên"
                       >
-                        <div className={`flex justify-center items-center relative mx-auto ${isThachCao ? 'h-[40px] w-[90px] text-center whitespace-normal' : 'h-[90px] w-[20px]'}`}>
+                        <div className={`flex justify-center items-center relative mx-auto ${isThachCao ? 'h-[40px] w-[90px] text-center whitespace-normal' : 'h-[100px] w-[24px]'}`}>
+                          {iIdx > 0 && (
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); moveCategoryItem(bIdx, gIdx, iIdx, -1); }} 
+                              className="absolute top-0 left-0 opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-slate-200 rounded transition z-10" 
+                              title="Sang trái"
+                            >
+                              &lt;
+                            </button>
+                          )}
                           <span className={`${isThachCao ? 'text-[9px] leading-[1.2]' : '[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-[9px]'} font-extrabold text-slate-700 tracking-tight`}>
                             {cat}
                           </span>
-                          <button 
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); toggleHideColumn(itemKey); }}
-                            className="opacity-0 group-hover/col:opacity-100 p-0.5 text-gray-500 hover:text-indigo-600 hover:bg-slate-200 rounded transition absolute -top-1 -right-1 bg-white shadow-sm z-10"
-                            title="Ẩn cột này"
-                          >
-                            <EyeOff className="w-3 h-3" />
-                          </button>
+                          <div className="absolute top-0 right-0 flex flex-col items-center opacity-0 group-hover/col:opacity-100 bg-white/90 backdrop-blur-sm shadow-sm rounded z-10">
+                            {iIdx < group.items.length - 1 && (
+                              <button 
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); moveCategoryItem(bIdx, gIdx, iIdx, 1); }} 
+                                className="p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-slate-200 rounded transition" 
+                                title="Sang phải"
+                              >
+                                &gt;
+                              </button>
+                            )}
+                            <button 
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); toggleHideColumn(itemKey); }}
+                              className="p-0.5 text-gray-400 hover:text-indigo-600 hover:bg-slate-200 rounded transition"
+                              title="Ẩn cột này"
+                            >
+                              <EyeOff className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
                       </th>
                     );

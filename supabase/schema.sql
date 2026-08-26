@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS public.projects (
   progress INT DEFAULT 0,
   matrix_blocks JSONB DEFAULT '[]'::jsonb,
   matrix_data JSONB DEFAULT '[]'::jsonb,
+  notes JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

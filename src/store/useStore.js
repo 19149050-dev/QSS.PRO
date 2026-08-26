@@ -55,6 +55,7 @@ export const useStore = create(
       materials: initialMaterials,
       materialSheets: {},
       attendanceSheets: {},
+      projectNotes: {},
       paymentMatrix: initialPaymentMatrix,
       matrixBlocks: defaultMatrixBlocksLocal,
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
@@ -97,6 +98,15 @@ export const useStore = create(
         delete newSelections[key];
         return { ipcSelections: newSelections };
       }),
+      updateProjectNote: (projectName, note) => {
+        set((state) => ({
+          projectNotes: {
+            ...state.projectNotes,
+            [projectName]: note
+          }
+        }));
+        get().syncProjectNotesToSupabase(projectName);
+      },
 
       // User Actions
       addUser: async (user) => {
@@ -1356,6 +1366,50 @@ export const useStore = create(
         get().syncMatrixDataToSupabase(projectName);
       },
 
+      moveGroup: (projectName, blockIdx, groupIdx, direction) => {
+        set((state) => {
+          const blocks = state.matrixBlocks[projectName];
+          if (!blocks) return state;
+          const newBlocks = JSON.parse(JSON.stringify(blocks));
+          const block = newBlocks[blockIdx];
+          if (!block || !block.groups) return state;
+          
+          const targetIdx = groupIdx + direction;
+          if (targetIdx < 0 || targetIdx >= block.groups.length) return state;
+          
+          const temp = block.groups[groupIdx];
+          block.groups[groupIdx] = block.groups[targetIdx];
+          block.groups[targetIdx] = temp;
+          
+          return {
+            matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }
+          };
+        });
+        get().syncMatrixDataToSupabase(projectName);
+      },
+
+      moveCategoryItem: (projectName, blockIdx, groupIdx, itemIdx, direction) => {
+        set((state) => {
+          const blocks = state.matrixBlocks[projectName];
+          if (!blocks) return state;
+          const newBlocks = JSON.parse(JSON.stringify(blocks));
+          const group = newBlocks[blockIdx]?.groups?.[groupIdx];
+          if (!group || !group.items) return state;
+          
+          const targetIdx = itemIdx + direction;
+          if (targetIdx < 0 || targetIdx >= group.items.length) return state;
+          
+          const temp = group.items[itemIdx];
+          group.items[itemIdx] = group.items[targetIdx];
+          group.items[targetIdx] = temp;
+          
+          return {
+            matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }
+          };
+        });
+        get().syncMatrixDataToSupabase(projectName);
+      },
+
       addCategoryGroup: (projectName, blockIdx, groupName) => { set((state) => {
         if (!groupName) return state;
         const blocks = state.matrixBlocks[projectName] || state.matrixBlocks['BCONS TĐH'] || standardBlocksTemplateLocal;
@@ -1508,7 +1562,9 @@ export const useStore = create(
             
             const blocks = {};
             const matrix = {};
+            const notesObj = {};
             projectsData.forEach(p => {
+              if (p.notes) notesObj[p.name] = p.notes;
               if (p.matrix_blocks) blocks[p.name] = p.matrix_blocks;
               if (p.matrix_data) {
                 if (Array.isArray(p.matrix_data)) {
@@ -1522,7 +1578,8 @@ export const useStore = create(
             });
             set((state) => ({ 
               matrixBlocks: { ...state.matrixBlocks, ...blocks },
-              paymentMatrix: { ...state.paymentMatrix, ...matrix }
+              paymentMatrix: { ...state.paymentMatrix, ...matrix },
+              projectNotes: { ...state.projectNotes, ...notesObj }
             }));
           }
 
@@ -1619,6 +1676,24 @@ export const useStore = create(
           console.log('Using local mock state (Supabase fallback active):', err);
         } finally {
           set({ isLoading: false });
+        }
+      },
+
+      syncProjectNotesToSupabase: async (projectName) => {
+        const state = get();
+        const project = state.projects.find(p => p.name === projectName);
+        if (!project) return;
+        const notes = state.projectNotes[projectName] || [];
+        try {
+          if (String(project.id).startsWith('p-')) {
+            const { error } = await supabase.from('projects').update({ notes }).eq('name', projectName);
+            if (error) console.error('Failed to sync notes:', error);
+          } else {
+            const { error } = await supabase.from('projects').update({ notes }).eq('id', project.id);
+            if (error) console.error('Failed to sync notes:', error);
+          }
+        } catch (err) {
+          console.error('Supabase sync error:', err);
         }
       },
 

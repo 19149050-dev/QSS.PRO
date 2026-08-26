@@ -47,6 +47,7 @@ export default function Sidebar({ onCloseMobile }) {
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
     { label: 'Điểm danh đội', id: 'team-attendance', icon: UserCheck },
+    { label: 'Ghi chú', id: 'project-notes', icon: PenTool },
   ];
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';

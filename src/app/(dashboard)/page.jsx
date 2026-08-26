@@ -19,6 +19,7 @@ import UsersView from '@/components/Views/UsersView';
 import TrashView from '@/components/Views/TrashView';
 import MaterialsView from '@/components/Views/MaterialsView';
 import AcceptanceView from '@/components/Views/AcceptanceView';
+import ProjectNotesView from '@/components/Views/ProjectNotesView';
 
 export default function RootRouter() {
   const { activeTab } = useStore();
@@ -44,6 +45,8 @@ export default function RootRouter() {
       return <ExportMaterialsView />;
     case 'team-attendance':
       return <TeamAttendanceView />;
+    case 'project-notes':
+      return <ProjectNotesView />;
     case 'ipc':
       return <IpcView />;
     case 'users':
