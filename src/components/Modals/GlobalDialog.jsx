@@ -102,18 +102,33 @@ export default function GlobalDialog() {
                   />
                   {globalDialog.allowNote && (
                     <div>
-                      <label className="block text-xs font-semibold text-gray-500 mb-1 ml-1">Ghi chú (Tùy chọn):</label>
-                      <input
-                        type="text"
-                        value={noteValue}
-                        onChange={(e) => setNoteValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleConfirm();
-                          if (e.key === 'Escape') handleCancel();
-                        }}
-                        placeholder="Nhập đợt order"
-                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
-                      />
+                      <label className="block text-xs font-semibold text-gray-500 mb-1 ml-1">
+                        {globalDialog.noteOptions ? 'Chọn đợt order (PO):' : 'Ghi chú (Tùy chọn):'}
+                      </label>
+                      {globalDialog.noteOptions ? (
+                        <select
+                          value={noteValue}
+                          onChange={(e) => setNoteValue(e.target.value)}
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
+                        >
+                          <option value="">-- Chọn PO --</option>
+                          {globalDialog.noteOptions.map(po => (
+                            <option key={po} value={po}>{po}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          value={noteValue}
+                          onChange={(e) => setNoteValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleConfirm();
+                            if (e.key === 'Escape') handleCancel();
+                          }}
+                          placeholder="Nhập đợt order"
+                          className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-shadow"
+                        />
+                      )}
                     </div>
                   )}
                 </div>

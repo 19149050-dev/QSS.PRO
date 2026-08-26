@@ -6,6 +6,7 @@ import PaymentMatrix from '@/components/PaymentMatrix';
 import AddTeamModal from '@/components/Modals/AddTeamModal';
 import AssignMemberModal from '@/components/Modals/AssignMemberModal';
 import { Plus, Users } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function TeamsPage() {
   const { teams, activeProject, setActiveProject } = useStore();
@@ -66,7 +67,7 @@ export default function TeamsPage() {
             <button
               onClick={() => {
                 if (selectedTeamFilter === 'ALL') {
-                  alert('Vui lòng chọn 1 tổ đội cụ thể để phân bổ nhân viên.');
+                  toast.error('Vui lòng chọn 1 tổ đội cụ thể để phân bổ nhân viên.');
                   return;
                 }
                 setIsAssignModalOpen(true);

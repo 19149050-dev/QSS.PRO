@@ -255,11 +255,25 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const handleEditValue = (row, item, field, currentValue) => {
     const fieldName = field === 'order' ? (isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)')) : (isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN'));
+    
+    let poOptions = null;
+    if (field === 'received' && !isExport && !isAttendance) {
+      const pos = new Set();
+      materialRows.forEach(r => {
+        const val = r.values?.[item.id];
+        if (val) {
+           const match = String(val.order || '').match(/\((PO.*?)\)/i);
+           if (match) pos.add(match[1].toUpperCase());
+        }
+      });
+      poOptions = Array.from(pos).sort();
+    }
+
     openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || (isAttendance ? 'tổ đội này' : 'vật tư này')}:`, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
       }
-    }, currentValue || '', 'Nhập liệu', 'text', true);
+    }, currentValue || '', 'Nhập liệu', 'text', true, null, null, 'Xóa', poOptions);
   };
 
   const addRow = () => {
@@ -578,7 +592,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <table id="material-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
                         <thead>
                           <tr>
-                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight">
+                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                               {isExport ? 'TẦNG' : (
                                 <>
                                   NGÀY<br/>
@@ -637,7 +651,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             if (!isExport) {
                               return (
                                 <tr key={row.id}>
-                                  <td className="border border-slate-800 p-0">
+                                  <td className="border border-slate-800 p-0 sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                     <div
                                       onClick={() => handleEditDate(row)}
                                       className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex items-center justify-center"
@@ -646,7 +660,11 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     </div>
                                   </td>
                                   {materialItems.map((item) => {
-                                    const orderVal = row.values?.[item.id]?.order || '';
+                                    const orderVal = row.values?.[item.id]?.order ?? '';
+                                    const receivedVal = row.values?.[item.id]?.received ?? '';
+                                    const hasOrder = orderVal.toString().trim() !== '';
+                                    const hasReceived = receivedVal.toString().trim() !== '';
+
                                     const match = String(orderVal).match(/\((PO.*?)\)/i);
                                     let orderBg = 'bg-[#fffaf0] hover:bg-[#ffecce]';
                                     let orderText = 'text-amber-900';
@@ -681,18 +699,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                       <Fragment key={`${row.id}-${item.id}`}>
                                         <td className={`border border-slate-800 p-0 transition-colors ${orderBg}`}>
                                           <div
-                                            onClick={() => handleEditValue(row, item, 'order', row.values?.[item.id]?.order)}
+                                            onClick={() => handleEditValue(row, item, 'order', orderVal)}
                                             className={`w-full h-full p-2 text-center cursor-pointer min-h-[36px] flex items-center justify-center font-medium ${orderText}`}
                                           >
-                                            {row.values?.[item.id]?.order ?? ''}
+                                            {orderVal}
                                           </div>
                                         </td>
-                                        <td className="border border-slate-800 p-0 bg-[#f2fbf3] hover:bg-[#dcf1dd] transition-colors">
+                                        <td className={`p-0 transition-colors ${hasReceived ? 'border-[3px] border-red-500 z-10 relative bg-[#f2fbf3]' : 'border border-slate-800 bg-[#f2fbf3] hover:bg-[#dcf1dd]'}`}>
                                           <div
-                                            onClick={() => handleEditValue(row, item, 'received', row.values?.[item.id]?.received)}
-                                            className="w-full h-full p-2 text-center cursor-pointer text-emerald-900 min-h-[36px] flex items-center justify-center font-medium"
+                                            onClick={() => handleEditValue(row, item, 'received', receivedVal)}
+                                            className={`w-full h-full p-2 text-center cursor-pointer min-h-[36px] flex items-center justify-center ${hasReceived ? 'font-black text-red-700' : 'text-emerald-900 font-medium'}`}
                                           >
-                                            {row.values?.[item.id]?.received ?? ''}
+                                            {receivedVal}
                                           </div>
                                         </td>
                                       </Fragment>
@@ -714,7 +732,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               const rowSpans = Array.from({ length: maxEntries }).map((_, idx) => (
                                 <tr key={`${row.id}-sub-${idx}`}>
                                   {idx === 0 && (
-                                    <td rowSpan={maxEntries} className="border border-slate-800 p-0 align-middle">
+                                    <td rowSpan={maxEntries} className="border border-slate-800 p-0 align-middle sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                       <div
                                         onClick={() => handleEditDate(row)}
                                         className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex flex-col items-center justify-center font-bold"
@@ -726,6 +744,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   {materialItems.map((item) => {
                                     const arr = Array.isArray(row.values?.[item.id]) ? row.values?.[item.id] : [];
                                     const entry = arr[idx] || { quantity: '', date: '' };
+                                    const hasQuantity = entry.quantity && entry.quantity.toString().trim() !== '';
+                                    const hasDate = entry.date && entry.date.toString().trim() !== '';
                                     
                                     return (
                                       <Fragment key={`${row.id}-${item.id}-sub-${idx}`}>
@@ -741,14 +761,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                             {entry.quantity || ''}
                                           </div>
                                         </td>
-                                        <td className="border border-slate-800 p-0 bg-slate-50">
+                                        <td className={`p-0 bg-slate-50 ${hasDate ? 'border-[3px] border-red-500 z-10 relative' : 'border border-slate-800'}`}>
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
                                               setSelectedItem(item);
                                               setIsExportModalOpen(true);
                                             }}
-                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] text-slate-900 min-h-[36px] flex items-center justify-center transition-colors"
+                                            className={`w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] min-h-[36px] flex items-center justify-center transition-colors ${hasDate ? 'font-black text-red-700' : 'text-slate-900'}`}
                                           >
                                             {entry.date || ''}
                                           </div>
@@ -771,7 +791,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           {!isExport ? (
                             <>
                               <tr className="bg-slate-100 font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900">TỔNG</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 sticky left-0 z-20 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">TỔNG</td>
                                 {materialItems.map((item) => (
                                   <Fragment key={`${item.id}-totals`}>
                                     <td className="border border-slate-800 p-2 text-amber-900 bg-amber-200 font-extrabold text-sm">{formatCell(orderTotals[item.id] || 0)}</td>
@@ -780,7 +800,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 ))}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase">Vật tư chưa nhận</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Vật tư chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
                                   const isShort = remaining > 0;
@@ -796,7 +816,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase">Sản lượng</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Sản lượng</td>
                                 {materialItems.map((item) => {
                                   const poQty = orderTotals[item.id] || 0;
                                   const recvQty = totals[item.id] || 0;
@@ -817,7 +837,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase">IPC</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">IPC</td>
                                 {materialItems.map((item) => {
                                   const rawIpc = currentSheet.ipcMap?.[item.id];
                                   const ipcVal = typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order ?? '') : (rawIpc ?? '');
@@ -838,7 +858,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase">%</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">%</td>
                                 {materialItems.map((item) => {
                                   const recvQty = totals[item.id] || 0;
                                   const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
@@ -937,7 +957,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       {/* Modal Cấu Hình Định Mức Vật Tư Theo Tên */}
       {isDinhMucModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
             <div className="p-5 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-base">Cấu Hình Định Mức Vật Tư</h3>
@@ -948,15 +968,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
               </button>
             </div>
 
-            <div className="p-6 space-y-3 max-h-96 overflow-y-auto">
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[75vh] overflow-y-auto">
               {materialItems.map((item, idx) => {
                 const name = item.name || `Cột ${idx + 1}`;
                 const defaultVal = getDefaultDinhMuc(name);
                 const currentVal = dinhMucDraft[item.id] ?? defaultVal;
                 return (
-                  <div key={item.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition">
-                    <span className="font-bold text-slate-800 text-sm truncate max-w-[240px]">{name}</span>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+                  <div key={item.id} className="flex flex-col gap-2 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition shadow-sm">
+                    <span className="font-bold text-slate-800 text-sm truncate w-full">{name}</span>
+                    <div className="flex items-center justify-between w-full">
                       <span className="text-xs text-slate-500 font-semibold">Định mức:</span>
                       <input
                         type="number"

@@ -1,5 +1,6 @@
 import './globals.css';
 import { Inter } from 'next/font/google';
+import { Toaster } from 'react-hot-toast';
 
 const inter = Inter({ subsets: ['latin', 'vietnamese'] });
 
@@ -18,6 +19,7 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="/output.css" />
       </head>
       <body className="bg-slate-100 text-slate-900 antialiased min-h-screen">
+        <Toaster position="top-right" />
         {children}
       </body>
     </html>
