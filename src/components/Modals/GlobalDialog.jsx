@@ -12,7 +12,7 @@ export default function GlobalDialog() {
     if (globalDialog.isOpen) {
       if (globalDialog.type === 'prompt') {
         if (globalDialog.allowNote) {
-          const match = (globalDialog.defaultValue || '').match(/^(.*?)(?:\s*\((.*?)\))?$/);
+          const match = String(globalDialog.defaultValue || '').match(/^(.*?)(?:\s*\((.*?)\))?$/);
           setInputValue(match[1]?.trim() || '');
           setNoteValue(match[2]?.trim() || '');
         } else {
@@ -31,10 +31,10 @@ export default function GlobalDialog() {
   const handleConfirm = () => {
     if (globalDialog.onConfirm) {
       if (globalDialog.type === 'prompt') {
-        if (globalDialog.allowNote && noteValue.trim()) {
-          globalDialog.onConfirm(`${inputValue.trim()} (${noteValue.trim()})`);
+        if (globalDialog.allowNote && String(noteValue).trim()) {
+          globalDialog.onConfirm(`${String(inputValue).trim()} (${String(noteValue).trim()})`);
         } else {
-          globalDialog.onConfirm(inputValue.trim() || inputValue);
+          globalDialog.onConfirm(String(inputValue).trim() || inputValue);
         }
       } else {
         globalDialog.onConfirm();

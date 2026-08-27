@@ -1672,6 +1672,21 @@ export const useStore = create(
             }));
           }
 
+          // Fetch Attendance Sheets
+          const { data: attData, error: attError } = await supabase.from('attendance_sheets').select('*');
+          if (!attError && attData) {
+            const atts = {};
+            attData.forEach(s => {
+              atts[s.project_name] = {
+                rows: s.rows || [],
+                customTeams: s.custom_teams || []
+              };
+            });
+            set((state) => ({
+              attendanceSheets: { ...state.attendanceSheets, ...atts }
+            }));
+          }
+
         } catch (err) {
           console.log('Using local mock state (Supabase fallback active):', err);
         } finally {
@@ -1770,11 +1785,12 @@ export const useStore = create(
 
       syncAttendanceSheetToSupabase: async (projectName) => {
         const state = get();
-        const sheet = state.attendanceSheets[projectName] || { rows: [] };
+        const sheet = state.attendanceSheets[projectName] || { rows: [], customTeams: [] };
         try {
           const payload = {
             project_name: projectName,
             rows: sheet.rows || [],
+            custom_teams: sheet.customTeams || [],
             updated_at: new Date().toISOString()
           };
           

@@ -179,3 +179,30 @@ CREATE POLICY "Allow public write material_sheets"
   ON public.material_sheets
   FOR ALL
   USING (true);
+
+-- ==============================================================================
+-- 8. ATTENDANCE SHEETS TABLE (TEAM ATTENDANCE)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.attendance_sheets (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_name text NOT NULL UNIQUE,
+  rows jsonb DEFAULT '[]'::jsonb,
+  custom_teams jsonb DEFAULT '[]'::jsonb,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.attendance_sheets ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read attendance_sheets" ON public.attendance_sheets;
+DROP POLICY IF EXISTS "Allow public write attendance_sheets" ON public.attendance_sheets;
+
+CREATE POLICY "Allow public read attendance_sheets"
+  ON public.attendance_sheets
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public write attendance_sheets"
+  ON public.attendance_sheets
+  FOR ALL
+  USING (true);
