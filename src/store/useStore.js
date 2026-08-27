@@ -888,71 +888,79 @@ export const useStore = create(
         }));
         get().syncAttendanceSheetToSupabase(projectName);
       },
-      addAttendanceRow: (projectName, dateStr = '') => set((state) => {
-        const current = state.attendanceSheets[projectName] || { rows: [] };
-        const newRow = {
-          id: `att-row-${Date.now()}`,
-          date: dateStr || '',
-          values: {}
-        };
-        const nextRows = [...(current.rows || []), newRow];
-        const nextSheet = { ...current, rows: nextRows };
-        get().syncAttendanceSheetToSupabase(projectName);
-        return {
-          attendanceSheets: {
-            ...state.attendanceSheets,
-            [projectName]: nextSheet
-          }
-        };
-      }),
-      updateAttendanceCell: (projectName, rowId, teamKey, value) => set((state) => {
-        const current = state.attendanceSheets[projectName] || { rows: [] };
-        const nextRows = (current.rows || []).map(row => {
-          if (row.id !== rowId) return row;
+      addAttendanceRow: (projectName, dateStr = '') => {
+        set((state) => {
+          const current = state.attendanceSheets[projectName] || { rows: [] };
+          const newRow = {
+            id: `att-row-${Date.now()}`,
+            date: dateStr || '',
+            values: {}
+          };
+          const nextRows = [...(current.rows || []), newRow];
+          const nextSheet = { ...current, rows: nextRows };
           return {
-            ...row,
-            values: {
-              ...(row.values || {}),
-              [teamKey]: value
+            attendanceSheets: {
+              ...state.attendanceSheets,
+              [projectName]: nextSheet
             }
           };
         });
-        const nextSheet = { ...current, rows: nextRows };
         get().syncAttendanceSheetToSupabase(projectName);
-        return {
-          attendanceSheets: {
-            ...state.attendanceSheets,
-            [projectName]: nextSheet
-          }
-        };
-      }),
-      updateAttendanceRow: (projectName, rowId, field, value) => set((state) => {
-        const current = state.attendanceSheets[projectName] || { rows: [] };
-        const nextRows = (current.rows || []).map(row => {
-          if (row.id !== rowId) return row;
-          return { ...row, [field]: value };
+      },
+      updateAttendanceCell: (projectName, rowId, teamKey, value) => {
+        set((state) => {
+          const current = state.attendanceSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            return {
+              ...row,
+              values: {
+                ...(row.values || {}),
+                [teamKey]: value
+              }
+            };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            attendanceSheets: {
+              ...state.attendanceSheets,
+              [projectName]: nextSheet
+            }
+          };
         });
-        const nextSheet = { ...current, rows: nextRows };
         get().syncAttendanceSheetToSupabase(projectName);
-        return {
-          attendanceSheets: {
-            ...state.attendanceSheets,
-            [projectName]: nextSheet
-          }
-        };
-      }),
-      deleteAttendanceRow: (projectName, rowId) => set((state) => {
-        const current = state.attendanceSheets[projectName] || { rows: [] };
-        const nextRows = (current.rows || []).filter(row => row.id !== rowId);
-        const nextSheet = { ...current, rows: nextRows };
+      },
+      updateAttendanceRow: (projectName, rowId, field, value) => {
+        set((state) => {
+          const current = state.attendanceSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            return { ...row, [field]: value };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            attendanceSheets: {
+              ...state.attendanceSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
         get().syncAttendanceSheetToSupabase(projectName);
-        return {
-          attendanceSheets: {
-            ...state.attendanceSheets,
-            [projectName]: nextSheet
-          }
-        };
-      }),
+      },
+      deleteAttendanceRow: (projectName, rowId) => {
+        set((state) => {
+          const current = state.attendanceSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).filter(row => row.id !== rowId);
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            attendanceSheets: {
+              ...state.attendanceSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncAttendanceSheetToSupabase(projectName);
+      },
 
       // Payment Matrix Actions
       updateMatrixCell: (key, floor, itemKey, value) => { set((state) => {
