@@ -970,8 +970,10 @@ export const useStore = create(
           ? state.paymentMatrix[key]
           : JSON.parse(JSON.stringify(baseMatrix));
 
+        let floorExists = false;
         const newMatrix = currentMatrix.map(row => {
           if (row.floor === floor) {
+            floorExists = true;
             return {
               ...row,
               items: { ...row.items, [itemKey]: value }
@@ -979,6 +981,14 @@ export const useStore = create(
           }
           return row;
         });
+
+        if (!floorExists) {
+          const baseRow = baseMatrix.find(r => r.floor === floor) || { floor, numApts: '', items: {} };
+          newMatrix.push({
+            ...baseRow,
+            items: { ...baseRow.items, [itemKey]: value }
+          });
+        }
 
         let newState = {
           paymentMatrix: {

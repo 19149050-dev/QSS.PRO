@@ -134,7 +134,7 @@ export default function TeamAttendanceView() {
   };
 
   const filteredRows = useMemo(() => {
-    return rows.filter(row => {
+    const result = rows.filter(row => {
       const rowDate = parseDate(row.date);
       if (!rowDate) return true;
       
@@ -153,6 +153,15 @@ export default function TeamAttendanceView() {
       if (from && rowDate < from) return false;
       if (to && rowDate > to) return false;
       return true;
+    });
+
+    return result.sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return dateA.getTime() - dateB.getTime();
     });
   }, [rows, fromDate, toDate]);
 
@@ -183,8 +192,26 @@ export default function TeamAttendanceView() {
   // Actions
   const handleAddRow = () => {
     const today = new Date();
-    const formattedToday = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-    addAttendanceRow(selectedProject, formattedToday);
+    const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    openGlobalPrompt('Chọn ngày điểm danh để thêm:', (newDate) => {
+      if (!newDate) return;
+      
+      let formattedDate = newDate;
+      if (newDate.includes('-')) {
+        const parts = newDate.split('-');
+        if (parts.length === 3) {
+          formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+        }
+      }
+      
+      if (rows.some(r => r.date === formattedDate)) {
+        openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng điểm danh!`);
+        return;
+      }
+      
+      addAttendanceRow(selectedProject, formattedDate);
+    }, isoToday, 'Thêm Ngày Điểm Danh', 'date');
   };
 
   const handleAddCustomTeam = () => {
@@ -239,15 +266,21 @@ export default function TeamAttendanceView() {
     openGlobalPrompt('Chọn ngày điểm danh:', (newDate) => {
       if (newDate !== null) {
         if (newDate) {
+          let formattedDate = newDate;
           const parts = newDate.split('-');
           if (parts.length === 3) {
              const y = parts[0];
              const m = parts[1];
              const d = parts[2];
-             updateAttendanceRow(selectedProject, row.id, 'date', `${d}/${m}/${y}`);
-          } else {
-             updateAttendanceRow(selectedProject, row.id, 'date', newDate);
+             formattedDate = `${d}/${m}/${y}`;
           }
+          
+          if (formattedDate !== row.date && rows.some(r => r.date === formattedDate)) {
+             openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng điểm danh!`);
+             return;
+          }
+          
+          updateAttendanceRow(selectedProject, row.id, 'date', formattedDate);
         } else {
           updateAttendanceRow(selectedProject, row.id, 'date', '');
         }
