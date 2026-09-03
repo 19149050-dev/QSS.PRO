@@ -1029,9 +1029,12 @@ export const useStore = create(
       },
       
       addFloor: (projectName, floorName) => { set((state) => {
-        const matrix = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
+        const baseMatrix = state.paymentMatrix[projectName] || [];
+        const teamMatrix = state.paymentMatrix[`${projectName}_team`] || [];
+        const ipcMatrix = state.paymentMatrix[`${projectName}_ipc`] || [];
         const blocks = state.matrixBlocks[projectName] || [];
-        if (!floorName || matrix.some(r => r.floor === floorName)) return state;
+        
+        if (!floorName || baseMatrix.some(r => r.floor === floorName)) return state;
         
         const emptyItems = {};
         blocks.forEach(b => {
@@ -1043,12 +1046,18 @@ export const useStore = create(
         });
 
         const newRow = { floor: floorName, numApts: '', items: emptyItems };
-        const newMatrix = [newRow, ...matrix];
+        
         return {
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: sortFloors(newMatrix) }
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: sortFloors([newRow, ...baseMatrix]),
+            [`${projectName}_team`]: sortFloors([newRow, ...teamMatrix]),
+            [`${projectName}_ipc`]: sortFloors([newRow, ...ipcMatrix])
+          }
         };
       });
-        get().syncMatrixDataToSupabase(projectName);
+        const projName = projectName;
+        get().syncMatrixDataToSupabase(projName);
       },
 
       updateFloorName: (projectName, oldFloorName, newFloorName) => { set((state) => {
@@ -1100,12 +1109,8 @@ export const useStore = create(
 
       deleteFloor: (projectName, floorName) => { set((state) => {
         const targetFloor = String(floorName).trim();
-        const currentBase = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
-        const newBaseMatrix = currentBase.filter(row => String(row.floor).trim() !== targetFloor);
-
         const newPaymentMatrix = { ...state.paymentMatrix };
 
-        // Clean from all keys for this project
         Object.keys(newPaymentMatrix).forEach(key => {
           if (key === projectName || key.startsWith(`${projectName}_`)) {
             if (Array.isArray(newPaymentMatrix[key])) {
@@ -1113,12 +1118,6 @@ export const useStore = create(
             }
           }
         });
-
-        newPaymentMatrix[projectName] = newBaseMatrix;
-        newPaymentMatrix[`${projectName}_team`] = newBaseMatrix;
-        if (!newPaymentMatrix[`${projectName}_ipc`]) {
-          newPaymentMatrix[`${projectName}_ipc`] = newBaseMatrix.map(r => ({ floor: r.floor, numApts: r.numApts, items: {} }));
-        }
 
         return { paymentMatrix: newPaymentMatrix };
       });
@@ -1148,12 +1147,8 @@ export const useStore = create(
 
       deleteMultipleFloors: (projectName, floorNamesArray) => { set((state) => {
         const targetFloors = floorNamesArray.map(f => String(f).trim());
-        const currentBase = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
-        const newBaseMatrix = currentBase.filter(row => !targetFloors.includes(String(row.floor).trim()));
-
         const newPaymentMatrix = { ...state.paymentMatrix };
 
-        // Clean from all keys for this project
         Object.keys(newPaymentMatrix).forEach(key => {
           if (key === projectName || key.startsWith(`${projectName}_`)) {
             if (Array.isArray(newPaymentMatrix[key])) {
@@ -1161,12 +1156,6 @@ export const useStore = create(
             }
           }
         });
-
-        newPaymentMatrix[projectName] = newBaseMatrix;
-        newPaymentMatrix[`${projectName}_team`] = newBaseMatrix;
-        if (!newPaymentMatrix[`${projectName}_ipc`]) {
-          newPaymentMatrix[`${projectName}_ipc`] = newBaseMatrix.map(r => ({ floor: r.floor, numApts: r.numApts, items: {} }));
-        }
 
         return { paymentMatrix: newPaymentMatrix };
       });
@@ -1270,19 +1259,26 @@ export const useStore = create(
         
         newBlocks[blockIdx].groups[groupIdx].items[itemIdx] = newName;
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          if (newItems[oldKey] !== undefined) {
-            newItems[newKey] = newItems[oldKey];
-            delete newItems[oldKey];
-          }
-          return { ...row, items: newItems };
-        });
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            if (newItems[oldKey] !== undefined) {
+              newItems[newKey] = newItems[oldKey];
+              delete newItems[oldKey];
+            }
+            return { ...row, items: newItems };
+          });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }, 
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix } 
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          } 
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1297,23 +1293,30 @@ export const useStore = create(
         const oldGroupName = newBlocks[blockIdx].groups[groupIdx].groupName;
         newBlocks[blockIdx].groups[groupIdx].groupName = newName;
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          newBlocks[blockIdx].groups[groupIdx].items.forEach(item => {
-             const oldKey = `${blockName}_${oldGroupName}_${item}`;
-             const newKey = `${blockName}_${newName}_${item}`;
-             if (newItems[oldKey] !== undefined) {
-               newItems[newKey] = newItems[oldKey];
-               delete newItems[oldKey];
-             }
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            newBlocks[blockIdx].groups[groupIdx].items.forEach(item => {
+               const oldKey = `${blockName}_${oldGroupName}_${item}`;
+               const newKey = `${blockName}_${newName}_${item}`;
+               if (newItems[oldKey] !== undefined) {
+                 newItems[newKey] = newItems[oldKey];
+                 delete newItems[oldKey];
+               }
+            });
+            return { ...row, items: newItems };
           });
-          return { ...row, items: newItems };
-        });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks },
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix }
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          }
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1327,25 +1330,32 @@ export const useStore = create(
         const oldBlockName = newBlocks[blockIdx].blockName;
         newBlocks[blockIdx].blockName = newName;
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          newBlocks[blockIdx].groups.forEach(group => {
-            group.items.forEach(item => {
-               const oldKey = `${oldBlockName}_${group.groupName}_${item}`;
-               const newKey = `${newName}_${group.groupName}_${item}`;
-               if (newItems[oldKey] !== undefined) {
-                 newItems[newKey] = newItems[oldKey];
-                 delete newItems[oldKey];
-               }
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            newBlocks[blockIdx].groups.forEach(group => {
+              group.items.forEach(item => {
+                 const oldKey = `${oldBlockName}_${group.groupName}_${item}`;
+                 const newKey = `${newName}_${group.groupName}_${item}`;
+                 if (newItems[oldKey] !== undefined) {
+                   newItems[newKey] = newItems[oldKey];
+                   delete newItems[oldKey];
+                 }
+              });
             });
+            return { ...row, items: newItems };
           });
-          return { ...row, items: newItems };
-        });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks },
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix }
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          }
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1370,15 +1380,22 @@ export const useStore = create(
         }
 
         const newKey = `${blockName}_${groupName}_${itemName}`;
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => ({
-          ...row,
-          items: { ...row.items, [newKey]: row.items[newKey] !== undefined ? row.items[newKey] : '' }
-        }));
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => ({
+            ...row,
+            items: { ...row.items, [newKey]: row.items[newKey] !== undefined ? row.items[newKey] : '' }
+          }));
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }, 
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix } 
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          } 
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1736,6 +1753,14 @@ export const useStore = create(
         if (!project) return;
         
         const blocks = state.matrixBlocks[projectName] || [];
+        
+        // Safety check: Prevent saving empty base matrix if blocks exist
+        const baseData = state.paymentMatrix[projectName];
+        if (blocks.length > 0 && (!baseData || baseData.length === 0)) {
+           console.warn(`Prevented sync of empty matrix data for ${projectName} to avoid data loss.`);
+           return;
+        }
+
         const matrixDataObj = {
           base: state.paymentMatrix[projectName] || [],
           ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
