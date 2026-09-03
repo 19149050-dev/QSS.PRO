@@ -57,6 +57,7 @@ export const useStore = create(
       attendanceSheets: {},
       projectNotes: {},
       paymentMatrix: initialPaymentMatrix,
+      trashMatrix: {},
       matrixBlocks: defaultMatrixBlocksLocal,
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
       openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
@@ -1110,6 +1111,22 @@ export const useStore = create(
       deleteFloor: (projectName, floorName) => { set((state) => {
         const targetFloor = String(floorName).trim();
         const newPaymentMatrix = { ...state.paymentMatrix };
+        
+        // Save to trash
+        const trashItem = {
+          id: `trash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'floor',
+          title: `Tầng: ${targetFloor}`,
+          projectName: projectName,
+          deletedAt: new Date().toISOString(),
+          deletedBy: state.currentUser?.name || 'Unknown',
+          data: {
+            base: (state.paymentMatrix[projectName] || []).filter(row => String(row.floor).trim() === targetFloor),
+            team: (state.paymentMatrix[`${projectName}_team`] || []).filter(row => String(row.floor).trim() === targetFloor),
+            ipc: (state.paymentMatrix[`${projectName}_ipc`] || []).filter(row => String(row.floor).trim() === targetFloor)
+          }
+        };
+        const currentTrash = state.trashMatrix[projectName] || [];
 
         Object.keys(newPaymentMatrix).forEach(key => {
           if (key === projectName || key.startsWith(`${projectName}_`)) {
@@ -1119,13 +1136,32 @@ export const useStore = create(
           }
         });
 
-        return { paymentMatrix: newPaymentMatrix };
+        return { 
+          paymentMatrix: newPaymentMatrix,
+          trashMatrix: { ...state.trashMatrix, [projectName]: [trashItem, ...currentTrash] }
+        };
       });
         get().syncMatrixDataToSupabase(projectName);
       },
       
       deleteAllFloors: (projectName) => { set((state) => {
         const newPaymentMatrix = { ...state.paymentMatrix };
+        
+        // Save to trash
+        const trashItem = {
+          id: `trash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'all_floors',
+          title: `Tất cả các tầng`,
+          projectName: projectName,
+          deletedAt: new Date().toISOString(),
+          deletedBy: state.currentUser?.name || 'Unknown',
+          data: {
+            base: state.paymentMatrix[projectName] || [],
+            team: state.paymentMatrix[`${projectName}_team`] || [],
+            ipc: state.paymentMatrix[`${projectName}_ipc`] || []
+          }
+        };
+        const currentTrash = state.trashMatrix[projectName] || [];
 
         // Clean from all keys for this project
         Object.keys(newPaymentMatrix).forEach(key => {
@@ -1140,7 +1176,10 @@ export const useStore = create(
         newPaymentMatrix[`${projectName}_team`] = [];
         newPaymentMatrix[`${projectName}_ipc`] = [];
 
-        return { paymentMatrix: newPaymentMatrix };
+        return { 
+          paymentMatrix: newPaymentMatrix,
+          trashMatrix: { ...state.trashMatrix, [projectName]: [trashItem, ...currentTrash] }
+        };
       });
         get().syncMatrixDataToSupabase(projectName);
       },
@@ -1148,6 +1187,22 @@ export const useStore = create(
       deleteMultipleFloors: (projectName, floorNamesArray) => { set((state) => {
         const targetFloors = floorNamesArray.map(f => String(f).trim());
         const newPaymentMatrix = { ...state.paymentMatrix };
+        
+        // Save to trash
+        const trashItem = {
+          id: `trash_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          type: 'multiple_floors',
+          title: `Nhiều tầng (${targetFloors.join(', ')})`,
+          projectName: projectName,
+          deletedAt: new Date().toISOString(),
+          deletedBy: state.currentUser?.name || 'Unknown',
+          data: {
+            base: (state.paymentMatrix[projectName] || []).filter(row => targetFloors.includes(String(row.floor).trim())),
+            team: (state.paymentMatrix[`${projectName}_team`] || []).filter(row => targetFloors.includes(String(row.floor).trim())),
+            ipc: (state.paymentMatrix[`${projectName}_ipc`] || []).filter(row => targetFloors.includes(String(row.floor).trim()))
+          }
+        };
+        const currentTrash = state.trashMatrix[projectName] || [];
 
         Object.keys(newPaymentMatrix).forEach(key => {
           if (key === projectName || key.startsWith(`${projectName}_`)) {
@@ -1157,7 +1212,54 @@ export const useStore = create(
           }
         });
 
-        return { paymentMatrix: newPaymentMatrix };
+        return { 
+          paymentMatrix: newPaymentMatrix,
+          trashMatrix: { ...state.trashMatrix, [projectName]: [trashItem, ...currentTrash] }
+        };
+      });
+        get().syncMatrixDataToSupabase(projectName);
+      },
+      
+      restoreFromTrash: (projectName, trashId) => { set((state) => {
+        const projectTrash = state.trashMatrix[projectName] || [];
+        const trashItem = projectTrash.find(t => t.id === trashId);
+        if (!trashItem) return state;
+        
+        const newPaymentMatrix = { ...state.paymentMatrix };
+        
+        // Helper to merge rows
+        const mergeRows = (currentRows, rowsToRestore) => {
+           let merged = [...(currentRows || [])];
+           (rowsToRestore || []).forEach(row => {
+             // If floor already exists, overwrite it? Or replace? Let's just push and sort.
+             const exists = merged.some(r => r.floor === row.floor);
+             if (!exists) {
+                merged.push(row);
+             }
+           });
+           return sortFloors(merged);
+        };
+        
+        newPaymentMatrix[projectName] = mergeRows(state.paymentMatrix[projectName], trashItem.data.base);
+        newPaymentMatrix[`${projectName}_team`] = mergeRows(state.paymentMatrix[`${projectName}_team`], trashItem.data.team);
+        newPaymentMatrix[`${projectName}_ipc`] = mergeRows(state.paymentMatrix[`${projectName}_ipc`], trashItem.data.ipc);
+        
+        const newProjectTrash = projectTrash.filter(t => t.id !== trashId);
+        
+        return {
+          paymentMatrix: newPaymentMatrix,
+          trashMatrix: { ...state.trashMatrix, [projectName]: newProjectTrash }
+        };
+      });
+        get().syncMatrixDataToSupabase(projectName);
+      },
+      
+      permanentlyDeleteFromTrash: (projectName, trashId) => { set((state) => {
+        const projectTrash = state.trashMatrix[projectName] || [];
+        const newProjectTrash = projectTrash.filter(t => t.id !== trashId);
+        return {
+          trashMatrix: { ...state.trashMatrix, [projectName]: newProjectTrash }
+        };
       });
         get().syncMatrixDataToSupabase(projectName);
       },
@@ -1509,7 +1611,6 @@ export const useStore = create(
       },
 
       // Reset to default mock data
-      // Reset to default mock data
       resetToDefault: () => set({
         users: initialUsers,
         projects: initialProjects,
@@ -1597,6 +1698,7 @@ export const useStore = create(
             
             const blocks = {};
             const matrix = {};
+            const trash = {};
             const notesObj = {};
             projectsData.forEach(p => {
               if (p.notes) notesObj[p.name] = p.notes;
@@ -1608,13 +1710,16 @@ export const useStore = create(
                   if (p.matrix_data.base) matrix[p.name] = p.matrix_data.base;
                   if (p.matrix_data.ipc) matrix[`${p.name}_ipc`] = p.matrix_data.ipc;
                   if (p.matrix_data.team) matrix[`${p.name}_team`] = p.matrix_data.team;
+                  if (p.matrix_data.trash) trash[p.name] = p.matrix_data.trash;
                 }
               }
             });
+            
             set((state) => ({ 
               matrixBlocks: { ...state.matrixBlocks, ...blocks },
               paymentMatrix: { ...state.paymentMatrix, ...matrix },
-              projectNotes: { ...state.projectNotes, ...notesObj }
+              trashMatrix: { ...state.trashMatrix, ...trash },
+              projects: state.projects.map(p => ({ ...p, notes: notesObj[p.name] || [] }))
             }));
           }
 
@@ -1764,7 +1869,8 @@ export const useStore = create(
         const matrixDataObj = {
           base: state.paymentMatrix[projectName] || [],
           ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
-          team: state.paymentMatrix[`${projectName}_team`] || []
+          team: state.paymentMatrix[`${projectName}_team`] || [],
+          trash: state.trashMatrix[projectName] || []
         };
         
         try {
