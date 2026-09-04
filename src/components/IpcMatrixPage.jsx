@@ -157,6 +157,10 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       }
     }
 
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+    const userStr = currentUser?.name || currentUser?.username || 'Unknown';
+
     const nextRows = materialRows.map(row => {
       if (row.id === rowId) {
         return {
@@ -165,7 +169,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
             ...(row.values || {}),
             [colId]: {
               ...(row.values?.[colId] || { order: '', received: '' }),
-              [field]: value
+              [field]: value,
+              [`${field}UpdatedBy`]: userStr,
+              [`${field}UpdatedAt`]: timeStr
             }
           }
         };
@@ -269,11 +275,19 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       poOptions = Array.from(pos).sort();
     }
 
-    openGlobalPrompt(`Nhập ${fieldName.toLowerCase()} cho ${item.name || (isAttendance ? 'tổ đội này' : 'vật tư này')}:`, (newVal) => {
+    const updatedBy = row.values?.[item.id]?.[`${field}UpdatedBy`];
+    const updatedAt = row.values?.[item.id]?.[`${field}UpdatedAt`];
+    let msg = `Nhập ${fieldName.toLowerCase()} cho ${item.name || (isAttendance ? 'tổ đội này' : 'vật tư này')}:`;
+    let historyInfo = null;
+    if (updatedBy && updatedAt) {
+      historyInfo = `Cập nhật bởi: ${updatedBy} lúc ${updatedAt}`;
+    }
+
+    openGlobalPrompt(msg, (newVal) => {
       if (newVal !== null) {
         handleUpdateCell(row.id, item.id, field, newVal);
       }
-    }, currentValue || '', 'Nhập liệu', 'text', true, null, null, 'Xóa', poOptions);
+    }, currentValue || '', 'Nhập liệu', 'text', true, null, null, 'Xóa', poOptions, historyInfo);
   };
 
   const addRow = () => {
@@ -290,6 +304,10 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       }
     }
 
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+    const userStr = currentUser?.name || currentUser?.username || 'Unknown';
+
     const newRowId = `row-${Date.now()}`;
     const values = {};
     materialItems.forEach(item => {
@@ -297,7 +315,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       if (q) {
         values[item.id] = {
           order: `${q} (${poName})`,
-          received: ''
+          received: '',
+          orderUpdatedBy: userStr,
+          orderUpdatedAt: timeStr
         };
       }
     });

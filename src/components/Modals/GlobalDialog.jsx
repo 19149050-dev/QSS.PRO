@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '@/store/useStore';
-import { AlertTriangle, CheckCircle, Info, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Info, X, Clock } from 'lucide-react';
 
 export default function GlobalDialog() {
   const { globalDialog, closeGlobalDialog } = useStore();
@@ -85,6 +85,13 @@ export default function GlobalDialog() {
               <p className="text-slate-600 text-sm whitespace-pre-wrap leading-relaxed">
                 {globalDialog.message}
               </p>
+
+              {globalDialog.historyInfo && (
+                <div className="mt-3 text-xs font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 border border-indigo-100 shadow-sm">
+                  <Clock className="w-3.5 h-3.5" /> 
+                  {globalDialog.historyInfo}
+                </div>
+              )}
               
               {globalDialog.type === 'prompt' && (
                 <div className="mt-4 space-y-3">
