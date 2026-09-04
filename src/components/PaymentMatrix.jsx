@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore, sortFloors } from '@/store/useStore';
-import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer } from 'lucide-react';
+import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
+import QuickEntryModal from '@/components/Modals/QuickEntryModal';
 
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
   const store = useStore();
@@ -54,7 +55,29 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     ? store.matrixBlocks[projectName] 
     : fallbackBlocks;
     
-  const matrixBlocks = rawBlocks;
+  const filterBlock = store.matrixFilterBlock[projectName] || 'ALL';
+  const filterGroup = store.matrixFilterGroup[projectName] || 'ALL';
+
+  const matrixBlocks = React.useMemo(() => {
+    return rawBlocks.map(block => {
+      if (filterBlock !== 'ALL' && block.blockName !== filterBlock) return null;
+      
+      const filteredGroups = block.groups.map(group => {
+        if (filterGroup !== 'ALL') {
+          const selectedGroups = filterGroup.split(',');
+          if (!selectedGroups.includes(group.groupName)) return null;
+        }
+        return group;
+      }).filter(Boolean);
+      
+      if (filteredGroups.length === 0) return null;
+      
+      return {
+        ...block,
+        groups: filteredGroups
+      };
+    }).filter(Boolean);
+  }, [rawBlocks, filterBlock, filterGroup]);
   
   const updateMatrixCell = (...args) => store.updateMatrixCell(matrixKey, ...args);
   const updateCategoryName = (...args) => store.updateCategoryName(projectName, ...args);
@@ -504,8 +527,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
       {/* Helper Toolbar */}
-      <div className="flex flex-wrap items-center justify-end gap-3 mb-4 text-xs no-print">
-        <button 
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs no-print">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <button 
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
         >
@@ -529,6 +553,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <span className="text-lg leading-none pb-0.5">+</span> Tạo BOQ Nhanh
         </button>
+        </div>
       </div>
 
       {/* Grid Container */}
@@ -1522,6 +1547,143 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export function PaymentMatrixFilters({ projectName, type = 'default' }) {
+  const store = useStore();
+  const rawBlocks = (store.matrixBlocks[projectName] && store.matrixBlocks[projectName].length > 0) 
+    ? store.matrixBlocks[projectName] 
+    : JSON.parse(JSON.stringify(store.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao' ? thachCaoBlocksTemplate : standardBlocksTemplate));
+    
+  const filterBlock = store.matrixFilterBlock[projectName] || 'ALL';
+  const filterGroup = store.matrixFilterGroup[projectName] || 'ALL';
+  const matrixKey = type === 'ipc' ? `${projectName}_ipc` : (type === 'team' || type === 'ipc_select') ? `${projectName}_team` : projectName;
+
+  const uniqueBlocks = React.useMemo(() => rawBlocks.map(b => b.blockName), [rawBlocks]);
+  const uniqueGroups = React.useMemo(() => {
+    const groups = new Set();
+    rawBlocks.forEach(b => {
+      if (filterBlock === 'ALL' || b.blockName === filterBlock) {
+        b.groups.forEach(g => groups.add(g.groupName));
+      }
+    });
+    return Array.from(groups);
+  }, [rawBlocks, filterBlock]);
+
+  const [isGroupOpen, setIsGroupOpen] = useState(false);
+  const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
+  const groupRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (groupRef.current && !groupRef.current.contains(event.target)) {
+        setIsGroupOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [groupRef]);
+
+  const selectedGroups = filterGroup === 'ALL' ? [] : filterGroup.split(',').filter(Boolean);
+
+  const toggleGroup = (grp) => {
+    let newGroups = [...selectedGroups];
+    if (newGroups.includes(grp)) {
+      newGroups = newGroups.filter(g => g !== grp);
+    } else {
+      newGroups.push(grp);
+    }
+    const newVal = newGroups.length === 0 ? 'ALL' : newGroups.join(',');
+    store.setMatrixFilter(projectName, filterBlock, newVal);
+  };
+
+  const handleSelectAllGroups = () => {
+    if (selectedGroups.length === uniqueGroups.length) {
+      store.setMatrixFilter(projectName, filterBlock, 'ALL');
+    } else {
+      store.setMatrixFilter(projectName, filterBlock, uniqueGroups.join(','));
+    }
+  };
+
+  const handleNhậpNhanh = () => {
+    setIsQuickEntryOpen(true);
+  };
+
+  return (
+    <div className="flex items-center gap-2 ml-auto z-50">
+      <select 
+        value={filterBlock} 
+        onChange={(e) => {
+          store.setMatrixFilter(projectName, e.target.value, 'ALL');
+        }}
+        className="px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs min-w-[150px] cursor-pointer"
+      >
+        <option value="ALL">Tất cả các Tháp</option>
+        {uniqueBlocks.map(b => (
+          <option key={b} value={b}>{b}</option>
+        ))}
+      </select>
+      
+      <div className="relative min-w-[180px]" ref={groupRef}>
+        <button
+          onClick={() => setIsGroupOpen(!isGroupOpen)}
+          className="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer hover:bg-gray-50"
+        >
+          <span className="truncate max-w-[140px]">
+            {filterGroup === 'ALL' || selectedGroups.length === 0
+              ? 'Tất cả Nhóm'
+              : selectedGroups.length === 1 ? selectedGroups[0] : `Đã chọn (${selectedGroups.length})`}
+          </span>
+          <ChevronDown className="w-4 h-4 ml-2 text-gray-500" />
+        </button>
+
+        {isGroupOpen && (
+          <div className="absolute top-full left-0 mt-1 w-[250px] bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50 flex flex-col max-h-[350px]">
+            <div className="p-2 border-b border-gray-100 bg-gray-50">
+              <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded text-xs font-bold text-gray-700">
+                <input 
+                  type="checkbox" 
+                  checked={selectedGroups.length > 0 && selectedGroups.length === uniqueGroups.length}
+                  onChange={handleSelectAllGroups}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Chọn tất cả
+              </label>
+            </div>
+            <div className="overflow-y-auto p-1 scrollbar-thin">
+              {uniqueGroups.map(g => (
+                <label key={g} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-indigo-50 rounded text-xs font-medium text-gray-700">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedGroups.includes(g)}
+                    onChange={() => toggleGroup(g)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {g}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <button 
+        onClick={handleNhậpNhanh}
+        className="px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-2xl text-xs font-bold shadow-xs transition-colors whitespace-nowrap flex items-center gap-1.5"
+      >
+        <Zap className="w-4 h-4 fill-indigo-600" />
+        Nhập nhanh
+      </button>
+
+      <QuickEntryModal 
+        isOpen={isQuickEntryOpen}
+        onClose={() => setIsQuickEntryOpen(false)}
+        projectName={projectName}
+        matrixKey={matrixKey}
+        rawBlocks={rawBlocks}
+      />
     </div>
   );
 }

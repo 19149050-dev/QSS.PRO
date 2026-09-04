@@ -59,6 +59,12 @@ export const useStore = create(
       paymentMatrix: initialPaymentMatrix,
       trashMatrix: {},
       matrixBlocks: defaultMatrixBlocksLocal,
+      matrixFilterBlock: {},
+      matrixFilterGroup: {},
+      setMatrixFilter: (projectName, block, group) => set((state) => ({
+        matrixFilterBlock: { ...state.matrixFilterBlock, [projectName]: block },
+        matrixFilterGroup: { ...state.matrixFilterGroup, [projectName]: group }
+      })),
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
       openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
       openGlobalConfirm: (message, onConfirm, title = 'Xác nhận') => set({ globalDialog: { isOpen: true, type: 'confirm', title, message, onConfirm } }),

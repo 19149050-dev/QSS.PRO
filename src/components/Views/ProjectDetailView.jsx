@@ -3,7 +3,7 @@
 import React from 'react';
 import Navbar from '@/components/Navbar';
 import { useStore } from '@/store/useStore';
-import PaymentMatrix from '@/components/PaymentMatrix';
+import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import { ArrowLeft, Building2, MapPin } from 'lucide-react';
 
 export default function ProjectDetailView() {
@@ -61,7 +61,8 @@ export default function ProjectDetailView() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="text-right">
+              <PaymentMatrixFilters projectName={proj.name} />
+              <div className="text-right ml-4">
                 <span className="text-[10px] uppercase font-bold text-gray-400">Tổng Giá Trị Hợp Đồng</span>
                 <h3 className="text-xl font-black text-indigo-700">{formatVND(proj.contractValue)}</h3>
               </div>

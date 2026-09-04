@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
-import PaymentMatrix from '@/components/PaymentMatrix';
+import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import AddTeamModal from '@/components/Modals/AddTeamModal';
 import AssignMemberModal from '@/components/Modals/AssignMemberModal';
 import { Plus, Users } from 'lucide-react';
@@ -81,6 +81,7 @@ export default function TeamsPage() {
               <Users className="w-4 h-4" />
               Phân bổ nhân viên
             </button>
+            <PaymentMatrixFilters projectName={selectedProject} />
           </div>
 
         </div>

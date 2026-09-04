@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState, useRef } from 'react';
 import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
-import PaymentMatrix from '@/components/PaymentMatrix';
+import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
 import EnterPOModal from '@/components/Modals/EnterPOModal';
 
@@ -945,12 +945,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                   </div>
                 </div>
               ) : (
-                <>
+                <div className="flex flex-col gap-4">
+                  <div className="flex justify-end">
+                    <PaymentMatrixFilters projectName={selectedProject} />
+                  </div>
                   <PaymentMatrix 
                     projectName={selectedProject} 
                     type={activeTab.type === 'team' ? 'ipc_select' : 'ipc'} 
                   />
-                </>
+                </div>
               )}
             </div>
           )}

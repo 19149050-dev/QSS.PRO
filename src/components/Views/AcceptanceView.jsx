@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import { useStore, useAllowedProjects } from '@/store/useStore';
-import PaymentMatrix from '@/components/PaymentMatrix';
+import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import { ShieldCheck, CheckCircle2, Clock, FileSpreadsheet, Search, Building2 } from 'lucide-react';
 
 export default function AcceptancePage() {
@@ -29,7 +29,8 @@ export default function AcceptancePage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs font-bold text-gray-700">Chọn dự án:</span>
+            <PaymentMatrixFilters projectName={selectedProject} />
+            <span className="text-xs font-bold text-gray-700 ml-4">Chọn dự án:</span>
             <select
               value={selectedProject}
               onChange={(e) => setSelectedProject(e.target.value)}
