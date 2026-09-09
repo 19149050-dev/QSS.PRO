@@ -820,8 +820,17 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                         if (selectedTeamFilter !== 'ALL') {
                           const teamParts = valForColor.split('+').filter(p => p.includes(`(${selectedTeamFilter})`));
                           valForColor = teamParts.join(' + ');
+                          
+                          if (valForColor) {
+                            bgColor = getCellColor(valForColor);
+                          } else if (rawVal) {
+                            bgColor = '#e2e8f0'; // gray for other teams
+                          } else {
+                            bgColor = '#f1f5f9'; // very light gray for completely empty cells so they know it's not their scope
+                          }
+                        } else {
+                          bgColor = getCellColor(rawVal);
                         }
-                        bgColor = getCellColor(valForColor || rawVal);
                       }
                       
                       return (
