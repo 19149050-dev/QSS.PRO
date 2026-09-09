@@ -1039,7 +1039,9 @@ export const useStore = create(
         const baseMatrix = state.paymentMatrix[projectName] || [];
         const teamMatrix = state.paymentMatrix[`${projectName}_team`] || [];
         const ipcMatrix = state.paymentMatrix[`${projectName}_ipc`] || [];
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         
         if (!floorName || baseMatrix.some(r => r.floor === floorName)) return state;
         
@@ -1272,7 +1274,9 @@ export const useStore = create(
       
       
       deleteCategoryName: (projectName, blockIdx, groupIdx, itemIdx) => { set((state) => {
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const blockName = newBlocks[blockIdx].blockName;
@@ -1282,23 +1286,32 @@ export const useStore = create(
         
         newBlocks[blockIdx].groups[groupIdx].items.splice(itemIdx, 1);
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          delete newItems[keyToDelete];
-          return { ...row, items: newItems };
-        });
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            delete newItems[keyToDelete];
+            return { ...row, items: newItems };
+          });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }, 
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix } 
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          } 
         };
       });
         get().syncMatrixDataToSupabase(projectName);
       },
 
       deleteGroupName: (projectName, blockIdx, groupIdx) => { set((state) => {
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const blockName = newBlocks[blockIdx].blockName;
@@ -1308,23 +1321,32 @@ export const useStore = create(
         const keysToDelete = items.map(item => `${blockName}_${groupName}_${item}`);
         newBlocks[blockIdx].groups.splice(groupIdx, 1);
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          keysToDelete.forEach(key => delete newItems[key]);
-          return { ...row, items: newItems };
-        });
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            keysToDelete.forEach(key => delete newItems[key]);
+            return { ...row, items: newItems };
+          });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks },
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix }
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          }
         };
       });
         get().syncMatrixDataToSupabase(projectName);
       },
 
       deleteBlockName: (projectName, blockIdx) => { set((state) => {
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const blockName = newBlocks[blockIdx].blockName;
@@ -1339,16 +1361,23 @@ export const useStore = create(
         
         newBlocks.splice(blockIdx, 1);
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          keysToDelete.forEach(key => delete newItems[key]);
-          return { ...row, items: newItems };
-        });
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            keysToDelete.forEach(key => delete newItems[key]);
+            return { ...row, items: newItems };
+          });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks },
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix }
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          }
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1356,7 +1385,9 @@ export const useStore = create(
 
       updateCategoryName: (projectName, blockIdx, groupIdx, itemIdx, oldName, newName) => { set((state) => {
         if (!newName || oldName === newName) return state;
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const blockName = newBlocks[blockIdx].blockName;
@@ -1394,7 +1425,9 @@ export const useStore = create(
 
       updateGroupName: (projectName, blockIdx, groupIdx, newName) => { set((state) => {
         if (!newName) return state;
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const blockName = newBlocks[blockIdx].blockName;
@@ -1432,7 +1465,9 @@ export const useStore = create(
 
       updateBlockName: (projectName, blockIdx, newName) => { set((state) => {
         if (!newName) return state;
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         
         const oldBlockName = newBlocks[blockIdx].blockName;
@@ -1471,7 +1506,9 @@ export const useStore = create(
 
       addBOQNode: (projectName, blockName, groupName, itemName) => { set((state) => {
         if (!blockName || !groupName || !itemName) return state;
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         let block = newBlocks.find(b => b.blockName === blockName);
         if (!block) {
@@ -1568,22 +1605,25 @@ export const useStore = create(
         });
 
         const blockName = newBlocks[blockIdx].blockName;
-        const matrix = state.paymentMatrix[projectName] || state.paymentMatrix[`${projectName}_team`] || standardFloorsTemplate;
-        const newMatrix = matrix.map(row => {
-          const newItems = { ...row.items };
-          initialItems.forEach(step => {
-            const key = `${blockName}_${groupName}_${step}`;
-            if (newItems[key] === undefined) newItems[key] = '';
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || (matrixKey === projectName ? standardFloorsTemplate : []);
+          return matrix.map(row => {
+            const newItems = { ...row.items };
+            initialItems.forEach(step => {
+              const key = `${blockName}_${groupName}_${step}`;
+              if (newItems[key] === undefined) newItems[key] = '';
+            });
+            return { ...row, items: newItems };
           });
-          return { ...row, items: newItems };
-        });
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks },
           paymentMatrix: { 
             ...state.paymentMatrix, 
-            [projectName]: newMatrix,
-            [`${projectName}_team`]: newMatrix
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
           } 
         };
       });
@@ -1592,7 +1632,9 @@ export const useStore = create(
 
       addCategoryItem: (projectName, blockIdx, groupIdx, itemName) => { set((state) => {
         if (!itemName) return state;
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         const newBlocks = JSON.parse(JSON.stringify(blocks));
         if (newBlocks[blockIdx].groups[groupIdx].items.includes(itemName)) return state;
         
@@ -1602,15 +1644,22 @@ export const useStore = create(
         const groupName = newBlocks[blockIdx].groups[groupIdx].groupName;
         const newKey = `${blockName}_${groupName}_${itemName}`;
         
-        const matrix = state.paymentMatrix[projectName] || [];
-        const newMatrix = matrix.map(row => ({
-          ...row,
-          items: { ...row.items, [newKey]: '' }
-        }));
+        const updateMatrix = (matrixKey) => {
+          const matrix = state.paymentMatrix[matrixKey] || [];
+          return matrix.map(row => ({
+            ...row,
+            items: { ...row.items, [newKey]: '' }
+          }));
+        };
 
         return { 
           matrixBlocks: { ...state.matrixBlocks, [projectName]: newBlocks }, 
-          paymentMatrix: { ...state.paymentMatrix, [projectName]: newMatrix } 
+          paymentMatrix: { 
+            ...state.paymentMatrix, 
+            [projectName]: updateMatrix(projectName),
+            [`${projectName}_team`]: updateMatrix(`${projectName}_team`),
+            [`${projectName}_ipc`]: updateMatrix(`${projectName}_ipc`)
+          } 
         };
       });
         get().syncMatrixDataToSupabase(projectName);
@@ -1863,7 +1912,9 @@ export const useStore = create(
         const project = state.projects.find(p => p.name === projectName);
         if (!project) return;
         
-        const blocks = state.matrixBlocks[projectName] || [];
+        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         
         // Safety check: Prevent saving empty base matrix if blocks exist
         const baseData = state.paymentMatrix[projectName];

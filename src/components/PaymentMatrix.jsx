@@ -97,6 +97,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const deleteMultipleFloors = (floorNames) => store.deleteMultipleFloors(projectName, floorNames);
   const updateBlockName = (...args) => store.updateBlockName(projectName, ...args);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
+  const [showTeamNames, setShowTeamNames] = useState(true);
   const [selectedCell, setSelectedCell] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [batchList, setBatchList] = useState([]);
@@ -391,8 +392,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       } else {
         return '';
       }
-    } else if (type === 'ipc_select' || type === 'ipc') {
-      // In IPC mode with ALL teams, strip all team names
+    } else if ((type === 'team' && team === 'ALL' && !showTeamNames) || type === 'ipc_select' || type === 'ipc') {
+      // In IPC mode with ALL teams, or when team names are hidden, strip all team names
       store.teams.forEach(t => {
         const escapedTeamName = t.teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
@@ -553,6 +554,16 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <span className="text-lg leading-none pb-0.5">+</span> Tạo BOQ Nhanh
         </button>
+        {type === 'team' && selectedTeamFilter === 'ALL' && (
+          <button
+            onClick={() => setShowTeamNames(!showTeamNames)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${showTeamNames ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}
+            title="Ẩn/Hiện tên đội trong bảng TỔNG"
+          >
+            {showTeamNames ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            {showTeamNames ? 'Ẩn tên' : 'Hiện tên'}
+          </button>
+        )}
         </div>
       </div>
 
