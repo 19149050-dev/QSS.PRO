@@ -666,10 +666,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       key={gIdx} 
                       colSpan={visCount} 
                       onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)}
-                      className="header-orange text-[10px] uppercase font-bold py-1 px-2 whitespace-nowrap border-r border-orange-200/50 cursor-pointer hover:bg-orange-200/50 transition-colors relative group/col"
+                      className="header-orange text-[10px] uppercase font-bold py-1 px-1 whitespace-normal break-words text-center border-r border-orange-200/50 cursor-pointer hover:bg-orange-200/50 transition-colors relative group/col"
                       title="Bấm đúp để sửa tên nhóm"
                     >
-                      <div className="flex justify-center items-center relative h-full px-4 w-full">
+                      <div className="flex justify-center items-center relative h-full px-1 w-full">
                         {gIdx > 0 && (
                           <button 
                             type="button"
