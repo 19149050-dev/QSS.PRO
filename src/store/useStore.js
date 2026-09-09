@@ -1599,10 +1599,16 @@ export const useStore = create(
         const isThachCao = project?.projectType?.trim() === 'Thạch cao';
         const initialItems = isThachCao ? [] : ['BẢ LỚP 1', 'BẢ LỚP 2', 'XẢ NHÁM', 'SƠN LÓT', 'SƠN PHỦ 1', 'SƠN PHỦ 2'];
 
-        newBlocks[blockIdx].groups.push({
-          groupName,
-          items: initialItems
-        });
+        const existingGroup = newBlocks[blockIdx].groups.find(g => g.groupName.trim() === groupName.trim());
+        if (existingGroup) {
+          // If exists, just merge items
+          existingGroup.items = [...new Set([...existingGroup.items, ...initialItems])];
+        } else {
+          newBlocks[blockIdx].groups.push({
+            groupName: groupName.trim(),
+            items: initialItems
+          });
+        }
 
         const blockName = newBlocks[blockIdx].blockName;
         const updateMatrix = (matrixKey) => {
@@ -1757,7 +1763,25 @@ export const useStore = create(
             const notesObj = {};
             projectsData.forEach(p => {
               if (p.notes) notesObj[p.name] = p.notes;
-              if (p.matrix_blocks) blocks[p.name] = p.matrix_blocks;
+              if (p.matrix_blocks) {
+                const sanitizeBlocks = (blks) => {
+                  if (!Array.isArray(blks)) return blks;
+                  return blks.map(block => {
+                    const uniqueGroupsMap = new Map();
+                    (block.groups || []).forEach(g => {
+                      const name = g.groupName?.trim() || 'UNNAMED';
+                      if (uniqueGroupsMap.has(name)) {
+                        const existing = uniqueGroupsMap.get(name);
+                        existing.items = [...new Set([...existing.items, ...(g.items || [])])];
+                      } else {
+                        uniqueGroupsMap.set(name, { groupName: name, items: [...(g.items || [])] });
+                      }
+                    });
+                    return { ...block, groups: Array.from(uniqueGroupsMap.values()) };
+                  });
+                };
+                blocks[p.name] = sanitizeBlocks(p.matrix_blocks);
+              }
               if (p.matrix_data) {
                 if (Array.isArray(p.matrix_data)) {
                   matrix[p.name] = p.matrix_data;
