@@ -80,23 +80,35 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     }).filter(Boolean);
   }, [rawBlocks, filterBlock, filterGroup]);
   
+  const getRealIndices = (bIdx, gIdx = null) => {
+    const block = matrixBlocks[bIdx];
+    if (!block) return { rbIdx: bIdx, rgIdx: gIdx };
+    const rbIdx = rawBlocks.findIndex(b => b.blockName === block.blockName);
+    let rgIdx = gIdx;
+    if (gIdx !== null && block.groups[gIdx]) {
+      const group = block.groups[gIdx];
+      rgIdx = rawBlocks[rbIdx]?.groups?.findIndex(g => g.groupName === group.groupName) ?? gIdx;
+    }
+    return { rbIdx: rbIdx !== -1 ? rbIdx : bIdx, rgIdx: rgIdx !== -1 ? rgIdx : gIdx };
+  };
+
   const updateMatrixCell = (...args) => store.updateMatrixCell(matrixKey, ...args);
-  const updateCategoryName = (...args) => store.updateCategoryName(projectName, ...args);
-  const deleteCategoryName = (...args) => store.deleteCategoryName(projectName, ...args);
-  const deleteGroupName = (...args) => store.deleteGroupName(projectName, ...args);
-  const deleteBlockName = (...args) => store.deleteBlockName(projectName, ...args);
-  const updateGroupName = (...args) => store.updateGroupName(projectName, ...args);
-  const addCategoryGroup = (...args) => store.addCategoryGroup(projectName, ...args);
-  const addCategoryItem = (...args) => store.addCategoryItem(projectName, ...args);
-  const moveGroup = (...args) => store.moveGroup(projectName, ...args);
-  const moveCategoryItem = (...args) => store.moveCategoryItem(projectName, ...args);
+  const updateCategoryName = (bIdx, gIdx, ...args) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.updateCategoryName(projectName, rbIdx, rgIdx, ...args); };
+  const deleteCategoryName = (bIdx, gIdx, ...args) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.deleteCategoryName(projectName, rbIdx, rgIdx, ...args); };
+  const deleteGroupName = (bIdx, gIdx) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.deleteGroupName(projectName, rbIdx, rgIdx); };
+  const deleteBlockName = (bIdx) => { const { rbIdx } = getRealIndices(bIdx); store.deleteBlockName(projectName, rbIdx); };
+  const updateGroupName = (bIdx, gIdx, ...args) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.updateGroupName(projectName, rbIdx, rgIdx, ...args); };
+  const addCategoryGroup = (bIdx, ...args) => { const { rbIdx } = getRealIndices(bIdx); store.addCategoryGroup(projectName, rbIdx, ...args); };
+  const addCategoryItem = (bIdx, gIdx, ...args) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.addCategoryItem(projectName, rbIdx, rgIdx, ...args); };
+  const moveGroup = (bIdx, gIdx, direction) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.moveGroup(projectName, rbIdx, rgIdx, direction); };
+  const moveCategoryItem = (bIdx, gIdx, iIdx, direction) => { const { rbIdx, rgIdx } = getRealIndices(bIdx, gIdx); store.moveCategoryItem(projectName, rbIdx, rgIdx, iIdx, direction); };
+  const updateBlockName = (bIdx, ...args) => { const { rbIdx } = getRealIndices(bIdx); store.updateBlockName(projectName, rbIdx, ...args); };
   const addFloor = (...args) => store.addFloor(projectName, ...args);
   const updateFloorName = (...args) => store.updateFloorName(projectName, ...args);
   const updateFloorNumApts = (...args) => store.updateFloorNumApts(projectName, ...args);
   const deleteFloor = (...args) => store.deleteFloor(projectName, ...args);
   const deleteAllFloors = () => store.deleteAllFloors(projectName);
   const deleteMultipleFloors = (floorNames) => store.deleteMultipleFloors(projectName, floorNames);
-  const updateBlockName = (...args) => store.updateBlockName(projectName, ...args);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
   const [showTeamNames, setShowTeamNames] = useState(true);
   const [selectedCell, setSelectedCell] = useState(null);
