@@ -2,8 +2,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore, sortFloors } from '@/store/useStore';
-import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap } from 'lucide-react';
+import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap, Upload } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
+import { parseExcelFile } from '@/utils/importUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import QuickEntryModal from '@/components/Modals/QuickEntryModal';
 
@@ -103,6 +104,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [batchList, setBatchList] = useState([]);
   const [newBatchName, setNewBatchName] = useState('');
   const [newBatchUnits, setNewBatchUnits] = useState('');
+  const fileInputRef = useRef(null);
+
+  const [contextMenu, setContextMenu] = useState(null);
   const [newBatchNote, setNewBatchNote] = useState('');
   const [unitError, setUnitError] = useState('');
   const [activeTeam, setActiveTeam] = useState('');
@@ -118,8 +122,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [isDeleteFloorsModalOpen, setIsDeleteFloorsModalOpen] = useState(false);
   const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
   
-  // Paste mode states
-  const [contextMenu, setContextMenu] = useState(null);
   const [copiedValue, setCopiedValue] = useState(null);
 
   React.useEffect(() => {
@@ -521,6 +523,26 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     exportToExcel(exportData, title, 'DuLieu');
   };
 
+  const handleImportExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      store.openGlobalAlert('⏳ Đang xử lý file Excel, vui lòng chờ...');
+      const importedData = await parseExcelFile(file);
+      if (importedData && importedData.length > 0) {
+        store.importPaymentMatrix(projectName, type, importedData);
+        store.openGlobalAlert('✅ Khôi phục dữ liệu từ Excel thành công! Hãy tải lại trang (F5) nếu thấy cột chưa hiển thị đủ.');
+      } else {
+        store.openGlobalAlert('⚠️ File Excel không có dữ liệu hoặc sai định dạng.');
+      }
+    } catch (err) {
+      console.error(err);
+      store.openGlobalAlert('❌ Lỗi khi đọc file Excel: ' + err.message);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handlePrint = () => {
     window.print();
   };
@@ -535,6 +557,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
         >
           <Printer className="w-4 h-4" /> In Bảng
+        </button>
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg border border-amber-200 shadow-sm transition-colors"
+          title="Nhập lại dữ liệu đã xuất từ file Excel để khôi phục"
+        >
+          <Upload className="w-4 h-4" /> Nhập Excel
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleImportExcel}
+            accept=".xlsx, .xls"
+            className="hidden"
+          />
         </button>
         <button 
           onClick={handleExportExcel}
