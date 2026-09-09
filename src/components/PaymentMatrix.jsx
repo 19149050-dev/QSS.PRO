@@ -824,9 +824,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                           if (valForColor) {
                             bgColor = getCellColor(valForColor);
                           } else if (rawVal) {
-                            bgColor = '#e2e8f0'; // gray for other teams
+                            bgColor = '#94a3b8'; // darker gray (slate-400) for other teams
                           } else {
-                            bgColor = '#f1f5f9'; // very light gray for completely empty cells so they know it's not their scope
+                            bgColor = '#cbd5e1'; // darker gray (slate-300) for completely empty cells
                           }
                         } else {
                           bgColor = getCellColor(rawVal);
