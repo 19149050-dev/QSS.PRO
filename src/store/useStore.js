@@ -1982,17 +1982,36 @@ export const useStore = create(
 
       importPaymentMatrix: (projectName, matrixType, importedData) => { set((state) => {
         const matrixKey = matrixType === 'base' ? projectName : `${projectName}_${matrixType}`;
-        const existingMatrix = state.paymentMatrix[matrixKey] || [];
         
-        const newMatrix = existingMatrix.map(row => {
-          const importRow = importedData.find(r => String(r['Tầng']).trim() === String(row.floor).trim());
-          if (!importRow) return row;
+        // 1. Reconstruct base matrix to ensure it has all floors and numApts
+        const baseMatrix = state.paymentMatrix[projectName] || [];
+        const newBaseMatrix = [...baseMatrix];
+        
+        importedData.forEach(importRow => {
+          const floorName = String(importRow['Tầng']).trim();
+          if (!floorName || floorName === 'undefined') return;
           
-          const newItems = { ...row.items };
+          const numApts = importRow['Số căn'] && importRow['Số căn'] !== '-' ? String(importRow['Số căn']) : '';
+          
+          const existingIdx = newBaseMatrix.findIndex(r => String(r.floor).trim() === floorName);
+          if (existingIdx !== -1) {
+             if (numApts) newBaseMatrix[existingIdx] = { ...newBaseMatrix[existingIdx], numApts };
+          } else {
+             newBaseMatrix.push({ floor: floorName, numApts, items: {} });
+          }
+        });
+
+        // 2. Reconstruct target matrix (team/ipc/base)
+        const targetMatrix = state.paymentMatrix[matrixKey] || [];
+        const newTargetMatrix = [...targetMatrix];
+        
+        importedData.forEach(importRow => {
+          const floorName = String(importRow['Tầng']).trim();
+          if (!floorName || floorName === 'undefined') return;
+          
+          const newItems = {};
           Object.keys(importRow).forEach(colName => {
              if (colName === 'Tầng' || colName === 'Số căn') return;
-             
-             // Convert "BLOCK A - MẶT NGOÀI - BẢ LỚP 1" -> "BLOCK A_MẶT NGOÀI_BẢ LỚP 1"
              const parts = colName.split(' - ');
              if (parts.length >= 3) {
                const key = parts.map(p => p.trim()).join('_');
@@ -2002,17 +2021,25 @@ export const useStore = create(
              }
           });
           
-          return {
-            ...row,
-            numApts: importRow['Số căn'] && importRow['Số căn'] !== '-' ? importRow['Số căn'] : row.numApts,
-            items: newItems
-          };
+          const numApts = importRow['Số căn'] && importRow['Số căn'] !== '-' ? String(importRow['Số căn']) : '';
+          const existingIdx = newTargetMatrix.findIndex(r => String(r.floor).trim() === floorName);
+          
+          if (existingIdx !== -1) {
+             newTargetMatrix[existingIdx] = {
+               ...newTargetMatrix[existingIdx],
+               numApts: numApts || newTargetMatrix[existingIdx].numApts,
+               items: { ...newTargetMatrix[existingIdx].items, ...newItems }
+             };
+          } else {
+             newTargetMatrix.push({ floor: floorName, numApts, items: newItems });
+          }
         });
         
         return {
           paymentMatrix: {
             ...state.paymentMatrix,
-            [matrixKey]: newMatrix
+            [projectName]: newBaseMatrix,
+            [matrixKey]: newTargetMatrix
           }
         };
       });
