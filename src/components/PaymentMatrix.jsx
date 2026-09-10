@@ -136,6 +136,84 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   
   const [copiedValue, setCopiedValue] = useState(null);
   const [quickNumAptsByBlock, setQuickNumAptsByBlock] = useState({});
+  const [topQuickAptsBlock, setTopQuickAptsBlock] = useState('');
+  const [topQuickAptsValue, setTopQuickAptsValue] = useState('');
+  const [topQuickAptsFloor, setTopQuickAptsFloor] = useState('ALL');
+  const [isQuickAptsMenuOpen, setIsQuickAptsMenuOpen] = useState(false);
+  const quickAptsMenuRef = useRef(null);
+
+  const [isFloorNumAptsModalOpen, setIsFloorNumAptsModalOpen] = useState(false);
+  const [floorNumAptsData, setFloorNumAptsData] = useState({ floor: '', apts: {} });
+
+  const handleOpenFloorNumApts = (floor) => {
+    const apts = {};
+    const row = paymentMatrix.find(r => r.floor === floor);
+    if (row) {
+      matrixBlocks.forEach(b => {
+        apts[b.blockName] = row.items[`${b.blockName}_numApts`] || '';
+      });
+    }
+    setFloorNumAptsData({ floor, apts });
+    setIsFloorNumAptsModalOpen(true);
+  };
+
+  const handleSaveFloorNumApts = () => {
+    Object.entries(floorNumAptsData.apts).forEach(([blockName, val]) => {
+      store.updateMatrixCell(matrixKey, floorNumAptsData.floor, `${blockName}_numApts`, val.trim());
+    });
+    setIsFloorNumAptsModalOpen(false);
+    store.openGlobalAlert(`Đã lưu số căn cho ${floorNumAptsData.floor}`);
+  };
+
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (quickAptsMenuRef.current && !quickAptsMenuRef.current.contains(event.target)) {
+        setIsQuickAptsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (matrixBlocks.length > 0 && !topQuickAptsBlock) {
+      setTopQuickAptsBlock(matrixBlocks[0].blockName);
+    }
+  }, [matrixBlocks, topQuickAptsBlock]);
+
+  const handleApplyTopQuickNumApts = () => {
+    if (!topQuickAptsBlock || !topQuickAptsValue.trim()) return;
+    
+    let count = 0;
+    paymentMatrix.forEach(row => {
+      if (topQuickAptsFloor !== 'ALL' && row.floor !== topQuickAptsFloor) return;
+
+      const isBasement = String(row.floor).toUpperCase().trim().startsWith('B') || 
+                         String(row.floor).toUpperCase().trim().includes('HẦM') || 
+                         String(row.floor).toUpperCase().trim().includes('HAM');
+      if (topQuickAptsFloor === 'ALL' && isBasement) return; // Only skip basements if applying to ALL
+
+      const numAptsKey = `${topQuickAptsBlock}_numApts`;
+      const currentVal = row.items[numAptsKey];
+      
+      if (topQuickAptsFloor !== 'ALL' || !currentVal) {
+        store.updateMatrixCell(matrixKey, row.floor, numAptsKey, topQuickAptsValue.trim());
+        count++;
+      }
+    });
+    if (count > 0) {
+      if (topQuickAptsFloor === 'ALL') {
+        store.openGlobalAlert(`Đã áp dụng số căn "${topQuickAptsValue.trim()}" cho ${count} ô trống của tháp ${topQuickAptsBlock}.`);
+      } else {
+        store.openGlobalAlert(`Đã cập nhật số căn cho ${topQuickAptsFloor} - tháp ${topQuickAptsBlock}.`);
+      }
+    } else {
+      store.openGlobalAlert(`Không có ô nào được cập nhật.`);
+    }
+    setTopQuickAptsValue('');
+  };
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -629,6 +707,89 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <span className="text-lg leading-none pb-0.5">+</span> Tạo BOQ Nhanh
         </button>
+        {type === 'team' && (
+          <>
+            <div className="relative" ref={quickAptsMenuRef}>
+              <button 
+                onClick={() => setIsQuickAptsMenuOpen(!isQuickAptsMenuOpen)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${isQuickAptsMenuOpen ? 'bg-indigo-100 text-indigo-800 border-indigo-300' : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border-gray-200'}`}
+              >
+                <Zap className="w-4 h-4" /> Số căn nhanh
+              </button>
+              
+              {isQuickAptsMenuOpen && (
+                <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] p-4 w-[320px]">
+                  <div className="text-sm font-extrabold text-gray-800 mb-4 flex items-center justify-between border-b border-gray-100 pb-2">
+                    <span>Áp dụng số căn nhanh</span>
+                    <button onClick={() => setIsQuickAptsMenuOpen(false)} className="text-gray-400 hover:text-gray-600 bg-gray-50 hover:bg-gray-100 p-1.5 rounded-full transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-4">
+                    <div>
+                      <label className="block text-[11px] text-gray-500 font-bold mb-1.5">CHỌN TẦNG</label>
+                      <select 
+                        value={topQuickAptsFloor} 
+                        onChange={(e) => setTopQuickAptsFloor(e.target.value)} 
+                        className="w-full px-3 py-2 text-sm font-bold border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      >
+                        <option value="ALL">Tất cả tầng (chỉ điền ô trống)</option>
+                        {paymentMatrix.map(row => <option key={row.floor} value={row.floor}>{row.floor}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 font-bold mb-1.5">CHỌN THÁP (BLOCK)</label>
+                      <select 
+                        value={topQuickAptsBlock} 
+                        onChange={(e) => setTopQuickAptsBlock(e.target.value)} 
+                        className="w-full px-3 py-2 text-sm font-bold border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                      >
+                         {matrixBlocks.map(b => <option key={b.blockName} value={b.blockName}>{b.blockName}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-gray-500 font-bold mb-1.5">SỐ CĂN (VD: 10)</label>
+                      <input 
+                        type="text" 
+                        value={topQuickAptsValue} 
+                        onChange={(e) => setTopQuickAptsValue(e.target.value)} 
+                        className="w-full px-3 py-2 text-sm font-bold border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50" 
+                        placeholder="Nhập số lượng căn..." 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            handleApplyTopQuickNumApts();
+                            setIsQuickAptsMenuOpen(false);
+                          }
+                        }}
+                      />
+                    </div>
+                    <button 
+                      onClick={() => {
+                        handleApplyTopQuickNumApts();
+                        setIsQuickAptsMenuOpen(false);
+                      }} 
+                      className="w-full mt-2 px-3 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-sm transition-colors shadow-md flex items-center justify-center gap-2"
+                    >
+                      <Zap className="w-4 h-4" /> Áp dụng ngay
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <button 
+              onClick={handleAddFloor}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-lg border border-blue-200 shadow-sm transition-colors"
+            >
+              <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng
+            </button>
+            <button 
+              onClick={openDeleteFloorsModal}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 font-bold rounded-lg border border-red-200 shadow-sm transition-colors"
+            >
+              <Trash2 className="w-4 h-4" /> Xóa Tầng
+            </button>
+          </>
+        )}
         {type === 'team' && selectedTeamFilter === 'ALL' && (
           <button
             onClick={() => setShowTeamNames(!showTeamNames)}
@@ -884,7 +1045,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                               floor: row.floor,
                               itemKey,
                               rawVal,
-                              blockNumApts: blockNumApts || row.numApts
+                              blockNumApts: row.numApts
                             });
                           }}
                           onClick={() => {
@@ -981,71 +1142,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                 })}
               </tr>
             ))}
-            {type === 'team' && (
-              <tr className="sticky bottom-0 z-20 shadow-[0_-2px_5px_-2px_rgba(0,0,0,0.1)] bg-white">
-                <td className="py-2 px-2 border-t border-r border-gray-200 bg-gray-50/50 text-left sticky left-0 z-30">
-                  <div className="flex flex-col gap-2">
-                    <button 
-                      onClick={handleAddFloor}
-                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-[10px]"
-                    >
-                      <span className="text-sm leading-none pb-0.5">+</span> Thêm Tầng
-                    </button>
-                    <button 
-                      onClick={openDeleteFloorsModal}
-                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 font-bold rounded-lg border border-red-200 transition-colors shadow-sm text-[10px]"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tầng
-                    </button>
-                  </div>
-                </td>
-                {matrixBlocks.flatMap((block, bIdx) => {
-                  const hasVisibleCols = block.groups.some(g => {
-                    const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
-                    return visG.length > 0 || g.items.length === 0;
-                  });
-                  
-                  if (!hasVisibleCols) return null;
-                  
-                  const emptyGroupCells = block.groups.flatMap((group, gIdx) => {
-                    const visItems = group.items.filter(cat => isColumnVisible(`${block.blockName}_${group.groupName}_${cat}`));
-                    if (visItems.length === 0 && group.items.length > 0) return [];
-                    
-                    if (visItems.length === 0 && group.items.length === 0) {
-                      return [<td key={`empty-g-${bIdx}-${gIdx}-none`} className="border-t border-r border-gray-200 bg-gray-50/50"></td>];
-                    }
-                    
-                    return visItems.map((cat, cIdx) => (
-                      <td key={`empty-g-${bIdx}-${gIdx}-${cIdx}`} className="border-t border-r border-gray-200 bg-gray-50/50"></td>
-                    ));
-                  });
-
-                  return [
-                    <td key={`quick-${bIdx}`} className="py-2 px-1 border-t border-r border-gray-200 bg-gray-50/50 text-center align-top">
-                      <div className="flex flex-col items-center gap-1">
-                        <input 
-                          type="text"
-                          value={quickNumAptsByBlock[block.blockName] || ''}
-                          onChange={(e) => setQuickNumAptsByBlock(prev => ({...prev, [block.blockName]: e.target.value}))}
-                          placeholder="Số căn..."
-                          className="px-1.5 py-1.5 border border-gray-300 rounded text-[10px] w-full min-w-[50px] text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleApplyQuickNumApts(block.blockName);
-                          }}
-                        />
-                        <button 
-                          onClick={() => handleApplyQuickNumApts(block.blockName)}
-                          className="px-2 py-1 text-white bg-indigo-600 hover:bg-indigo-700 font-bold rounded transition-colors text-[9px] w-full whitespace-nowrap shadow-sm"
-                        >
-                          Áp dụng
-                        </button>
-                      </div>
-                    </td>,
-                    ...emptyGroupCells
-                  ];
-                })}
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
@@ -1549,6 +1645,56 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       )}
 
       {/* Modal Ẩn / Hiện Cột */}
+      {isFloorNumAptsModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[24px] p-6 w-full max-w-[320px] shadow-2xl border border-gray-100">
+            <h3 className="text-lg font-extrabold text-indigo-900 mb-2 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" /> 
+              Số căn - {floorNumAptsData.floor}
+            </h3>
+            <p className="text-xs text-gray-500 mb-4">Nhập số căn của từng Block cho tầng này</p>
+            
+            <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-1">
+              {matrixBlocks.map((b, idx) => (
+                <div key={idx} className="flex items-center justify-between gap-3 bg-gray-50 p-2 rounded-xl border border-gray-100">
+                  <span className="text-xs font-bold text-gray-700">{b.blockName}</span>
+                  <input
+                    type="text"
+                    value={floorNumAptsData.apts[b.blockName] || ''}
+                    onChange={(e) => setFloorNumAptsData({ 
+                      ...floorNumAptsData, 
+                      apts: { ...floorNumAptsData.apts, [b.blockName]: e.target.value } 
+                    })}
+                    placeholder="VD: 10"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveFloorNumApts();
+                    }}
+                    className="w-[80px] px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-sm font-semibold text-center text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsFloorNumAptsModalOpen(false)}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-bold text-xs transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveFloorNumApts}
+                className="px-5 py-2 rounded-xl font-bold text-xs text-white shadow-md transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20"
+              >
+                Lưu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {isColumnModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-[24px] p-6 w-full max-w-lg shadow-2xl border border-gray-100">
