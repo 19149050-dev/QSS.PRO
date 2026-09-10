@@ -823,12 +823,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Vật tư chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
-                                  const isShort = remaining > 0;
+                                  let bgColorClass = 'bg-green-400';
+                                  if (remaining > 0) bgColorClass = 'bg-red-400';
+                                  else if (remaining < 0) bgColorClass = 'bg-orange-400';
                                   return (
                                     <td
                                       key={`${item.id}-remaining`}
                                       colSpan={2}
-                                      className={`border border-slate-800 p-2 ${isShort ? 'bg-red-400 text-white' : 'bg-green-400 text-white'}`}
+                                      className={`border border-slate-800 p-2 ${bgColorClass} text-white`}
                                     >
                                       {remaining}
                                     </td>

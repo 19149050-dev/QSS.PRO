@@ -110,7 +110,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const deleteAllFloors = () => store.deleteAllFloors(projectName);
   const deleteMultipleFloors = (floorNames) => store.deleteMultipleFloors(projectName, floorNames);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
-  const [showTeamNames, setShowTeamNames] = useState(true);
+  const [showTeamNames, setShowTeamNames] = useState(false);
   const [selectedCell, setSelectedCell] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [batchList, setBatchList] = useState([]);
@@ -135,6 +135,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
   
   const [copiedValue, setCopiedValue] = useState(null);
+  const [quickNumAptsByBlock, setQuickNumAptsByBlock] = useState({});
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -339,6 +340,32 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const openDeleteFloorsModal = () => {
     setSelectedFloorsToDelete([]);
     setIsDeleteFloorsModalOpen(true);
+  };
+
+  const handleApplyQuickNumApts = (blockName) => {
+    const val = (quickNumAptsByBlock[blockName] || '').trim();
+    if (!val) return;
+    
+    let count = 0;
+    paymentMatrix.forEach(row => {
+      const isBasement = String(row.floor).toUpperCase().trim().startsWith('B') || 
+                         String(row.floor).toUpperCase().trim().includes('HẦM') || 
+                         String(row.floor).toUpperCase().trim().includes('HAM');
+      if (isBasement) return; // Bỏ qua tầng hầm
+
+      const numAptsKey = `${blockName}_numApts`;
+      const currentVal = row.items[numAptsKey];
+      if (!currentVal) {
+        store.updateMatrixCell(matrixKey, row.floor, numAptsKey, val);
+        count++;
+      }
+    });
+    if (count > 0) {
+      store.openGlobalAlert(`Đã áp dụng số căn "${val}" cho ${count} ô trống của tháp ${blockName}.`);
+    } else {
+      store.openGlobalAlert(`Không tìm thấy ô trống nào để áp dụng cho tháp ${blockName}.`);
+    }
+    setQuickNumAptsByBlock(prev => ({ ...prev, [blockName]: '' }));
   };
 
   const allCategories = matrixBlocks.flatMap(b => b.groups.flatMap(g => g.items));
@@ -616,7 +643,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       </div>
 
       {/* Grid Container */}
-      <div className="overflow-x-auto overflow-y-auto max-h-[75vh] rounded-xl border border-gray-300 shadow-inner relative"
+      <div className="overflow-x-auto overflow-y-auto max-h-[75vh] w-full rounded-xl border border-gray-300 shadow-inner relative"
            onClick={() => setContextMenu(null)}
            onScroll={() => setContextMenu(null)}
       >
@@ -955,26 +982,68 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               </tr>
             ))}
             {type === 'team' && (
-              <tr>
-                <td 
-                  colSpan={matrixBlocks.reduce((acc, block) => acc + block.groups.reduce((gAcc, g) => gAcc + Math.max(g.items.length, 1), 0), 0) + 2} 
-                  className="py-2 px-2 border-t border-gray-200 bg-gray-50/50 text-left"
-                >
-                  <div className="flex gap-2">
+              <tr className="sticky bottom-0 z-20 shadow-[0_-2px_5px_-2px_rgba(0,0,0,0.1)] bg-white">
+                <td className="py-2 px-2 border-t border-r border-gray-200 bg-gray-50/50 text-left sticky left-0 z-30">
+                  <div className="flex flex-col gap-2">
                     <button 
                       onClick={handleAddFloor}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-xs"
+                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 transition-colors shadow-sm text-[10px]"
                     >
-                      <span className="text-lg leading-none pb-0.5">+</span> Thêm Tầng Mới
+                      <span className="text-sm leading-none pb-0.5">+</span> Thêm Tầng
                     </button>
                     <button 
                       onClick={openDeleteFloorsModal}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 font-bold rounded-lg border border-red-200 transition-colors shadow-sm text-xs"
+                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 font-bold rounded-lg border border-red-200 transition-colors shadow-sm text-[10px]"
                     >
-                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tầng Tùy Chọn
+                      <Trash2 className="w-3.5 h-3.5" /> Xóa Tầng
                     </button>
                   </div>
                 </td>
+                {matrixBlocks.flatMap((block, bIdx) => {
+                  const hasVisibleCols = block.groups.some(g => {
+                    const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
+                    return visG.length > 0 || g.items.length === 0;
+                  });
+                  
+                  if (!hasVisibleCols) return null;
+                  
+                  const emptyGroupCells = block.groups.flatMap((group, gIdx) => {
+                    const visItems = group.items.filter(cat => isColumnVisible(`${block.blockName}_${group.groupName}_${cat}`));
+                    if (visItems.length === 0 && group.items.length > 0) return [];
+                    
+                    if (visItems.length === 0 && group.items.length === 0) {
+                      return [<td key={`empty-g-${bIdx}-${gIdx}-none`} className="border-t border-r border-gray-200 bg-gray-50/50"></td>];
+                    }
+                    
+                    return visItems.map((cat, cIdx) => (
+                      <td key={`empty-g-${bIdx}-${gIdx}-${cIdx}`} className="border-t border-r border-gray-200 bg-gray-50/50"></td>
+                    ));
+                  });
+
+                  return [
+                    <td key={`quick-${bIdx}`} className="py-2 px-1 border-t border-r border-gray-200 bg-gray-50/50 text-center align-top">
+                      <div className="flex flex-col items-center gap-1">
+                        <input 
+                          type="text"
+                          value={quickNumAptsByBlock[block.blockName] || ''}
+                          onChange={(e) => setQuickNumAptsByBlock(prev => ({...prev, [block.blockName]: e.target.value}))}
+                          placeholder="Số căn..."
+                          className="px-1.5 py-1.5 border border-gray-300 rounded text-[10px] w-full min-w-[50px] text-center font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleApplyQuickNumApts(block.blockName);
+                          }}
+                        />
+                        <button 
+                          onClick={() => handleApplyQuickNumApts(block.blockName)}
+                          className="px-2 py-1 text-white bg-indigo-600 hover:bg-indigo-700 font-bold rounded transition-colors text-[9px] w-full whitespace-nowrap shadow-sm"
+                        >
+                          Áp dụng
+                        </button>
+                      </div>
+                    </td>,
+                    ...emptyGroupCells
+                  ];
+                })}
               </tr>
             )}
           </tbody>
