@@ -2048,15 +2048,17 @@ export const useStore = create(
 
       syncMaterialSheetToSupabase: async (projectName) => {
         const state = get();
-        const sheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+        const sheet = state.materialSheets[projectName];
+        if (!sheet) return;
         
         try {
           const payload = {
             project_name: projectName,
-            items: sheet.items,
-            receive_rows: sheet.rows,
-            export_rows: sheet.exportRows,
+            items: sheet.items || [],
+            receive_rows: sheet.rows || [],
+            export_rows: sheet.exportRows || [],
             dinh_muc_map: sheet.dinhMucMap || {},
+            ipc_map: sheet.ipcMap || {},
             updated_at: new Date().toISOString()
           };
           
