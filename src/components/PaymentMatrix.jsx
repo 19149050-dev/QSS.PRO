@@ -27,10 +27,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     const teamMatrix = store.paymentMatrix[`${projectName}_team`] || [];
     const fullMatrix = baseFloors.map(canonicalRow => {
       const teamRow = teamMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
+      
+      const mergedItems = { ...canonicalRow.items };
+      if (teamRow && teamRow.items) {
+        Object.keys(teamRow.items).forEach(k => {
+          if (teamRow.items[k] !== undefined && teamRow.items[k] !== '') {
+            mergedItems[k] = teamRow.items[k];
+          }
+        });
+      }
+
       return {
         floor: canonicalRow.floor,
         numApts: canonicalRow.numApts,
-        items: teamRow ? (teamRow.items || {}) : {}
+        items: mergedItems
       };
     });
     
@@ -43,10 +53,24 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     const sourceMatrix = targetMatrix.length > 0 ? targetMatrix : baseFloors;
     paymentMatrix = baseFloors.map(canonicalRow => {
       const rowData = sourceMatrix.find(r => String(r.floor).trim() === String(canonicalRow.floor).trim());
+      
+      // Merge base items with target items. This ensures that if new cells are added to the base project
+      // after the team/ipc matrix was instantiated, they will still appear in the team/ipc view.
+      const mergedItems = { ...canonicalRow.items };
+      if (rowData && rowData.items) {
+        Object.keys(rowData.items).forEach(k => {
+          // If the target matrix has a non-empty value, override the base matrix.
+          // If it's empty, we fallback to the base matrix (so new base data shows up).
+          if (rowData.items[k] !== undefined && rowData.items[k] !== '') {
+            mergedItems[k] = rowData.items[k];
+          }
+        });
+      }
+
       return {
         floor: canonicalRow.floor,
         numApts: canonicalRow.numApts,
-        items: rowData ? (rowData.items || {}) : {}
+        items: mergedItems
       };
     });
   }
@@ -61,12 +85,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   const matrixBlocks = React.useMemo(() => {
     return rawBlocks.map(block => {
+      if (!block.blockName || block.blockName.trim() === '') return null; // Prevent rendering empty/redundant blocks
       if (filterBlock !== 'ALL' && block.blockName !== filterBlock) return null;
       
       const filteredGroups = block.groups.map(group => {
+        if (!group.groupName || group.groupName.trim() === '') return null;
         if (filterGroup !== 'ALL') {
           const selectedGroups = filterGroup.split(',');
-          if (!selectedGroups.includes(group.groupName)) return null;
+          const fullKey = `${block.blockName} - ${group.groupName}`;
+          if (!selectedGroups.includes(fullKey) && !selectedGroups.includes(group.groupName)) return null;
         }
         return group;
       }).filter(Boolean);
@@ -1849,7 +1876,7 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
     const groups = new Set();
     rawBlocks.forEach(b => {
       if (filterBlock === 'ALL' || b.blockName === filterBlock) {
-        b.groups.forEach(g => groups.add(g.groupName));
+        b.groups.forEach(g => groups.add(`${b.blockName} - ${g.groupName}`));
       }
     });
     return Array.from(groups);

@@ -12,13 +12,16 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
   
   const [selectedFloors, setSelectedFloors] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState(''); // Used for Team Mode
+  const [batchName, setBatchName] = useState('');
+  const [batchUnits, setBatchUnits] = useState('');
+  const [batchNote, setBatchNote] = useState('');
   const [activeGroupKey, setActiveGroupKey] = useState(null);
 
-  // Initialize active group
+  // Initialize active group to null (don't auto-select)
   useEffect(() => {
-    if (isOpen && rawBlocks.length > 0 && rawBlocks[0].groups.length > 0) {
-      setActiveGroupKey(`${rawBlocks[0].blockName}___${rawBlocks[0].groups[0].groupName}`);
+    if (isOpen) {
+      setActiveGroupKey(null);
     }
   }, [isOpen, rawBlocks]);
 
@@ -28,8 +31,34 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
       setSelectedFloors([]);
       setSelectedItems([]);
       setInputValue(isTeamMode && projectTeams.length > 0 ? (projectTeams[0].teamName || projectTeams[0].team_name) : '');
+      setBatchName('');
+      setBatchUnits('');
+      setBatchNote('');
     }
   }, [isOpen, isTeamMode]);
+
+  useEffect(() => {
+    if (isTeamMode && projectTeams.length > 0 && !inputValue) {
+      setInputValue(projectTeams[0].teamName || projectTeams[0].team_name);
+    }
+  }, [isTeamMode, projectTeams, inputValue]);
+
+  const activeBlockObj = rawBlocks.find(b => activeGroupKey?.startsWith(`${b.blockName}___`));
+  const activeGroupObj = activeBlockObj?.groups.find(g => activeGroupKey === `${activeBlockObj.blockName}___${g.groupName}`);
+
+  const isApartmentGroup = activeGroupObj?.groupName?.toUpperCase().includes('CĂN HỘ');
+  const activeBlockName = activeBlockObj?.blockName;
+  const totalApts = activeBlockName ? paymentMatrix.reduce((sum, row) => sum + (parseInt(row.items?.[`${activeBlockName}_numApts`] || row.numApts) || 0), 0) : 0;
+  const selectedApts = activeBlockName ? selectedFloors.reduce((sum, floor) => {
+    const row = paymentMatrix.find(f => f.floor === floor);
+    return sum + (parseInt(row?.items?.[`${activeBlockName}_numApts`] || row?.numApts) || 0);
+  }, 0) : 0;
+
+  useEffect(() => {
+    if (!isTeamMode && isOpen) {
+      setBatchUnits('');
+    }
+  }, [activeGroupKey, isApartmentGroup, isTeamMode, isOpen]);
 
   if (!isOpen) return null;
 
@@ -86,15 +115,72 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
       toast.error('Vui lòng chọn ít nhất 1 hạng mục');
       return;
     }
-    if (!inputValue.trim()) {
-      toast.error('Vui lòng nhập giá trị');
-      return;
+    
+    if (isTeamMode) {
+      if (!inputValue.trim()) {
+        toast.error('Vui lòng chọn Tổ đội');
+        return;
+      }
+    } else {
+      if (!batchName.trim()) {
+        toast.error('Vui lòng nhập Mã Đợt / IPC');
+        return;
+      }
+      if (!batchUnits.trim() && !isApartmentGroup) {
+        toast.error('Vui lòng nhập Số căn / Khối lượng');
+        return;
+      }
     }
 
     // Call updateMatrixCell for each selected floor and item
     selectedFloors.forEach(floor => {
-      selectedItems.forEach(itemKey => {
-        store.updateMatrixCell(matrixKey, floor, itemKey, inputValue.trim(), '');
+      const floorData = paymentMatrix.find(f => f.floor === floor);
+
+      selectedItems.forEach(selectedKey => {
+        const [blockName, groupName, itemName] = selectedKey.split('___');
+        const blockNumApts = floorData?.items?.[`${blockName}_numApts`];
+        const floorApts = blockNumApts ? String(blockNumApts) : (floorData?.numApts ? String(floorData.numApts) : '');
+        const matrixItemKey = `${blockName}_${groupName}_${itemName}`;
+        
+        const existingVal = floorData?.items?.[matrixItemKey] || '';
+        let valToSave = '';
+
+        if (isTeamMode) {
+          const teamName = inputValue.trim();
+          if (teamName) {
+            if (existingVal) {
+              const batches = existingVal.split('+').map(p => p.trim()).filter(Boolean);
+              valToSave = batches.map(b => {
+                // If it already has this team, keep it
+                if (b.includes(`(${teamName})`)) return b;
+                // If it already has SOME team, you might want to replace it, but for now just append
+                // To be safe, if they use QuickEntry to assign a team, we just append (TeamName)
+                return `${b} (${teamName})`;
+              }).join(' + ');
+            } else {
+              // If there's no base data, we can't assign a team. Wait, we can just save it as (TeamName)?
+              // If there is no base data, the user shouldn't be assigning a team.
+              valToSave = '';
+            }
+          }
+        } else {
+          let finalUnits = batchUnits.trim();
+          if (!finalUnits && isApartmentGroup) {
+            finalUnits = floorApts;
+          }
+          
+          let newBatch = batchName.trim();
+          if (finalUnits) newBatch += ` (${finalUnits})`;
+          if (batchNote.trim()) newBatch += ` - ${batchNote.trim()}`;
+          
+          if (existingVal && !existingVal.includes(newBatch)) {
+            valToSave = existingVal + ' + ' + newBatch;
+          } else {
+            valToSave = existingVal ? existingVal : newBatch;
+          }
+        }
+
+        store.updateMatrixCell(matrixKey, floor, matrixItemKey, valToSave, '');
       });
     });
 
@@ -102,8 +188,6 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
     onClose();
   };
 
-  const activeBlockObj = rawBlocks.find(b => activeGroupKey?.startsWith(`${b.blockName}___`));
-  const activeGroupObj = activeBlockObj?.groups.find(g => activeGroupKey === `${activeBlockObj.blockName}___${g.groupName}`);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
@@ -163,8 +247,8 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               {rawBlocks.map(block => (
                 <div key={block.blockName} className="mb-4">
-                  <div className="px-2 py-1 bg-gray-100/80 rounded-md text-[10px] tracking-wider font-black text-gray-500 uppercase mb-2">
-                    {block.blockName}
+                  <div className="px-3 py-2.5 bg-slate-800 rounded-xl text-sm tracking-wide font-black text-white uppercase mb-3 shadow-md border-b-4 border-slate-900 flex items-center gap-2">
+                    <span className="text-slate-400">🏢</span> <span>{block.blockName}</span>
                   </div>
                   {block.groups.map(group => {
                     const groupKey = `${block.blockName}___${group.groupName}`;
@@ -278,19 +362,56 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                   })}
                 </select>
               ) : (
-                <input 
-                  type="text"
-                  value={inputValue}
-                  onChange={e => setInputValue(e.target.value)}
-                  placeholder="VD: đợt 1, 100%, ..."
-                  className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                />
+                <div className="space-y-3">
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 block mb-1">MÃ ĐỢT / IPC</span>
+                    <input 
+                      type="text"
+                      value={batchName}
+                      onChange={e => setBatchName(e.target.value)}
+                      placeholder="VD: Đợt 1, IPC 01"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 block mb-1">SỐ CĂN / KHỐI LƯỢNG</span>
+                    <input 
+                      type="text"
+                      value={batchUnits}
+                      onChange={e => setBatchUnits(e.target.value)}
+                      placeholder="VD: 5 căn, 50%"
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-500 block mb-1">GHI CHÚ (Tùy chọn)</span>
+                    <input 
+                      type="text"
+                      value={batchNote}
+                      onChange={e => setBatchNote(e.target.value)}
+                      placeholder="VD: Tường nứt, thiếu vật tư..."
+                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+                    />
+                  </div>
+                  {isApartmentGroup && (
+                    <div className="text-sm font-medium text-emerald-700 bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex items-start gap-2 shadow-sm">
+                      <div className="mt-0.5 text-emerald-500">💡</div>
+                      <div>
+                        Vì đây là hạng mục <b>Căn hộ</b>, hệ thống sẽ tự động điền <b>số lượng căn hộ tương ứng của từng tầng</b> vào các ô dữ liệu nếu bạn <b>để trống ô Số căn / Khối lượng</b>. <br/>
+                        <div className="mt-1.5 flex flex-wrap gap-2">
+                          <span className="bg-white px-2 py-1 rounded-md border border-emerald-100 shadow-sm text-xs">Tổng dự án: <b className="text-emerald-800">{totalApts} căn</b></span>
+                          <span className="bg-white px-2 py-1 rounded-md border border-emerald-100 shadow-sm text-xs">Các tầng đang chọn: <b className="text-emerald-800">{selectedApts} căn</b></span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             
             <button 
               onClick={handleSubmit}
-              disabled={selectedFloors.length === 0 || selectedItems.length === 0 || !inputValue.trim()}
+              disabled={selectedFloors.length === 0 || selectedItems.length === 0 || (isTeamMode ? !inputValue.trim() : (!batchName.trim() || (!isApartmentGroup && !batchUnits.trim())))}
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-600/20"
             >
               <Check className="w-5 h-5" /> Thực Thi Nhập Nhanh
