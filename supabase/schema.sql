@@ -206,3 +206,35 @@ CREATE POLICY "Allow public write attendance_sheets"
   ON public.attendance_sheets
   FOR ALL
   USING (true);
+
+-- ==============================================================================
+-- 9. CHECKLISTS TABLE (GLOBAL ADMIN CHECKLIST)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.checklists (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  task_name text NOT NULL,
+  project_name text,
+  assignee text,
+  priority text DEFAULT 'Bình thường',
+  deadline date,
+  status text DEFAULT '0%',
+  note text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.checklists ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read checklists" ON public.checklists;
+DROP POLICY IF EXISTS "Allow public write checklists" ON public.checklists;
+
+CREATE POLICY "Allow public read checklists"
+  ON public.checklists
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public write checklists"
+  ON public.checklists
+  FOR ALL
+  USING (true);
+

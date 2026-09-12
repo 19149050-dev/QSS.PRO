@@ -22,6 +22,7 @@ import {
   FolderGit2,
   ClipboardList,
   UserCheck,
+  CheckSquare,
   X
 } from 'lucide-react';
 
@@ -55,6 +56,7 @@ export default function Sidebar({ onCloseMobile }) {
   const systemNavItems = [
     { label: 'QL Công trình', id: 'projects', icon: Building2 },
     ...(isAdmin ? [{ label: 'QL Nhân viên', id: 'users', icon: Users }] : []),
+    ...(isAdmin ? [{ label: 'Check list', id: 'checklist', icon: CheckSquare }] : []),
     { label: 'QL Tổ đội', id: 'manage-teams', icon: Users },
     { label: 'Thùng rác', id: 'trash', icon: Trash2 },
   ];

@@ -1341,31 +1341,58 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   onClick={() => {
                     if (!newBatchName.trim()) return;
                     
-                    const parseQuantity = (str, totalApts) => {
+                    const parseQuantities = (str, totalApts) => {
                       if (!str) return 0;
-                      if (str.includes('Xong 100%')) return parseFloat(totalApts) || 0;
-                      let total = 0;
+                      if (str.includes('Xong 100%')) return parseFloat(totalApts) || 100;
+                      
+                      let percent = 0;
+                      let units = 0;
+                      
                       str.split('+').forEach(p => {
-                        if (p.includes('Xong 100%')) {
-                          total += parseFloat(totalApts) || 0;
+                        const b = p.trim();
+                        if (b.includes('Xong 100%')) {
+                          percent += 100;
+                          return;
+                        }
+                        
+                        const m = b.match(/\(([^)]+)\)/);
+                        if (m) {
+                          if (m[1].includes('%')) {
+                            percent += parseFloat(m[1]) || 0;
+                          } else {
+                            const uMatch = m[1].match(/(\d+(\.\d+)?)/);
+                            if (uMatch) units += parseFloat(uMatch[1]);
+                          }
                         } else {
-                          const m = p.match(/\((.*?)\)/);
-                          if (m) {
-                            const match = m[1].match(/(\d+(\.\d+)?)/);
-                            if (match) total += parseFloat(match[1]);
+                          if (b.includes('%')) {
+                            const pMatch = b.match(/(\d+(\.\d+)?)%/);
+                            if (pMatch) percent += parseFloat(pMatch[1]);
+                          } else {
+                            const uMatch = b.match(/^(\d+(\.\d+)?)/) || b.match(/(\d+(\.\d+)?)\s*căn/i);
+                            if (uMatch) units += parseFloat(uMatch[1]);
                           }
                         }
                       });
-                      return total;
+                      
+                      if (parseFloat(totalApts) > 0) {
+                        return units + (percent / 100 * parseFloat(totalApts));
+                      }
+                      return percent > 0 ? percent : units;
                     };
 
                     if (type === 'ipc' && selectedCell.teamRawValue) {
-                      const teamMax = parseQuantity(selectedCell.teamRawValue, selectedCell.numApts);
-                      const currentIpcTotal = parseQuantity(batchList.join(' + '), selectedCell.numApts);
-                      const newUnits = parseQuantity(`(${newBatchUnits})`, selectedCell.numApts);
+                      const teamMax = parseQuantities(selectedCell.teamRawValue, selectedCell.numApts);
+                      const currentIpcTotal = parseQuantities(batchList.join(' + '), selectedCell.numApts);
                       
-                      if (currentIpcTotal + newUnits > teamMax) {
-                        store.openGlobalAlert(`⚠️ Tổng khối lượng IPC (${currentIpcTotal + newUnits}) không được vượt quá số lượng Tổ Đội đã báo cáo (${teamMax}). Vui lòng kiểm tra lại!`);
+                      // For the new batch, we parse it as if it's formatted
+                      let formattedNew = newBatchUnits.trim() ? `(${newBatchUnits.trim()})` : newBatchName.trim();
+                      if (newBatchName.trim() && !newBatchUnits.trim() && newBatchName.match(/(\d+(\.\d+)?)%/)) {
+                        formattedNew = newBatchName.trim();
+                      }
+                      const newUnits = parseQuantities(formattedNew, selectedCell.numApts);
+                      
+                      if (currentIpcTotal + newUnits > teamMax + 0.01) {
+                        store.openGlobalAlert(`⚠️ Tổng khối lượng IPC (${(currentIpcTotal + newUnits).toFixed(1).replace(/\.0$/, '')}) không được vượt quá số lượng Tổ Đội đã báo cáo (${teamMax.toFixed(1).replace(/\.0$/, '')}). Vui lòng kiểm tra lại!`);
                         return;
                       }
                     }
@@ -1412,30 +1439,94 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   <button 
                     onClick={() => {
                       const maxUnits = parseInt(selectedCell?.numApts, 10) || 0;
-                      const addUnits = newBatchName.trim() ? (parseInt(newBatchUnits, 10) || 0) : 0;
-                      const currentSum = batchList.reduce((sum, b) => {
-                        const m = b.match(/\((\d+)[^)]*\)/) || b.match(/(\d+)\s*căn/i) || b.match(/^(\d+)/);
-                        return sum + (m ? parseInt(m[1], 10) : 0);
-                      }, 0);
+                      
+                      const parseQuantities = (strOrObj, isNewBatchObj = false) => {
+                         let percent = 0;
+                         let units = 0;
+                         
+                         if (isNewBatchObj) {
+                            const { name, unitStr } = strOrObj;
+                            if (unitStr.includes('%')) {
+                               percent = parseFloat(unitStr) || 0;
+                            } else if (unitStr) {
+                               units = parseFloat(unitStr) || 0;
+                            } else if (name.includes('%')) {
+                               const m = name.match(/(\d+(\.\d+)?)%/);
+                               if (m) percent = parseFloat(m[1]);
+                           } else {
+                               const m = name.match(/^(\d+(\.\d+)?)/);
+                               if (m) units = parseFloat(m[1]);
+                           }
+                           return { percent, units };
+                         }
+
+                         const b = strOrObj;
+                         if (!b) return { percent: 0, units: 0 };
+                         if (b.includes('Xong 100%')) return { percent: 100, units: 0 };
+                         
+                         const m = b.match(/\(([^)]+)\)/);
+                         if (m) {
+                           if (m[1].includes('%')) {
+                             percent += parseFloat(m[1]) || 0;
+                           } else {
+                             const uMatch = m[1].match(/(\d+(\.\d+)?)/);
+                             if (uMatch) units += parseFloat(uMatch[1]);
+                           }
+                         } else {
+                           if (b.includes('%')) {
+                             const pMatch = b.match(/(\d+(\.\d+)?)%/);
+                             if (pMatch) percent += parseFloat(pMatch[1]);
+                           } else {
+                             const uMatch = b.match(/^(\d+(\.\d+)?)/) || b.match(/(\d+(\.\d+)?)\s*căn/i);
+                             if (uMatch) units += parseFloat(uMatch[1]);
+                           }
+                         }
+                         return { percent, units };
+                      };
+
+                      let addQ = newBatchName.trim() ? parseQuantities({ name: newBatchName, unitStr: newBatchUnits }, true) : { percent: 0, units: 0 };
+                      
+                      let currentQ = { percent: 0, units: 0 };
+                      batchList.forEach(b => {
+                        const q = parseQuantities(b);
+                        currentQ.percent += q.percent;
+                        currentQ.units += q.units;
+                      });
 
                       const rawVal = selectedCell?.rawValue || '';
                       const allParts = rawVal ? rawVal.split(' + ').map(p => p.trim()).filter(Boolean) : [];
                       const otherTeamParts = activeTeam 
                         ? allParts.filter(p => !p.includes(`(${activeTeam})`))
                         : [];
-                      const otherTeamUnits = otherTeamParts.reduce((sum, b) => {
-                        const m = b.match(/\((\d+)[^)]*\)/) || b.match(/(\d+)\s*căn/i) || b.match(/^(\d+)/);
-                        return sum + (m ? parseInt(m[1], 10) : 0);
-                      }, 0);
+                      
+                      let otherTeamQ = { percent: 0, units: 0 };
+                      otherTeamParts.forEach(b => {
+                        const q = parseQuantities(b);
+                        otherTeamQ.percent += q.percent;
+                        otherTeamQ.units += q.units;
+                      });
 
-                      const totalProjected = otherTeamUnits + currentSum + addUnits;
+                      const totalPercent = otherTeamQ.percent + currentQ.percent + addQ.percent;
+                      const totalUnits = otherTeamQ.units + currentQ.units + addQ.units;
 
-                      if (maxUnits > 0 && (totalProjected > maxUnits)) {
-                        const remainingAllowed = Math.max(0, maxUnits - (otherTeamUnits + currentSum));
-                        const errorMsg = `⚠️ KHÔNG THỂ LƯU (VƯỢT HẠN MỨC): Tổng số căn (${totalProjected} căn) vượt quá số căn tổng của Tầng ${selectedCell.floor} (${maxUnits} căn)! Bạn chỉ có thể nhập tối đa thêm ${remainingAllowed} căn nữa.`;
-                        setUnitError(errorMsg);
-                        store.openGlobalAlert(errorMsg);
-                        return;
+                      if (maxUnits > 0) {
+                        const combinedUnits = totalUnits + (totalPercent / 100 * maxUnits);
+                        if (combinedUnits > maxUnits + 0.01) {
+                           const currentTotalUnits = otherTeamQ.units + currentQ.units + ((otherTeamQ.percent + currentQ.percent) / 100 * maxUnits);
+                           const remainingAllowed = Math.max(0, maxUnits - currentTotalUnits);
+                           const errorMsg = `⚠️ KHÔNG THỂ LƯU (VƯỢT HẠN MỨC): Tổng khối lượng tương đương (${combinedUnits.toFixed(1).replace(/\\.0$/, '')} căn) vượt quá số căn tổng của Tầng ${selectedCell.floor} (${maxUnits} căn)! Bạn chỉ có thể nhập tối đa thêm ${remainingAllowed.toFixed(1).replace(/\\.0$/, '')} căn nữa.`;
+                           setUnitError(errorMsg);
+                           store.openGlobalAlert(errorMsg);
+                           return;
+                        }
+                      } else {
+                        if (totalPercent > 100.01) {
+                           const remainingPercent = Math.max(0, 100 - (otherTeamQ.percent + currentQ.percent));
+                           const errorMsg = `⚠️ KHÔNG THỂ LƯU (VƯỢT HẠN MỨC): Tổng phần trăm (${totalPercent}%) vượt quá 100%! Bạn chỉ có thể nhập tối đa thêm ${remainingPercent}% nữa.`;
+                           setUnitError(errorMsg);
+                           store.openGlobalAlert(errorMsg);
+                           return;
+                        }
                       }
 
                       let finalVal = batchList.join(' + ');

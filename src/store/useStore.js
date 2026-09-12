@@ -59,6 +59,7 @@ export const useStore = create(
       paymentMatrix: initialPaymentMatrix,
       trashMatrix: {},
       matrixBlocks: defaultMatrixBlocksLocal,
+      checklists: [],
       matrixFilterBlock: {},
       matrixFilterGroup: {},
       setMatrixFilter: (projectName, block, group) => set((state) => ({
@@ -137,6 +138,41 @@ export const useStore = create(
           await supabase.from('users').insert([dbUser]);
         } catch (error) {
           console.error("Failed to add user to Supabase:", error);
+        }
+      },
+      addChecklistItem: async (item) => {
+        const tempId = `chk-${Date.now()}`;
+        const newItem = { id: tempId, task_name: item.taskName, project_name: item.projectName || '', assignee: item.assignee || '', priority: item.priority || 'Bình thường', deadline: item.deadline || null, status: item.status || '0%', note: item.note || '' };
+        set((state) => ({ checklists: [...state.checklists, newItem] }));
+        try {
+          const { data, error } = await supabase.from('checklists').insert([{
+            task_name: item.taskName,
+            project_name: item.projectName || '',
+            assignee: item.assignee || '',
+            priority: item.priority || 'Bình thường',
+            deadline: item.deadline || null,
+            status: item.status || '0%',
+            note: item.note || ''
+          }]).select();
+          if (!error && data && data.length > 0) {
+            set((state) => ({ checklists: state.checklists.map(c => c.id === tempId ? data[0] : c) }));
+          }
+        } catch (err) { console.error('Add checklist error:', err); }
+      },
+      updateChecklistItem: async (id, updatedData) => {
+        set((state) => ({ checklists: state.checklists.map(c => c.id === id ? { ...c, ...updatedData } : c) }));
+        if (!String(id).startsWith('chk-')) {
+          try {
+            await supabase.from('checklists').update(updatedData).eq('id', id);
+          } catch (err) { console.error('Update checklist error:', err); }
+        }
+      },
+      deleteChecklistItem: async (id) => {
+        set((state) => ({ checklists: state.checklists.filter(c => c.id !== id) }));
+        if (!String(id).startsWith('chk-')) {
+          try {
+            await supabase.from('checklists').delete().eq('id', id);
+          } catch (err) { console.error('Delete checklist error:', err); }
         }
       },
       updateUser: async (id, updatedData) => {
@@ -1906,6 +1942,12 @@ export const useStore = create(
             }));
           }
 
+          // Fetch Checklists
+          const { data: checkData, error: checkError } = await supabase.from('checklists').select('*');
+          if (!checkError && checkData) {
+            set({ checklists: checkData });
+          }
+
         } catch (err) {
           console.log('Using local mock state (Supabase fallback active):', err);
         } finally {
@@ -1940,12 +1982,6 @@ export const useStore = create(
         const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
         const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
         
-        // Safety check: Prevent saving empty base matrix if blocks exist
-        const baseData = state.paymentMatrix[projectName];
-        if (blocks.length > 0 && (!baseData || baseData.length === 0)) {
-           console.warn(`Prevented sync of empty matrix data for ${projectName} to avoid data loss.`);
-           return;
-        }
 
         const matrixDataObj = {
           base: state.paymentMatrix[projectName] || [],
@@ -2075,9 +2111,11 @@ export const useStore = create(
           
           if (error) {
             console.error('Failed to sync material sheet to Supabase:', error);
+            get().openGlobalAlert(`Lỗi đồng bộ Supabase: ${error.message || JSON.stringify(error)}`, 'Lỗi đồng bộ');
           }
         } catch (err) {
           console.error('Supabase material sheet sync error:', err);
+          get().openGlobalAlert(`Lỗi đồng bộ (Exception): ${err.message || JSON.stringify(err)}`, 'Lỗi đồng bộ');
         }
       },
 
