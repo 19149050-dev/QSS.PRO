@@ -2,76 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/store/useStore';
 import { PlusCircle, Trash2, Edit2, Check, X, Calendar, Search, CheckSquare, ChevronDown } from 'lucide-react';
 
-const StatusCombobox = ({ value, onChange, disabled, done }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const options = ['0%', '25%', '50%', '75%', '100%', 'FINISH'];
-  const wrapperRef = useRef(null);
 
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  return (
-    <>
-      {isOpen && !disabled && (
-        <div className="fixed inset-0 z-40 bg-black/10 backdrop-blur-[2px]" />
-      )}
-      <div ref={wrapperRef} className="relative w-full z-50">
-        {!isOpen ? (
-          <div 
-            onClick={() => !disabled && setIsOpen(true)}
-            className={`w-full truncate cursor-pointer p-1.5 rounded-lg transition-colors text-sm font-medium ${done ? 'text-zinc-500 line-through' : 'text-slate-700 hover:bg-zinc-100'}`}
-          >
-            {value || <span className="text-zinc-400 italic font-normal">Trạng thái...</span>}
-          </div>
-        ) : (
-          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 bg-white border-2 border-black rounded-xl shadow-2xl z-[60] flex flex-col overflow-hidden">
-            <div className="relative flex items-center border-b border-zinc-200">
-              <input
-                type="text"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                disabled={disabled}
-                placeholder="Trạng thái"
-                className="w-full px-4 py-3 text-sm font-medium focus:outline-none bg-transparent text-slate-800"
-                autoFocus
-              />
-              {!disabled && (
-                <button 
-                  type="button"
-                  onClick={() => setIsOpen(false)}
-                  className="absolute right-3 text-zinc-400 hover:text-black"
-                >
-                  <ChevronDown className="w-4 h-4 transform rotate-180" />
-                </button>
-              )}
-            </div>
-            <div className="bg-[#1a1a1a] w-full max-h-64 overflow-auto py-1">
-              {options.map(opt => (
-                <div
-                  key={opt}
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
-                  }}
-                  className="px-4 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer font-medium transition-colors"
-                >
-                  {opt}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
-};
 
 const NotePopover = ({ value, onChange, disabled, done }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -131,6 +62,32 @@ const NotePopover = ({ value, onChange, disabled, done }) => {
       </div>
     </>
   );
+};
+
+const stringToColor = (str) => {
+  if (!str) return 'text-slate-700';
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = [
+    'text-red-600',
+    'text-orange-600',
+    'text-amber-600',
+    'text-green-600',
+    'text-emerald-600',
+    'text-teal-600',
+    'text-cyan-600',
+    'text-sky-600',
+    'text-blue-600',
+    'text-indigo-600',
+    'text-violet-600',
+    'text-purple-600',
+    'text-fuchsia-600',
+    'text-pink-600',
+    'text-rose-600'
+  ];
+  return colors[Math.abs(hash) % colors.length];
 };
 
 export default function ChecklistView() {
@@ -195,12 +152,19 @@ export default function ChecklistView() {
       if (aDone && !bDone) return 1;
       if (!aDone && bDone) return -1;
       
-      // If both are same completion state, sort by creation time (descending)
+      // Sort by priority ("Gấp" first)
+      const aIsUrgent = a.priority === 'Gấp';
+      const bIsUrgent = b.priority === 'Gấp';
+      
+      if (aIsUrgent && !bIsUrgent) return -1;
+      if (!aIsUrgent && bIsUrgent) return 1;
+      
+      // If both are same completion state and priority, sort by creation time (descending)
       const aTime = new Date(a.created_at || 0).getTime();
       const bTime = new Date(b.created_at || 0).getTime();
       return bTime - aTime;
     });
-  }, [checklists, searchTerm]);
+  }, [checklists, searchTerm, projectFilter]);
 
   const handleAdd = () => {
     if (!newTaskName.trim()) return;
@@ -447,7 +411,7 @@ export default function ChecklistView() {
                         <select
                           value={item.project_name || ''}
                           onChange={(e) => updateChecklistItem(item.id, { project_name: e.target.value })}
-                          className={`w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-medium ${done ? 'text-zinc-500 line-through' : 'text-slate-700'}`}
+                          className={`w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-bold ${done ? 'text-zinc-500 line-through' : stringToColor(item.project_name)}`}
                         >
                           <option value="">(Không chọn)</option>
                           {projects?.map(p => (
@@ -488,11 +452,15 @@ export default function ChecklistView() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <StatusCombobox 
-                          value={item.status || ''} 
-                          onChange={(newVal) => handleStatusChange(item.id, newVal)} 
-                          done={done}
-                        />
+                        <select
+                          value={item.status || '0%'}
+                          onChange={(e) => handleStatusChange(item.id, e.target.value)}
+                          className={`w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-bold cursor-pointer ${done ? 'text-zinc-500 line-through' : 'text-slate-700'}`}
+                        >
+                          {['0%', '25%', '50%', '75%', '100%', 'FINISH'].map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
                       </td>
                       <td className="px-6 py-4">
                         <NotePopover 
