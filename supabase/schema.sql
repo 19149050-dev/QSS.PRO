@@ -238,3 +238,33 @@ CREATE POLICY "Allow public write checklists"
   FOR ALL
   USING (true);
 
+-- ==============================================================================
+-- 10. SHOP DRAWINGS TABLE
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.shop_drawings (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  project_name text,
+  approval_date date,
+  code text,
+  drawing_name text NOT NULL,
+  status text DEFAULT 'Đã duyệt',
+  note text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.shop_drawings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read shop_drawings" ON public.shop_drawings;
+DROP POLICY IF EXISTS "Allow public write shop_drawings" ON public.shop_drawings;
+
+CREATE POLICY "Allow public read shop_drawings"
+  ON public.shop_drawings
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public write shop_drawings"
+  ON public.shop_drawings
+  FOR ALL
+  USING (true);
+

@@ -21,6 +21,7 @@ import MaterialsView from '@/components/Views/MaterialsView';
 import AcceptanceView from '@/components/Views/AcceptanceView';
 import ProjectNotesView from '@/components/Views/ProjectNotesView';
 import ChecklistView from '@/components/Views/ChecklistView';
+import ShopView from '@/components/Views/ShopView';
 
 export default function RootRouter() {
   const { activeTab } = useStore();
@@ -60,6 +61,8 @@ export default function RootRouter() {
       return <AcceptanceView />;
     case 'checklist':
       return <ChecklistView />;
+    case 'shop':
+      return <ShopView />;
     default:
       return <DashboardView />;
   }

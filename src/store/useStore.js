@@ -60,6 +60,7 @@ export const useStore = create(
       trashMatrix: {},
       matrixBlocks: defaultMatrixBlocksLocal,
       checklists: [],
+      shopDrawings: [],
       matrixFilterBlock: {},
       matrixFilterGroup: {},
       setMatrixFilter: (projectName, block, group) => set((state) => ({
@@ -173,6 +174,40 @@ export const useStore = create(
           try {
             await supabase.from('checklists').delete().eq('id', id);
           } catch (err) { console.error('Delete checklist error:', err); }
+        }
+      },
+      addShopDrawing: async (item) => {
+        const tempId = `shop-${Date.now()}`;
+        const newItem = { id: tempId, drawing_name: item.drawingName, project_name: item.projectName || '', approval_date: item.approvalDate || null, code: item.code || '', status: item.status || 'Đã duyệt', note: item.note || '' };
+        set((state) => ({ shopDrawings: [...state.shopDrawings, newItem] }));
+        try {
+          const { data, error } = await supabase.from('shop_drawings').insert([{
+            drawing_name: item.drawingName,
+            project_name: item.projectName || '',
+            approval_date: item.approvalDate || null,
+            code: item.code || '',
+            status: item.status || 'Đã duyệt',
+            note: item.note || ''
+          }]).select();
+          if (!error && data && data.length > 0) {
+            set((state) => ({ shopDrawings: state.shopDrawings.map(s => s.id === tempId ? data[0] : s) }));
+          }
+        } catch (err) { console.error('Add shop drawing error:', err); }
+      },
+      updateShopDrawing: async (id, updatedData) => {
+        set((state) => ({ shopDrawings: state.shopDrawings.map(s => s.id === id ? { ...s, ...updatedData } : s) }));
+        if (!String(id).startsWith('shop-')) {
+          try {
+            await supabase.from('shop_drawings').update(updatedData).eq('id', id);
+          } catch (err) { console.error('Update shop drawing error:', err); }
+        }
+      },
+      deleteShopDrawing: async (id) => {
+        set((state) => ({ shopDrawings: state.shopDrawings.filter(s => s.id !== id) }));
+        if (!String(id).startsWith('shop-')) {
+          try {
+            await supabase.from('shop_drawings').delete().eq('id', id);
+          } catch (err) { console.error('Delete shop drawing error:', err); }
         }
       },
       updateUser: async (id, updatedData) => {
@@ -1946,6 +1981,12 @@ export const useStore = create(
           const { data: checkData, error: checkError } = await supabase.from('checklists').select('*');
           if (!checkError && checkData) {
             set({ checklists: checkData });
+          }
+
+          // Fetch Shop Drawings
+          const { data: shopData, error: shopError } = await supabase.from('shop_drawings').select('*');
+          if (!shopError && shopData) {
+            set({ shopDrawings: shopData });
           }
 
         } catch (err) {
