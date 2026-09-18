@@ -8,7 +8,7 @@ import { parseExcelFile } from '@/utils/importUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import QuickEntryModal from '@/components/Modals/QuickEntryModal';
 
-export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', period = '' }) {
+export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', selectedIpcFilter = 'ALL', period = '', headerContent, filterContent }) {
   const store = useStore();
   const isAdmin = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || store.currentUser?.role === 'QS';
@@ -46,7 +46,21 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     
     // Only keep floors that have at least one cell with data (excluding numApts)
     paymentMatrix = fullMatrix.filter(row => {
-      return Object.entries(row.items).some(([key, val]) => !key.endsWith('_numApts') && val && val.trim() !== '');
+      const hasTeamProgress = Object.entries(row.items).some(([key, val]) => !key.endsWith('_numApts') && val && val.trim() !== '');
+      if (!hasTeamProgress) return false;
+      
+      if (selectedIpcFilter !== 'ALL') {
+         const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
+         const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
+         if (!ipcRow || !ipcRow.items) return false;
+         
+         const hasIpcMatch = Object.entries(ipcRow.items).some(([key, val]) => {
+           if (key.endsWith('_numApts') || !val) return false;
+           return val.split(' + ').some(p => p.includes(selectedIpcFilter));
+         });
+         return hasIpcMatch;
+      }
+      return true;
     });
   } else {
     const targetMatrix = store.paymentMatrix[matrixKey] || [];
@@ -162,6 +176,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
   
   const [copiedValue, setCopiedValue] = useState(null);
+  const [hideIpcQuantities, setHideIpcQuantities] = useState(false);
+  const [isAutoHiddenEmpty, setIsAutoHiddenEmpty] = useState(false);
   const [quickNumAptsByBlock, setQuickNumAptsByBlock] = useState({});
   const [topQuickAptsBlock, setTopQuickAptsBlock] = useState('');
   const [topQuickAptsValue, setTopQuickAptsValue] = useState('');
@@ -280,7 +296,73 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     });
   };
 
-  const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey);
+  const emptyColumnsKeys = React.useMemo(() => {
+    const emptyKeys = [];
+    const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
+    matrixBlocks.forEach(block => {
+      block.groups.forEach(group => {
+        group.items.forEach(cat => {
+          const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
+          let hasAnyActionableData = false;
+          let hasIpcOrTeamFilterMatch = false;
+          
+          for (const row of paymentMatrix) {
+            const rawVal = row.items[itemKey] || '';
+            let ipcRawVal = '';
+            if (type === 'ipc' || type === 'ipc_select') {
+               const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
+               ipcRawVal = ipcRow?.items?.[itemKey] || '';
+            }
+            
+            if (rawVal || ipcRawVal) {
+              hasAnyActionableData = true;
+            }
+            
+            let valForColor = rawVal;
+            if (type === 'ipc' && selectedIpcFilter !== 'ALL') {
+               let filteredIpcVal = ipcRawVal;
+               if (filteredIpcVal) {
+                 filteredIpcVal = filteredIpcVal.split(' + ').filter(p => p.includes(selectedIpcFilter)).join(' + ');
+               }
+               valForColor = filteredIpcVal;
+            } else if (type === 'team' && selectedTeamFilter !== 'ALL') {
+              valForColor = (valForColor || '').split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`)).join(' + ');
+            }
+            
+            if (valForColor && valForColor.trim() !== '') {
+              hasIpcOrTeamFilterMatch = true;
+            }
+            
+            if (hasAnyActionableData && hasIpcOrTeamFilterMatch) break;
+          }
+          
+          if (type === 'ipc' || type === 'ipc_select') {
+            if (selectedIpcFilter !== 'ALL') {
+              // If filtering by a specific IPC, ALWAYS hide columns that don't have it, regardless of auto-hide
+              if (!hasIpcOrTeamFilterMatch) {
+                emptyKeys.push(itemKey);
+                return;
+              }
+            } else {
+              // If viewing ALL IPCs, hide completely dead columns
+              if (!hasAnyActionableData) {
+                emptyKeys.push(itemKey);
+                return;
+              }
+            }
+          }
+          
+          // For team view or when auto-hide is on
+          if (isAutoHiddenEmpty && !hasIpcOrTeamFilterMatch) {
+            emptyKeys.push(itemKey);
+          }
+        });
+      });
+    });
+    return emptyKeys;
+  }, [isAutoHiddenEmpty, matrixBlocks, paymentMatrix, type, selectedTeamFilter, selectedIpcFilter, store.paymentMatrix, projectName]);
+
+  const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey) && !emptyColumnsKeys.includes(itemKey);
 
   const handleEditBlock = (bIdx, oldName) => {
     store.openGlobalPrompt(
@@ -481,8 +563,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     if (val === 'Xong 100%') return '#6ee7b7';
     if (val === 'Tạm dừng') return '#fca5a5';
 
-    // Split by +, newline, or comma followed by space
-    const parts = val.split(/\+|\n|,\s+/).map(p => p.trim()).filter(Boolean);
+    // Split by ' + ', newline, or comma followed by space
+    const parts = val.split(/\s\+\s|\n|,\s+/).map(p => p.trim()).filter(Boolean);
     if (parts.length === 0) return '';
 
     const getHashColor = (part) => {
@@ -525,6 +607,30 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     return `linear-gradient(to right, ${gradientStops.join(', ')})`;
   };
 
+  const parseTotalUnitsForCell = (str, totalApts) => {
+    if (!str) return 0;
+    if (str.includes('Xong 100%')) return parseFloat(totalApts) || 0;
+    let total = 0;
+    str.split(' + ').forEach(p => {
+      if (p.includes('Xong 100%')) {
+        total += parseFloat(totalApts) || 0;
+      } else {
+        const m = p.match(/\((.*?)\)/);
+        if (m) {
+          const match = m[1].match(/(\d+(\.\d+)?)/);
+          if (match) {
+            if (m[1].includes('%')) {
+              total += (parseFloat(match[1]) / 100) * (parseFloat(totalApts) || 0);
+            } else {
+              total += parseFloat(match[1]);
+            }
+          }
+        }
+      }
+    });
+    return total;
+  };
+
   const displayCellValue = (rawVal, team) => {
     if (!rawVal) return '';
 
@@ -532,7 +638,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     
     // Strip team names for specific team view
     if (team !== 'ALL') {
-      const teamParts = rawVal.split('+').filter(p => p.includes(`(${team})`));
+      const teamParts = rawVal.split(' + ').filter(p => p.includes(`(${team})`));
       if (teamParts.length > 0) {
         display = teamParts.map(p => p.replace(`(${team})`, '').trim()).join(' + ');
       } else {
@@ -548,16 +654,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
     // Extract quantities ONLY for ipc modes
     if (type === 'ipc' || type === 'ipc_select') {
-      const parts = display.split('+').map(p => p.trim());
-      const extractedParts = parts.map(p => {
-        const upperP = p.toUpperCase();
-        if (upperP.includes('ĐỢT') || upperP.includes('DOT')) {
-          const match = p.match(/\(([^)]+)\)/);
-          return match ? match[1] : '100%';
-        }
-        return p;
-      });
-      return extractedParts.join(' + ');
+      const parts = display.split(' + ').map(p => p.trim());
+      // Removed the block that incorrectly strips 'ĐỢT' so it displays identically to 'IPC'
+      return parts.join(' + ');
     }
 
     return display;
@@ -607,7 +706,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       const parts = currentRawVal.split(' + ').map(p => p.trim()).filter(Boolean);
       if (selectedTeamFilter !== 'ALL') {
         initialBatches = parts
-          .filter(p => p.includes(`(${selectedTeamFilter})`) || !p.match(/\([^)]*\)/g) || p.includes('ĐỢT') || p.includes('IPC'))
+          .filter(p => p.includes(`(${selectedTeamFilter})`) || (!p.match(/\([A-Za-z]/) && (p.includes('ĐỢT') || p.includes('IPC') || !p.match(/\([^)]*\)/g))))
           .map(p => p.replace(`(${selectedTeamFilter})`, '').trim());
       } else {
         initialBatches = parts;
@@ -692,10 +791,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
       {/* Helper Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs no-print">
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        {headerContent && (
+          <div className="flex-shrink-0 flex items-center">
+            {headerContent}
+          </div>
+        )}
+        <div className="flex flex-wrap items-center justify-start gap-3 flex-1">
           <button 
           onClick={handlePrint}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-lg border border-gray-200 shadow-sm transition-colors"
@@ -728,6 +832,24 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <Eye className="w-4 h-4" /> Quản lý Ẩn/Hiện
         </button>
+        <button 
+          onClick={() => {
+            setIsAutoHiddenEmpty(!isAutoHiddenEmpty);
+            setHiddenColumns([]);
+          }}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-700 hover:bg-slate-100 font-bold rounded-lg border border-slate-200 shadow-sm transition-colors"
+          title="Bật/Tắt tự động ẩn các cột chưa có dữ liệu thi công"
+        >
+          {isAutoHiddenEmpty ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} {isAutoHiddenEmpty ? 'Hiện cột trống' : 'Ẩn cột trống'}
+        </button>
+        {type === 'ipc' && (
+          <button 
+            onClick={() => setHideIpcQuantities(!hideIpcQuantities)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold rounded-lg border border-purple-200 shadow-sm transition-colors"
+          >
+            {hideIpcQuantities ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} {hideIpcQuantities ? 'Hiện Khối lượng' : 'Ẩn Khối lượng'}
+          </button>
+        )}
         <button 
           onClick={() => setIsBOQModalOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 shadow-sm transition-colors"
@@ -828,6 +950,11 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           </button>
         )}
         </div>
+        {filterContent && (
+          <div className="flex-shrink-0 flex items-center">
+            {filterContent}
+          </div>
+        )}
       </div>
 
       {/* Grid Container */}
@@ -866,6 +993,13 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             {/* Group level */}
             <tr>
               {matrixBlocks.flatMap((block, bIdx) => {
+                const visibleCountInBlock = block.groups.reduce((acc, g) => {
+                  const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
+                  const groupColSpan = (visG.length === 0 && g.items.length > 0) ? 0 : Math.max(visG.length, 1);
+                  return acc + groupColSpan;
+                }, 0);
+                if (visibleCountInBlock === 0) return [];
+
                 const numAptsHeader = (
                   <th key={`numapts-${bIdx}`} rowSpan={2} className="bg-slate-200 text-slate-800 text-[10px] font-bold uppercase border-b border-r border-gray-300 w-10 align-middle">
                     Số căn
@@ -878,7 +1012,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   const visCount = Math.max(visItems.length, 1);
                   return (
                     <th 
-                      key={gIdx} 
+                      key={`group-${bIdx}-${gIdx}`} 
                       colSpan={visCount} 
                       onDoubleClick={() => handleEditGroup(bIdx, gIdx, group.groupName)}
                       className="header-orange text-[10px] uppercase font-bold py-1 px-1 whitespace-normal break-words text-center border-r border-orange-200/50 cursor-pointer hover:bg-orange-200/50 transition-colors relative group/col"
@@ -926,8 +1060,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             {/* Item level */}
             <tr className="bg-slate-100 text-slate-800 text-[10px]">
               <th className="bg-slate-200 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-gray-300 py-2 text-xs w-[70px] max-w-[70px]">Tầng</th>
-              {matrixBlocks.flatMap((block, bIdx) =>
-                block.groups.flatMap((group, gIdx) => {
+              {matrixBlocks.flatMap((block, bIdx) => {
+                const visibleCountInBlock = block.groups.reduce((acc, g) => {
+                  const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
+                  const groupColSpan = (visG.length === 0 && g.items.length > 0) ? 0 : Math.max(visG.length, 1);
+                  return acc + groupColSpan;
+                }, 0);
+                if (visibleCountInBlock === 0) return [];
+
+                return block.groups.flatMap((group, gIdx) => {
                   if (group.items.length === 0) {
                     return <th key={`empty-${bIdx}-${gIdx}`} className="py-2 px-1 border-r border-gray-200 text-gray-400 italic text-[10px] font-normal">(Chưa có)</th>;
                   }
@@ -979,8 +1120,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       </th>
                     );
                   });
-                })
-              )}
+                });
+              })}
             </tr>
           </thead>
           <tbody>
@@ -994,6 +1135,13 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   {row.floor}
                 </td>
                 {matrixBlocks.flatMap((block, bIdx) => {
+                  const visibleCountInBlock = block.groups.reduce((acc, g) => {
+                    const visG = g.items.filter(cat => isColumnVisible(`${block.blockName}_${g.groupName}_${cat}`));
+                    const groupColSpan = (visG.length === 0 && g.items.length > 0) ? 0 : Math.max(visG.length, 1);
+                    return acc + groupColSpan;
+                  }, 0);
+                  if (visibleCountInBlock === 0) return [];
+
                   const numAptsKey = `${block.blockName}_numApts`;
                   const blockNumApts = row.items[numAptsKey] || '';
                   const isBasement = String(row.floor).toUpperCase().trim().startsWith('B') || 
@@ -1026,26 +1174,38 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                     return group.items.map((cat, cIdx) => {
                       const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
                       if (!isColumnVisible(itemKey)) return null;
-                      const rawVal = row.items[itemKey];
+                      let rawVal = row.items[itemKey];
                       const displayVal = displayCellValue(rawVal, selectedTeamFilter);
                       let ipcRawVal = '';
                       if (type === 'ipc' || type === 'ipc_select') {
                         const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
                         const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
                         ipcRawVal = ipcRow?.items?.[itemKey] || '';
+
+                        if (type === 'ipc' && selectedIpcFilter !== 'ALL') {
+                          if (ipcRawVal) {
+                            const ipcParts = ipcRawVal.split(' + ').filter(p => p.includes(selectedIpcFilter));
+                            ipcRawVal = ipcParts.join(' + ');
+                          }
+                          if (!ipcRawVal) {
+                            rawVal = '';
+                          }
+                        }
                       }
 
                       let bgColor = '';
+                      let valForColor = rawVal || '';
                       if (type === 'ipc') {
                         if (ipcRawVal) {
                           bgColor = getCellColor(ipcRawVal);
                         } else if (rawVal) {
                           bgColor = '#e2e8f0'; // slate-200 (gray)
+                        } else {
+                          bgColor = '#111827'; // very dark gray (black) for cells with no team progress
                         }
                       } else {
-                        let valForColor = rawVal || '';
                         if (selectedTeamFilter !== 'ALL') {
-                          const teamParts = valForColor.split('+').filter(p => p.includes(`(${selectedTeamFilter})`));
+                          const teamParts = valForColor.split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`));
                           valForColor = teamParts.join(' + ');
                           
                           if (valForColor) {
@@ -1060,27 +1220,39 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                         }
                       }
                       
+                      const strToParse = (type === 'team' && selectedTeamFilter !== 'ALL') ? valForColor : rawVal;
+                      const parsedUnits = strToParse ? parseTotalUnitsForCell(strToParse, blockNumApts || row.numApts) : 0;
+                      const teamPercent = Math.min(100, (parsedUnits / (blockNumApts || row.numApts)) * 100) || 0;
+                      
+                      const parsedTotalUnits = rawVal ? parseTotalUnitsForCell(rawVal, blockNumApts || row.numApts) : 0;
+                      const totalPercent = Math.min(100, (parsedTotalUnits / (blockNumApts || row.numApts)) * 100) || 0;
+                      const otherPercent = (type === 'team' && selectedTeamFilter !== 'ALL') ? Math.max(0, totalPercent - teamPercent) : 0;
+
                       return (
                         <td
                           key={`${bIdx}-${gIdx}-${cIdx}`}
                           onContextMenu={(e) => {
                             e.preventDefault();
-                            if (type === 'ipc') return; // maybe don't allow context menu in ipc mode if read-only, but let's allow it for copy
                             setContextMenu({
                               x: e.clientX,
                               y: e.clientY,
                               floor: row.floor,
                               itemKey,
-                              rawVal,
+                              rawVal: type === 'ipc' ? ipcRawVal : rawVal,
                               blockNumApts: row.numApts
                             });
                           }}
                           onClick={() => {
                             if (copiedValue !== null) {
+                              if (type === 'ipc') {
+                                const mergedVal = mergeCellValue(ipcRawVal, copiedValue, 'ALL');
+                                updateMatrixCell(row.floor, itemKey, mergedVal);
+                                return;
+                              }
+                              
                               // Paste Mode
-                              if (type === 'ipc_select' || type === 'ipc') {
-                                // Ignore paste for IPC if not supported or complex, but let's assume team/base mode for now
-                                if (type === 'ipc' && !ipcRawVal && !rawVal) return;
+                              if (type === 'ipc_select') {
+                                return; // Ignore paste for ipc_select
                               }
                               if (type === 'team' && selectedTeamFilter === 'ALL' && !isAdmin) return;
                               
@@ -1097,23 +1269,55 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                               handleCellClick(row.floor, itemKey, rawVal, blockNumApts || row.numApts);
                             }
                           }}
-                          className={`transition-all duration-150 text-center font-bold text-xs text-gray-900 select-none border-r border-gray-200 ${
+                          className={`relative transition-all duration-150 text-center font-bold text-xs text-gray-900 select-none border-r border-gray-200 ${
                             (type === 'team' && selectedTeamFilter === 'ALL' && !isAdmin) 
                               ? 'cursor-not-allowed hover:opacity-100' 
-                              : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'cursor-pointer hover:opacity-80')
+                              : ((type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-80')
                           } ${copiedValue !== null ? 'hover:ring-2 hover:ring-inset hover:ring-indigo-500 hover:bg-indigo-50 cursor-crosshair' : ''}`}
-                          style={{ background: (type === 'ipc_select' || type === 'ipc') && !rawVal && !ipcRawVal ? '#f8fafc' : bgColor }}
+                          style={{ 
+                            background: (type === 'ipc' || type === 'ipc_select') 
+                                ? bgColor 
+                                : '' 
+                          }}
                           title={copiedValue !== null ? 'Bấm để dán giá trị' : ((type === 'ipc_select' || type === 'ipc') ? (rawVal || ipcRawVal ? "Nhấp để phân bổ IPC" : "Chưa có khối lượng") : (selectedTeamFilter === 'ALL' ? (isAdmin ? "Nhấp để chỉnh sửa/xóa (Quyền Admin)" : "Chế độ xem TỔNG (Chỉ xem)") : "Nhấp để chỉnh sửa ô"))}
                         >
-                          <div className="flex flex-col items-center justify-center min-h-[26px] py-0.5">
+                          {type !== 'ipc' && type !== 'ipc_select' && rawVal && (
+                            <div className="absolute inset-y-0 left-0 flex pointer-events-none w-full">
+                              {teamPercent > 0 && (
+                                <div 
+                                  style={{ 
+                                    width: `${teamPercent}%`,
+                                    background: bgColor || '#94a3b8',
+                                    opacity: 1,
+                                    borderRight: teamPercent > 0 && teamPercent < 100 ? '2px solid rgba(0,0,0,0.1)' : 'none'
+                                  }}
+                                />
+                              )}
+                              {otherPercent > 0 && (
+                                <div 
+                                  style={{ 
+                                    width: `${otherPercent}%`,
+                                    background: '#94a3b8',
+                                    opacity: 1,
+                                    borderRight: otherPercent > 0 && (teamPercent + otherPercent) < 100 ? '2px solid rgba(0,0,0,0.1)' : 'none'
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+                          <div className="relative z-10 flex flex-col items-center justify-center min-h-[26px] py-0.5">
                             {type === 'ipc' ? (
                               <>
                                 {!ipcRawVal && (
-                                  <span className="text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px]">{displayVal || ''}</span>
+                                  <span className={`text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px] ${!rawVal ? 'text-gray-500' : ''}`}>
+                                    {hideIpcQuantities && displayVal 
+                                      ? (displayVal.match(/\([^)]+\)/g)?.map(m => m.replace(/[()]/g, '')).join(' + ') || displayVal)
+                                      : (displayVal || '')}
+                                  </span>
                                 )}
                                 {ipcRawVal && (
-                                  <span className="bg-blue-600 text-white border border-blue-700 px-1.5 py-0.5 rounded text-[10px] font-extrabold shadow-sm mt-0.5">
-                                    {ipcRawVal}
+                                  <span className="font-bold text-[10px] leading-tight whitespace-normal break-words px-1 max-w-[120px] text-slate-900">
+                                    {hideIpcQuantities ? ipcRawVal.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() : ipcRawVal}
                                   </span>
                                 )}
                               </>
@@ -1122,26 +1326,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                                 <span className="whitespace-normal break-words leading-tight px-1 max-w-[120px]">{displayVal || ''}</span>
                                 {(() => {
                                   if (type === 'ipc_select' && ipcRawVal) {
-                                    const parseTotalUnits = (str, totalApts) => {
-                                      if (!str) return 0;
-                                      if (str.includes('Xong 100%')) return parseFloat(totalApts) || 0;
-                                      let total = 0;
-                                      str.split('+').forEach(p => {
-                                        if (p.includes('Xong 100%')) {
-                                          total += parseFloat(totalApts) || 0;
-                                        } else {
-                                          const m = p.match(/\((.*?)\)/);
-                                          if (m) {
-                                            const match = m[1].match(/(\d+(\.\d+)?)/);
-                                            if (match) total += parseFloat(match[1]);
-                                          }
-                                        }
-                                      });
-                                      return total;
-                                    };
+                                    const parseTotalUnitsLocal = (str, totalApts) => parseTotalUnitsForCell(str, totalApts);
                                     
-                                    const teamMax = parseTotalUnits(rawVal, blockNumApts || row.numApts);
-                                    const ipcTotal = parseTotalUnits(ipcRawVal, blockNumApts || row.numApts);
+                                    const teamMax = parseTotalUnitsLocal(rawVal, blockNumApts || row.numApts);
+                                    const ipcTotal = parseTotalUnitsLocal(ipcRawVal, blockNumApts || row.numApts);
                                     let badgeText = "ĐÃ LÊN HS";
                                     let isPartial = false;
                                     
@@ -1230,6 +1418,46 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               Tầng <strong className="text-indigo-600 font-extrabold">{selectedCell.floor}</strong> &bull; <span className="font-medium">{selectedCell.category}</span>
             </p>
 
+            {(() => {
+              const maxUnits = parseFloat(selectedCell.numApts) || 0;
+              const allTeamsUnits = parseTotalUnitsForCell(selectedCell.rawValue, maxUnits);
+              const isSpecificTeam = type === 'team' && selectedTeamFilter !== 'ALL';
+              let currentTeamUnits = 0;
+              if (isSpecificTeam && selectedCell.rawValue) {
+                const teamParts = selectedCell.rawValue.split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`)).join(' + ');
+                currentTeamUnits = parseTotalUnitsForCell(teamParts, maxUnits);
+              }
+              const remainingUnits = Math.max(0, maxUnits - allTeamsUnits);
+
+              return (
+                <div className="mb-4 bg-gray-50 p-3 rounded-xl border border-gray-200">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">
+                    Thông tin tiến độ:
+                  </label>
+                  <div className="flex flex-col gap-1.5 text-sm">
+                    <div className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                      <span className="text-gray-600 font-medium">Tổng số lượng:</span>
+                      <strong className="text-gray-900">{maxUnits} căn</strong>
+                    </div>
+                    {isSpecificTeam && (
+                      <div className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                        <span className="text-gray-600 font-medium">Đội {selectedTeamFilter} đã làm:</span>
+                        <strong className="text-indigo-600">{currentTeamUnits.toFixed(1).replace(/\.0$/, '')} căn</strong>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                      <span className="text-gray-600 font-medium">Tổng các đội đã làm:</span>
+                      <strong className="text-emerald-600">{allTeamsUnits.toFixed(1).replace(/\.0$/, '')} căn</strong>
+                    </div>
+                    <div className="flex justify-between items-center bg-white px-3 py-1.5 rounded-lg border border-gray-100 shadow-sm">
+                      <span className="text-gray-600 font-medium">Còn lại:</span>
+                      <strong className="text-rose-600">{remainingUnits.toFixed(1).replace(/\.0$/, '')} căn</strong>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* Team assignment info for IPC mode */}
             {type === 'ipc' && selectedCell.teamRawValue && (
               <div className="mb-4 bg-emerald-50/50 p-3 rounded-xl border border-emerald-100">
@@ -1237,7 +1465,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                   Thông tin thầu phụ đã thực hiện:
                 </label>
                 <div className="flex flex-col gap-1.5">
-                  {selectedCell.teamRawValue.split('+').map(p => p.trim()).filter(Boolean).map((teamInfo, idx) => (
+                  {selectedCell.teamRawValue.split(' + ').map(p => p.trim()).filter(Boolean).map((teamInfo, idx) => (
                     <div key={idx} className="text-xs font-semibold text-emerald-800 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-200 shadow-sm">
                       {teamInfo}
                     </div>
@@ -1348,7 +1576,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       let percent = 0;
                       let units = 0;
                       
-                      str.split('+').forEach(p => {
+                      str.split(' + ').forEach(p => {
                         const b = p.trim();
                         if (b.includes('Xong 100%')) {
                           percent += 100;

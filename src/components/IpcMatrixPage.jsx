@@ -50,6 +50,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const [dinhMucDraft, setDinhMucDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [selectedIpcFilter, setSelectedIpcFilter] = useState('ALL');
 
   const projects = useAllowedProjects();
 
@@ -63,6 +64,26 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   // Material / Attendance Logic
   const isExport = mode === 'export_materials';
   const isAttendance = mode === 'attendance';
+  const { paymentMatrix } = useStore.getState();
+
+  const uniqueIpcs = useMemo(() => {
+    const ipcs = new Set();
+    if (activeTab.type === 'ipc') {
+      const ipcMatrix = paymentMatrix[`${selectedProject}_ipc`] || [];
+      ipcMatrix.forEach(row => {
+        Object.values(row.items || {}).forEach(val => {
+          if (val && typeof val === 'string') {
+            val.split(' + ').forEach(part => {
+              const match = part.match(/^([^()]+)/);
+              if (match) ipcs.add(match[1].trim());
+            });
+          }
+        });
+      });
+    }
+    return Array.from(ipcs).sort();
+  }, [paymentMatrix, selectedProject, activeTab.type]);
+
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
   
@@ -492,31 +513,33 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         }
       `}</style>
       <div className="space-y-6 p-8 w-full">
-        <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-              <Layers3 className="h-5 w-5" />
+        {(activeTab.type !== 'team' && activeTab.type !== 'ipc') && (
+          <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
+                <Layers3 className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-xl font-extrabold tracking-tight text-slate-900">{activeTab.label}</h1>
+                <p className="text-sm text-slate-500">{activeTab.hint}</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-slate-900">{activeTab.label}</h1>
-              <p className="text-sm text-slate-500">{activeTab.hint}</p>
-            </div>
+
+            <select
+              value={selectedProject}
+              onChange={(e) => setActiveProject(e.target.value)}
+              className="min-w-[180px] rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              {projects.map((project) => (
+                <option key={project.id} value={project.name}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
           </div>
+        )}
 
-          <select
-            value={selectedProject}
-            onChange={(e) => setActiveProject(e.target.value)}
-            className="min-w-[180px] rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            {projects.map((project) => (
-              <option key={project.id} value={project.name}>
-                {project.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className={(activeTab.type === 'team' || activeTab.type === 'ipc') ? "" : "rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"}>
           {!selectedProject ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center text-sm text-slate-500">
               Chưa có công trình nào để hiển thị.
@@ -947,13 +970,53 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="flex justify-end">
-                    <PaymentMatrixFilters projectName={selectedProject} />
-                  </div>
+                <div className="flex flex-col gap-0 w-full">
                   <PaymentMatrix 
                     projectName={selectedProject} 
                     type={activeTab.type === 'team' ? 'ipc_select' : 'ipc'} 
+                    selectedIpcFilter={selectedIpcFilter}
+                    headerContent={
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                            <Layers3 className="h-4 w-4" />
+                          </div>
+                          <div>
+                            <h1 className="text-base font-extrabold tracking-tight text-slate-900 leading-tight">{activeTab.label}</h1>
+                            <p className="text-xs text-slate-500">{activeTab.hint}</p>
+                          </div>
+                        </div>
+                        <div className="h-6 w-px bg-gray-200"></div>
+                        <select
+                          value={selectedProject}
+                          onChange={(e) => setActiveProject(e.target.value)}
+                          className="min-w-[140px] rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                        >
+                          {projects.map((project) => (
+                            <option key={project.id} value={project.name}>
+                              {project.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    }
+                    filterContent={
+                      <div className="flex items-center gap-2">
+                        {activeTab.type === 'ipc' && (
+                          <select 
+                            value={selectedIpcFilter}
+                            onChange={(e) => setSelectedIpcFilter(e.target.value)}
+                            className="px-4 py-2 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm min-w-[120px] cursor-pointer"
+                          >
+                            <option value="ALL">Tất cả IPC</option>
+                            {uniqueIpcs.map(ipc => (
+                              <option key={ipc} value={ipc}>{ipc}</option>
+                            ))}
+                          </select>
+                        )}
+                        <PaymentMatrixFilters projectName={selectedProject} />
+                      </div>
+                    }
                   />
                 </div>
               )}
