@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
 
+let matrixSyncTimeouts = {};
+let materialSyncTimeouts = {};
+let attendanceSyncTimeouts = {};
+
 export const sortFloors = (matrix) => {
   return [...matrix].sort((a, b) => {
     const parseFloor = (name) => {
@@ -2014,47 +2018,53 @@ export const useStore = create(
         }
       },
 
-      syncMatrixDataToSupabase: async (projectName) => {
-        const state = get();
-        const project = state.projects.find(p => p.name === projectName);
-        if (!project) return;
-        
-        const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
-        const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
-        const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
-        
-
-        const matrixDataObj = {
-          base: state.paymentMatrix[projectName] || [],
-          ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
-          team: state.paymentMatrix[`${projectName}_team`] || [],
-          trash: state.trashMatrix[projectName] || []
-        };
-        
-        try {
-          // Đối với các project mock (có id bắt đầu bằng 'p-'), ta phải update theo name vì id trong DB không khớp
-          if (String(project.id).startsWith('p-')) {
-            const { error } = await supabase
-              .from('projects')
-              .update({ 
-                matrix_blocks: blocks, 
-                matrix_data: matrixDataObj 
-              })
-              .eq('name', project.name);
-            if (error) console.error('Failed to sync matrix to Supabase (by name):', error);
-          } else {
-            const { error } = await supabase
-              .from('projects')
-              .update({ 
-                matrix_blocks: blocks, 
-                matrix_data: matrixDataObj 
-              })
-              .eq('id', project.id);
-            if (error) console.error('Failed to sync matrix to Supabase (by id):', error);
-          }
-        } catch (err) {
-          console.error('Supabase sync error:', err);
+      syncMatrixDataToSupabase: (projectName) => {
+        if (matrixSyncTimeouts[projectName]) {
+          clearTimeout(matrixSyncTimeouts[projectName]);
         }
+
+        matrixSyncTimeouts[projectName] = setTimeout(async () => {
+          const state = get();
+          const project = state.projects.find(p => p.name === projectName);
+          if (!project) return;
+          
+          const isTC = state.projects?.find(p => p.name?.trim() === projectName?.trim())?.projectType?.trim() === 'Thạch cao';
+          const fallback = isTC ? thachCaoBlocksTemplate : standardBlocksTemplate;
+          const blocks = (state.matrixBlocks[projectName] && state.matrixBlocks[projectName].length > 0) ? state.matrixBlocks[projectName] : fallback;
+          
+
+          const matrixDataObj = {
+            base: state.paymentMatrix[projectName] || [],
+            ipc: state.paymentMatrix[`${projectName}_ipc`] || [],
+            team: state.paymentMatrix[`${projectName}_team`] || [],
+            trash: state.trashMatrix[projectName] || []
+          };
+          
+          try {
+            // Đối với các project mock (có id bắt đầu bằng 'p-'), ta phải update theo name vì id trong DB không khớp
+            if (String(project.id).startsWith('p-')) {
+              const { error } = await supabase
+                .from('projects')
+                .update({ 
+                  matrix_blocks: blocks, 
+                  matrix_data: matrixDataObj 
+                })
+                .eq('name', project.name);
+              if (error) console.error('Failed to sync matrix to Supabase (by name):', error);
+            } else {
+              const { error } = await supabase
+                .from('projects')
+                .update({ 
+                  matrix_blocks: blocks, 
+                  matrix_data: matrixDataObj 
+                })
+                .eq('id', project.id);
+              if (error) console.error('Failed to sync matrix to Supabase (by id):', error);
+            }
+          } catch (err) {
+            console.error('Supabase sync error:', err);
+          }
+        }, 3000); // 3 seconds debounce
       },
 
       importPaymentMatrix: (projectName, matrixType, importedData) => { set((state) => {
@@ -2123,71 +2133,81 @@ export const useStore = create(
         get().syncMatrixDataToSupabase(projectName);
       },
 
-      syncMaterialSheetToSupabase: async (projectName) => {
-        const state = get();
-        const sheet = state.materialSheets[projectName];
-        if (!sheet) return;
-        
-        try {
-          const payload = {
-            project_name: projectName,
-            items: sheet.items || [],
-            receive_rows: sheet.rows || [],
-            export_rows: sheet.exportRows || [],
-            dinh_muc_map: sheet.dinhMucMap || {},
-            ipc_map: sheet.ipcMap || {},
-            updated_at: new Date().toISOString()
-          };
-          
-          const { data: existing } = await supabase.from('material_sheets').select('id').eq('project_name', projectName).maybeSingle();
-          let error = null;
-          
-          if (existing) {
-            const res = await supabase.from('material_sheets').update(payload).eq('project_name', projectName);
-            error = res.error;
-          } else {
-            const res = await supabase.from('material_sheets').insert([payload]);
-            error = res.error;
-          }
-          
-          if (error) {
-            console.error('Failed to sync material sheet to Supabase:', error);
-            get().openGlobalAlert(`Lỗi đồng bộ Supabase: ${error.message || JSON.stringify(error)}`, 'Lỗi đồng bộ');
-          }
-        } catch (err) {
-          console.error('Supabase material sheet sync error:', err);
-          get().openGlobalAlert(`Lỗi đồng bộ (Exception): ${err.message || JSON.stringify(err)}`, 'Lỗi đồng bộ');
+      syncMaterialSheetToSupabase: (projectName) => {
+        if (materialSyncTimeouts[projectName]) {
+          clearTimeout(materialSyncTimeouts[projectName]);
         }
+        materialSyncTimeouts[projectName] = setTimeout(async () => {
+          const state = get();
+          const sheet = state.materialSheets[projectName];
+          if (!sheet) return;
+          
+          try {
+            const payload = {
+              project_name: projectName,
+              items: sheet.items || [],
+              receive_rows: sheet.rows || [],
+              export_rows: sheet.exportRows || [],
+              dinh_muc_map: sheet.dinhMucMap || {},
+              ipc_map: sheet.ipcMap || {},
+              updated_at: new Date().toISOString()
+            };
+            
+            const { data: existing } = await supabase.from('material_sheets').select('id').eq('project_name', projectName).maybeSingle();
+            let error = null;
+            
+            if (existing) {
+              const res = await supabase.from('material_sheets').update(payload).eq('project_name', projectName);
+              error = res.error;
+            } else {
+              const res = await supabase.from('material_sheets').insert([payload]);
+              error = res.error;
+            }
+            
+            if (error) {
+              console.error('Failed to sync material sheet to Supabase:', error);
+              get().openGlobalAlert(`Lỗi đồng bộ Supabase: ${error.message || JSON.stringify(error)}`, 'Lỗi đồng bộ');
+            }
+          } catch (err) {
+            console.error('Supabase material sheet sync error:', err);
+            get().openGlobalAlert(`Lỗi đồng bộ (Exception): ${err.message || JSON.stringify(err)}`, 'Lỗi đồng bộ');
+          }
+        }, 3000);
       },
 
-      syncAttendanceSheetToSupabase: async (projectName) => {
-        const state = get();
-        const sheet = state.attendanceSheets[projectName] || { rows: [], customTeams: [] };
-        try {
-          const payload = {
-            project_name: projectName,
-            rows: sheet.rows || [],
-            custom_teams: sheet.customTeams || [],
-            updated_at: new Date().toISOString()
-          };
-          
-          const { data: existing } = await supabase.from('attendance_sheets').select('id').eq('project_name', projectName).maybeSingle();
-          let error = null;
-          
-          if (existing) {
-            const res = await supabase.from('attendance_sheets').update(payload).eq('project_name', projectName);
-            error = res.error;
-          } else {
-            const res = await supabase.from('attendance_sheets').insert([payload]);
-            error = res.error;
-          }
-          
-          if (error) {
-            console.warn('Supabase attendance sheet sync warning:', error.message);
-          }
-        } catch (err) {
-          // Fall back gracefully if table does not exist
+      syncAttendanceSheetToSupabase: (projectName) => {
+        if (attendanceSyncTimeouts[projectName]) {
+          clearTimeout(attendanceSyncTimeouts[projectName]);
         }
+        attendanceSyncTimeouts[projectName] = setTimeout(async () => {
+          const state = get();
+          const sheet = state.attendanceSheets[projectName] || { rows: [], customTeams: [] };
+          try {
+            const payload = {
+              project_name: projectName,
+              rows: sheet.rows || [],
+              custom_teams: sheet.customTeams || [],
+              updated_at: new Date().toISOString()
+            };
+            
+            const { data: existing } = await supabase.from('attendance_sheets').select('id').eq('project_name', projectName).maybeSingle();
+            let error = null;
+            
+            if (existing) {
+              const res = await supabase.from('attendance_sheets').update(payload).eq('project_name', projectName);
+              error = res.error;
+            } else {
+              const res = await supabase.from('attendance_sheets').insert([payload]);
+              error = res.error;
+            }
+            
+            if (error) {
+              console.warn('Supabase attendance sheet sync warning:', error.message);
+            }
+          } catch (err) {
+            // Fall back gracefully if table does not exist
+          }
+        }, 3000);
       }
     }),
     {
