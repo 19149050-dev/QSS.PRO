@@ -2214,7 +2214,7 @@ export const useStore = create(
       name: 'qss-pro-storage-v2',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => {
-        const { currentUser, ...rest } = state;
+        const { ...rest } = state;
         return rest;
       },
       // An empty project list is valid. Do not re-add mock projects after users
