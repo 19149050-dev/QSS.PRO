@@ -16,9 +16,6 @@ export default function LoginPage() {
   const fetchSupabaseData = useStore((s) => s.fetchSupabaseData);
 
   useEffect(() => {
-    if (window.location.pathname !== '/') {
-      window.history.replaceState({}, '', '/');
-    }
     fetchSupabaseData();
   }, [fetchSupabaseData]);
 
@@ -36,7 +33,7 @@ export default function LoginPage() {
       if (password === expectedPassword) {
         document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
         loginUser(user);
-        window.location.href = '/';
+        router.push('/');
         return;
       }
     }
