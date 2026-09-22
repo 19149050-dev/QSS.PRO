@@ -36,7 +36,7 @@ export default function LoginPage() {
       if (password === expectedPassword) {
         document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
         loginUser(user);
-        router.push('/');
+        window.location.href = '/';
         return;
       }
     }
