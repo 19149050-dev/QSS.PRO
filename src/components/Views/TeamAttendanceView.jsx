@@ -9,9 +9,12 @@ import {
   FileDown, 
   Printer, 
   RotateCcw, 
-  Users
+  Users,
+  Edit2,
+  BarChart3
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const parseNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -64,14 +67,15 @@ export default function TeamAttendanceView() {
   const teamItems = useMemo(() => {
     let items = projectTeams.map(t => ({
       id: t.id || `team_${t.teamName || t.team_name}`,
-      name: (t.teamName || t.team_name || 'Tổ Đội').toUpperCase()
+      name: (t.teamName || t.team_name || 'Tổ Đội').toUpperCase(),
+      isInactive: (currentSheet.inactiveTeams || []).includes(t.id || `team_${t.teamName || t.team_name}`)
     }));
 
     // If no teams set for project, provide default fallback team columns
     if (items.length === 0) {
       items = [
-        { id: 'team_a', name: 'ĐỘI A' },
-        { id: 'team_b', name: 'ĐỘI B' }
+        { id: 'team_a', name: 'ĐỘI A', isInactive: (currentSheet.inactiveTeams || []).includes('team_a') },
+        { id: 'team_b', name: 'ĐỘI B', isInactive: (currentSheet.inactiveTeams || []).includes('team_b') }
       ];
     }
 
@@ -79,13 +83,17 @@ export default function TeamAttendanceView() {
     if (currentSheet.customTeams && currentSheet.customTeams.length > 0) {
       currentSheet.customTeams.forEach(ct => {
         if (!items.some(c => c.id === ct.id)) {
-          items.push({ id: ct.id, name: ct.name.toUpperCase() });
+          items.push({ id: ct.id, name: ct.name.toUpperCase(), isInactive: (currentSheet.inactiveTeams || []).includes(ct.id) });
         }
       });
     }
 
-    return items;
-  }, [projectTeams, currentSheet.customTeams]);
+    // Sort items: active first, inactive last
+    return items.sort((a, b) => {
+      if (a.isInactive === b.isInactive) return 0;
+      return a.isInactive ? 1 : -1;
+    });
+  }, [projectTeams, currentSheet.customTeams, currentSheet.inactiveTeams]);
 
   // Default initial rows seed
   useEffect(() => {
@@ -117,8 +125,35 @@ export default function TeamAttendanceView() {
 
   const rows = currentSheet.rows || [];
 
+  const today = new Date();
+  const todayFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
   const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [toDate, setToDate] = useState(todayFormatted);
+  const [showChart, setShowChart] = useState(false);
+
+  const toISO = (dateStr) => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      let y = parts[2];
+      if (y.length === 2) y = '20' + y;
+      return `${y}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+    return dateStr;
+  };
+
+  const formatToDDMMYYYY = (isoDate) => {
+    if (!isoDate) return '';
+    const parts = isoDate.split('-');
+    if (parts.length === 3) {
+       const y = parts[0];
+       const m = parts[1];
+       const d = parts[2];
+       return `${d}/${m}/${y}`;
+    }
+    return isoDate;
+  };
 
   const parseDate = (dateStr) => {
     if (!dateStr) return null;
@@ -161,7 +196,7 @@ export default function TeamAttendanceView() {
       if (!dateA && !dateB) return 0;
       if (!dateA) return 1;
       if (!dateB) return -1;
-      return dateA.getTime() - dateB.getTime();
+      return dateB.getTime() - dateA.getTime();
     });
   }, [rows, fromDate, toDate]);
 
@@ -176,6 +211,11 @@ export default function TeamAttendanceView() {
     'bg-[#4f46e5] text-white', // Indigo
     'bg-[#ea580c] text-white'  // Bright Orange
   ];
+  
+  const baseChartColors = [
+    '#2563eb', '#059669', '#9333ea', '#d97706', 
+    '#e11d48', '#0891b2', '#4f46e5', '#ea580c'
+  ];
 
   // Calculate totals per team column
   const columnTotals = useMemo(() => {
@@ -189,7 +229,58 @@ export default function TeamAttendanceView() {
     return totals;
   }, [teamItems, filteredRows]);
 
+  // Chart Data grouped by Month
+  const chartDataByMonth = useMemo(() => {
+    const grouped = {};
+    
+    filteredRows.forEach(row => {
+      const d = parseDate(row.date);
+      if (!d) return;
+      
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const monthLabel = `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+      
+      if (!grouped[monthKey]) {
+        grouped[monthKey] = {
+          monthKey,
+          name: monthLabel,
+        };
+        // Initialize all teams to 0 for this month
+        teamItems.forEach(team => {
+          grouped[monthKey][team.id] = 0;
+        });
+      }
+      
+      teamItems.forEach(team => {
+        grouped[monthKey][team.id] += parseNumber(row.values?.[team.id]);
+      });
+    });
+
+    // Sort by month ascending
+    const sortedKeys = Object.keys(grouped).sort();
+    return sortedKeys.map(key => grouped[key]);
+  }, [filteredRows, teamItems]);
+
   // Actions
+  const handleTeamHeaderClick = (item) => {
+    const isInactive = item.isInactive;
+    const msg = isInactive 
+      ? `Đội "${item.name}" đang được đánh dấu nghỉ làm.\nBạn có muốn chuyển lại thành ĐANG LÀM VIỆC?`
+      : `Đội "${item.name}" ĐÃ NGHỈ LÀM?\n(Đội sẽ được chuyển xuống cuối và đổi màu xám)`;
+
+    openGlobalConfirm(msg, () => {
+      const currentInactive = currentSheet.inactiveTeams || [];
+      const nextInactive = isInactive 
+        ? currentInactive.filter(id => id !== item.id)
+        : [...currentInactive, item.id];
+        
+      setAttendanceSheet(selectedProject, {
+        ...currentSheet,
+        inactiveTeams: nextInactive
+      });
+    }, 'Trạng thái đội');
+  };
+
   const handleAddRow = () => {
     const today = new Date();
     const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -290,44 +381,6 @@ export default function TeamAttendanceView() {
         deleteAttendanceRow(selectedProject, row.id);
       }, 'Xác nhận xóa dòng');
     });
-  };
-
-  const handleEditFilterDate = (type) => {
-    const toISO = (dateStr) => {
-      if (!dateStr) return '';
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        let y = parts[2];
-        if (y.length === 2) y = '20' + y;
-        return `${y}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-      }
-      return dateStr;
-    };
-
-    const formatToDDMMYYYY = (isoDate) => {
-      if (!isoDate) return '';
-      const parts = isoDate.split('-');
-      if (parts.length === 3) {
-         const y = parts[0];
-         const m = parts[1];
-         const d = parts[2];
-         return `${d}/${m}/${y}`;
-      }
-      return isoDate;
-    };
-
-    const currentValue = type === 'from' ? fromDate : toDate;
-    
-    openGlobalPrompt(type === 'from' ? 'Chọn Từ ngày:' : 'Chọn Đến ngày:', (newDate) => {
-      if (newDate !== null) {
-        const formatted = formatToDDMMYYYY(newDate);
-        if (type === 'from') setFromDate(formatted);
-        else setToDate(formatted);
-      }
-    }, toISO(currentValue), type === 'from' ? 'Từ ngày' : 'Đến ngày', 'date', false, null, () => {
-      if (type === 'from') setFromDate('');
-      else setToDate('');
-    }, 'Clear (Xóa)');
   };
 
   const handleResetData = () => {
@@ -442,15 +495,6 @@ export default function TeamAttendanceView() {
 
               <button
                 type="button"
-                onClick={handleAddCustomTeam}
-                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition active:scale-95 shadow-xs shrink-0 whitespace-nowrap"
-              >
-                <Plus className="h-4 w-4" />
-                Thêm cột
-              </button>
-
-              <button
-                type="button"
                 onClick={handleResetData}
                 className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition shadow-xs shrink-0 whitespace-nowrap"
               >
@@ -458,42 +502,33 @@ export default function TeamAttendanceView() {
                 Clear dữ liệu
               </button>
 
+              <button
+                type="button"
+                onClick={() => setShowChart(!showChart)}
+                className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-xs shrink-0 whitespace-nowrap"
+              >
+                <BarChart3 className="h-4 w-4" />
+                {showChart ? 'Ẩn biểu đồ' : 'Xem biểu đồ'}
+              </button>
+
               <div className="flex-1"></div>
 
               <div className="flex items-center gap-2 mr-2 shrink-0 whitespace-nowrap">
                 <span className="text-sm font-semibold text-slate-700">Từ:</span>
-                <div 
-                  onClick={() => handleEditFilterDate('from')}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium cursor-pointer hover:bg-slate-50 flex items-center justify-between min-w-[110px]"
-                  title="Chọn Từ ngày"
-                >
-                  <span>{fromDate || <span className="text-slate-400 italic font-normal">dd/mm/yyyy</span>}</span>
-                  {fromDate && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setFromDate(''); }}
-                      className="ml-2 text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
+                <input 
+                  type="date"
+                  value={toISO(fromDate)}
+                  onChange={(e) => setFromDate(formatToDDMMYYYY(e.target.value))}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[130px] cursor-pointer"
+                />
                 <span className="text-sm text-slate-500">-</span>
                 <span className="text-sm font-semibold text-slate-700">Đến:</span>
-                <div 
-                  onClick={() => handleEditFilterDate('to')}
-                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium cursor-pointer hover:bg-slate-50 flex items-center justify-between min-w-[110px]"
-                  title="Chọn Đến ngày"
-                >
-                  <span>{toDate || <span className="text-slate-400 italic font-normal">dd/mm/yyyy</span>}</span>
-                  {toDate && (
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setToDate(''); }}
-                      className="ml-2 text-slate-400 hover:text-red-500"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
+                <input 
+                  type="date"
+                  value={toISO(toDate)}
+                  onChange={(e) => setToDate(formatToDDMMYYYY(e.target.value))}
+                  className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 min-w-[130px] cursor-pointer"
+                />
               </div>
 
               <button
@@ -515,6 +550,56 @@ export default function TeamAttendanceView() {
               </button>
             </div>
 
+            {/* Chart Section */}
+            {showChart && chartDataByMonth.length > 0 && (
+              <div className="mb-6 p-5 border border-slate-200 rounded-2xl bg-slate-50/50 print:hidden">
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                    <BarChart3 className="w-5 h-5" />
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800">Biểu Đồ Tổng Số Công Nhân Theo Tháng</h3>
+                </div>
+                <div className="h-[320px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartDataByMonth} margin={{ top: 10, right: 30, left: -20, bottom: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis 
+                        dataKey="name" 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }}
+                        dy={10}
+                      />
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fontSize: 12, fill: '#64748b', fontWeight: 500 }}
+                      />
+                      <Tooltip 
+                        cursor={{ fill: '#f8fafc' }}
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 500 }}
+                      />
+                      <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                      {teamItems.map((team, index) => {
+                        const color = team.isInactive ? '#94a3b8' : baseChartColors[index % baseChartColors.length];
+                        return (
+                          <Bar 
+                            key={team.id} 
+                            dataKey={team.id} 
+                            name={team.name} 
+                            fill={color} 
+                            radius={[4, 4, 0, 0]} 
+                            maxBarSize={40} 
+                            animationDuration={1000} 
+                          />
+                        );
+                      })}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
+
             {/* Attendance Table (Exact Border-slate-800 Grid Format, Single Team Column, No Yêu cầu/Nhận split, Only TỔNG row) */}
             <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
               <div className="overflow-x-auto">
@@ -528,26 +613,46 @@ export default function TeamAttendanceView() {
                       </th>
 
                       {teamItems.map((item, index) => {
-                        const colorClass = headerColors[index % headerColors.length];
+                        const isInactive = item.isInactive;
+                        const colorClass = isInactive 
+                          ? 'bg-slate-500 text-white' 
+                          : headerColors[index % headerColors.length];
+                          
                         return (
                           <th key={item.id} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
                             <div 
-                              onClick={() => item.id.startsWith('custom_team_') ? handleEditTeamName(item) : null}
-                              className={`w-full h-full min-w-[140px] p-2.5 text-center font-bold uppercase text-xs tracking-wide min-h-[42px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${item.id.startsWith('custom_team_') ? 'cursor-pointer hover:brightness-95' : ''}`}
+                              onClick={() => handleTeamHeaderClick(item)}
+                              className={`w-full h-full min-w-[140px] p-2.5 text-center font-bold uppercase text-xs tracking-wide min-h-[42px] flex flex-col items-center justify-center relative group ${colorClass.split(' ')[1]} cursor-pointer hover:brightness-95`}
+                              title="Click để đổi trạng thái nghỉ làm / đang làm"
                             >
                               <span>{item.name}</span>
+                              {isInactive && <span className="text-[10px] font-normal opacity-90 mt-0.5">(Đã nghỉ)</span>}
+                              
                               {item.id.startsWith('custom_team_') && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRemoveColumn(item.id);
-                                  }}
-                                  className="absolute right-1 top-1 text-slate-200 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                                  title="Xóa cột này"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditTeamName(item);
+                                    }}
+                                    className="absolute left-1 top-1 text-slate-200 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Sửa tên đội"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleRemoveColumn(item.id);
+                                    }}
+                                    className="absolute right-1 top-1 text-slate-200 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Xóa cột này"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
                               )}
                             </div>
                           </th>
@@ -564,53 +669,70 @@ export default function TeamAttendanceView() {
                         </td>
                       </tr>
                     ) : (
-                      filteredRows.map((row, rIdx) => (
-                        <tr key={row.id || rIdx} className="hover:bg-slate-50 transition">
-                          {/* Left Column: Date (Click to edit date or delete row) */}
-                          <td 
-                            onClick={() => handleEditDate(row)}
-                            className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs text-slate-900 cursor-pointer hover:bg-indigo-50/50 transition select-none"
-                            title="Click để chọn/sửa ngày"
-                          >
-                            {row.date ? (
-                              <span className="font-extrabold text-slate-900 text-xs">
-                                {row.date}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 italic text-[11px]">Chọn ngày</span>
-                            )}
-                          </td>
+                      filteredRows.map((row, rIdx) => {
+                        const d = parseDate(row.date);
+                        const isSunday = d && d.getDay() === 0;
 
-                          {/* Team Attendance Headcount Cells */}
-                          {teamItems.map((item) => {
-                            const val = row.values?.[item.id] ?? '';
-                            return (
-                              <td 
-                                key={item.id} 
-                                className="border border-slate-800 bg-white p-1 text-center cursor-pointer hover:bg-amber-50 transition"
-                                onClick={() => {
-                                  openGlobalPrompt(
-                                    `Nhập quân số của đội ${item.name}:`,
-                                    (newVal) => {
-                                      if (newVal !== null) {
-                                        updateAttendanceCell(selectedProject, row.id, item.id, newVal);
-                                      }
-                                    },
-                                    val || '',
-                                    'Nhập Quân Số',
-                                    'number'
-                                  );
-                                }}
-                                title="Click để nhập số lượng"
-                              >
-                                <div className="w-full text-center bg-transparent font-extrabold text-slate-900 text-sm py-1 select-none">
-                                  {val || 0}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))
+                        return (
+                          <tr key={row.id || rIdx} className="hover:bg-slate-50 transition">
+                            {/* Left Column: Date (Click to edit date or delete row) */}
+                            <td 
+                              onClick={() => handleEditDate(row)}
+                              className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs cursor-pointer hover:bg-indigo-50/50 transition select-none"
+                              title="Click để chọn/sửa ngày"
+                            >
+                              {row.date ? (
+                                <span className={`font-extrabold text-xs ${isSunday ? 'text-red-600' : 'text-slate-900'}`}>
+                                  {row.date}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic text-[11px]">Chọn ngày</span>
+                              )}
+                            </td>
+
+                            {/* Team Attendance Headcount Cells */}
+                            {teamItems.map((item) => {
+                              const rawVal = row.values?.[item.id];
+                              const val = rawVal ?? '';
+                              const isZero = parseNumber(rawVal) === 0;
+                              const isInactive = item.isInactive;
+                              
+                              return (
+                                <td 
+                                  key={item.id} 
+                                  className={`border border-slate-800 p-1 text-center transition ${
+                                    isInactive 
+                                      ? 'bg-slate-200 cursor-not-allowed opacity-90' 
+                                      : 'bg-white cursor-pointer hover:bg-amber-50'
+                                  }`}
+                                  onClick={() => {
+                                    if (isInactive) return; // Prevent updating inactive team
+                                    
+                                    openGlobalPrompt(
+                                      `Nhập quân số của đội ${item.name}:`,
+                                      (newVal) => {
+                                        if (newVal !== null) {
+                                          updateAttendanceCell(selectedProject, row.id, item.id, newVal);
+                                        }
+                                      },
+                                      val || '',
+                                      'Nhập Quân Số',
+                                      'number'
+                                    );
+                                  }}
+                                  title={isInactive ? 'Đội đã nghỉ làm, không thể cập nhật' : 'Click để nhập số lượng'}
+                                >
+                                  <div className={`w-full text-center bg-transparent font-extrabold text-sm py-1 select-none ${
+                                    isInactive ? 'text-slate-500' : (isZero ? 'text-slate-300' : 'text-slate-900')
+                                  }`}>
+                                    {val || 0}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })
                     )}
 
                     {/* Single Summary Row: TỔNG (Yellow bg-[#fffaf0] matching Materials Matrix total style) */}
