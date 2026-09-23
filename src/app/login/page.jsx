@@ -22,23 +22,28 @@ export default function LoginPage() {
   const handleLogin = (event) => {
     event.preventDefault();
 
-    const inputUsername = username.trim().toLowerCase();
-    const user = users.find(u => 
-      u.username.toLowerCase() === inputUsername || 
-      u.username.toLowerCase() === `@${inputUsername}`
-    );
+    try {
+      const inputUsername = username.trim().toLowerCase();
+      const user = (users || []).find(u => 
+        u?.username?.toLowerCase() === inputUsername || 
+        u?.username?.toLowerCase() === `@${inputUsername}`
+      );
 
-    if (user) {
-      const expectedPassword = user.password || (user.username === '@admin' ? '0000' : '1234');
-      if (password === expectedPassword) {
-        document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
-        loginUser(user);
-        window.location.href = '/';
-        return;
+      if (user) {
+        const expectedPassword = user.password || (user.username === '@admin' ? '0000' : '1234');
+        if (password === expectedPassword) {
+          document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
+          loginUser(user);
+          router.replace('/');
+          return;
+        }
       }
-    }
 
-    setError('Tài khoản hoặc mật khẩu không chính xác.');
+      setError('Tài khoản hoặc mật khẩu không chính xác.');
+    } catch (err) {
+      console.error("Login error:", err);
+      setError('Đã xảy ra lỗi hệ thống, vui lòng thử lại.');
+    }
   };
 
   return (
