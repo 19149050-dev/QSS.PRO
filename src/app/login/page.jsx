@@ -42,7 +42,7 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#050505] flex items-center justify-center p-6 relative overflow-hidden selection:bg-yellow-500 selection:text-black">
+    <main className="min-h-[100dvh] bg-[#050505] flex items-center justify-center p-6 relative overflow-x-hidden selection:bg-yellow-500 selection:text-black">
       {/* Background Glows */}
       <div className="absolute left-1/4 top-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-yellow-600/10 rounded-full blur-[120px] pointer-events-none" />
       <div className="absolute right-1/4 top-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-yellow-600/5 rounded-full blur-[100px] pointer-events-none" />
