@@ -42,7 +42,7 @@ export default function LoginPage() {
       setError('Tài khoản hoặc mật khẩu không chính xác.');
     } catch (err) {
       console.error("Login error:", err);
-      setError('Đã xảy ra lỗi hệ thống, vui lòng thử lại.');
+      setError(`Lỗi: ${err.message || err.toString()}`);
     }
   };
 
