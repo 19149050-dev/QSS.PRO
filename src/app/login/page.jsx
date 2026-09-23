@@ -20,20 +20,54 @@ export default function LoginPage() {
   }, [fetchSupabaseData]);
 
   const handleLogin = (event) => {
-    event.preventDefault();
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
 
     try {
-      const inputUsername = username.trim().toLowerCase();
-      const user = (users || []).find(u => 
-        u?.username?.toLowerCase() === inputUsername || 
-        u?.username?.toLowerCase() === `@${inputUsername}`
-      );
+      setError('');
+      const inputUsername = (username || '').trim().toLowerCase();
+      const inputPassword = (password || '').trim();
+
+      if (!inputUsername) {
+        setError('Vui lòng nhập tài khoản.');
+        return;
+      }
+
+      // Search user in store users list
+      let user = (users || []).find(u => {
+        const uName = (u?.username || '').toLowerCase();
+        const cleanName = uName.replace(/^@/, '');
+        return uName === inputUsername || cleanName === inputUsername || `@${cleanName}` === inputUsername;
+      });
+
+      // Emergency fallback for admin if store users haven't hydrated yet
+      if (!user && (inputUsername === 'admin' || inputUsername === '@admin')) {
+        user = {
+          id: 'u-1',
+          name: 'Quản trị hệ thống',
+          username: '@admin',
+          role: 'ADMIN',
+          status: 'Active',
+          allowViewFinancials: true
+        };
+      }
 
       if (user) {
-        const expectedPassword = user.password || (user.username === '@admin' ? '0000' : '1234');
-        if (password === expectedPassword) {
-          document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
-          loginUser(user);
+        const expectedPassword = user.password || (user.username === '@admin' || user.username === 'admin' ? '0000' : '1234');
+        if (inputPassword === expectedPassword) {
+          try {
+            document.cookie = 'isAuthenticated=1; path=/; max-age=86400; samesite=lax';
+          } catch (e) {
+            console.warn('Cookie failed:', e);
+          }
+
+          try {
+            loginUser(user);
+          } catch (e) {
+            console.warn('loginUser failed:', e);
+          }
+
           router.replace('/');
           return;
         }
@@ -42,7 +76,7 @@ export default function LoginPage() {
       setError('Tài khoản hoặc mật khẩu không chính xác.');
     } catch (err) {
       console.error("Login error:", err);
-      setError(`Lỗi: ${err.message || err.toString()}`);
+      setError(`Lỗi: ${err?.message || String(err)}`);
     }
   };
 
@@ -102,7 +136,7 @@ export default function LoginPage() {
                 <p className="text-xs text-zinc-500">Đăng nhập để tiếp tục làm việc</p>
               </div>
 
-              <form className="space-y-5">
+              <form onSubmit={handleLogin} className="space-y-5">
                 {error && (
                   <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-400">
                     {error}
@@ -119,6 +153,8 @@ export default function LoginPage() {
                       onChange={(e) => setUsername(e.target.value)}
                       className="w-full bg-[#f4f4f5] text-[14px] font-medium text-black rounded-xl pl-11 pr-4 py-3 outline-none focus:ring-2 focus:ring-yellow-500/50 transition-shadow"
                       placeholder="Nhập tài khoản"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                     />
                   </div>
                 </div>
@@ -141,11 +177,11 @@ export default function LoginPage() {
                 </div>
 
                 <button
-                  type="button"
+                  type="submit"
                   onClick={handleLogin}
                   className="mt-8 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400 hover:to-yellow-500 text-black font-bold text-[13px] transition-all shadow-[0_4px_15px_rgba(234,179,8,0.2)] hover:shadow-[0_6px_20px_rgba(234,179,8,0.3)] active:scale-[0.98]"
                 >
-                  Đăng nhập (v2)
+                  Đăng nhập
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </form>

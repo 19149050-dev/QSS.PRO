@@ -2212,7 +2212,35 @@ export const useStore = create(
     }),
     {
       name: 'qss-pro-storage-v2',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => ({
+        getItem: (name) => {
+          try {
+            if (typeof window === 'undefined') return null;
+            return localStorage.getItem(name);
+          } catch (e) {
+            console.warn('localStorage.getItem error:', e);
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(name, value);
+            }
+          } catch (e) {
+            console.warn('localStorage.setItem error (QuotaExceeded/Blocked):', e);
+          }
+        },
+        removeItem: (name) => {
+          try {
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem(name);
+            }
+          } catch (e) {
+            console.warn('localStorage.removeItem error:', e);
+          }
+        },
+      })),
       partialize: (state) => {
         const { ...rest } = state;
         return rest;
