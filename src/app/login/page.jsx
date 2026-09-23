@@ -102,7 +102,7 @@ export default function LoginPage() {
                 <p className="text-xs text-zinc-500">Đăng nhập để tiếp tục làm việc</p>
               </div>
 
-              <form onSubmit={handleLogin} className="space-y-5">
+              <form className="space-y-5">
                 {error && (
                   <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-center text-xs font-medium text-red-400">
                     {error}
@@ -141,10 +141,11 @@ export default function LoginPage() {
                 </div>
 
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={handleLogin}
                   className="mt-8 w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-yellow-500 to-yellow-400 hover:to-yellow-500 text-black font-bold text-[13px] transition-all shadow-[0_4px_15px_rgba(234,179,8,0.2)] hover:shadow-[0_6px_20px_rgba(234,179,8,0.3)] active:scale-[0.98]"
                 >
-                  Đăng nhập
+                  Đăng nhập (v2)
                   <ArrowRight className="h-4 w-4" />
                 </button>
               </form>
