@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore, sortFloors } from '@/store/useStore';
 import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap, Upload } from 'lucide-react';
-import { exportToExcel } from '@/utils/exportUtils';
+import { exportToExcel, exportMatrixToExcel } from '@/utils/exportUtils';
 import { parseExcelFile } from '@/utils/importUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import QuickEntryModal from '@/components/Modals/QuickEntryModal';
@@ -96,6 +96,49 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     
   const filterBlock = store.matrixFilterBlock[projectName] || 'ALL';
   const filterGroup = store.matrixFilterGroup[projectName] || 'ALL';
+  const filterBatch = store.matrixFilterBatch[projectName] || 'ALL';
+
+  const availableBatches = React.useMemo(() => {
+    const batches = new Set();
+    const matricesToScan = [
+      paymentMatrix,
+      store.paymentMatrix[projectName] || [],
+      store.paymentMatrix[`${projectName}_team`] || [],
+      store.paymentMatrix[`${projectName}_ipc`] || []
+    ];
+
+    matricesToScan.forEach(matrix => {
+      if (!Array.isArray(matrix)) return;
+      matrix.forEach(row => {
+        if (!row.items) return;
+        Object.entries(row.items).forEach(([key, val]) => {
+          if (key.endsWith('_numApts') || !val) return;
+          val.split('+').forEach(part => {
+            let str = part.trim();
+            if (!str) return;
+
+            (store.teams || []).forEach(t => {
+              const tName = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
+              if (tName) {
+                const escaped = tName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                str = str.replace(new RegExp(`\\s*\\(${escaped}\\)`, 'g'), '');
+              }
+            });
+
+            const match = str.match(/^([^(:\-]+)/);
+            if (match) {
+              const bName = match[1].trim();
+              if (bName && bName.length > 0 && bName.length <= 30) {
+                batches.add(bName);
+              }
+            }
+          });
+        });
+      });
+    });
+
+    return Array.from(batches).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [paymentMatrix, store.paymentMatrix, projectName, store.teams]);
 
   const matrixBlocks = React.useMemo(() => {
     return rawBlocks.map(block => {
@@ -151,7 +194,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const deleteAllFloors = () => store.deleteAllFloors(projectName);
   const deleteMultipleFloors = (floorNames) => store.deleteMultipleFloors(projectName, floorNames);
   const addBOQNode = (...args) => store.addBOQNode(projectName, ...args);
-  const [showTeamNames, setShowTeamNames] = useState(false);
+  const [displayMode, setDisplayMode] = useState('no_name'); // 'no_name' | 'name' | 'percent' | 'ratio'
   const [selectedCell, setSelectedCell] = useState(null);
   const [inputValue, setInputValue] = useState('');
   const [batchList, setBatchList] = useState([]);
@@ -329,6 +372,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               valForColor = (valForColor || '').split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`)).join(' + ');
             }
             
+            if (filterBatch && filterBatch !== 'ALL') {
+              valForColor = (valForColor || '').split(' + ').filter(p => p.includes(filterBatch)).join(' + ');
+            }
+
             if (valForColor && valForColor.trim() !== '') {
               hasIpcOrTeamFilterMatch = true;
             }
@@ -338,13 +385,11 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           
           if (type === 'ipc' || type === 'ipc_select') {
             if (selectedIpcFilter !== 'ALL') {
-              // If filtering by a specific IPC, ALWAYS hide columns that don't have it, regardless of auto-hide
               if (!hasIpcOrTeamFilterMatch) {
                 emptyKeys.push(itemKey);
                 return;
               }
             } else {
-              // If viewing ALL IPCs, hide completely dead columns
               if (!hasAnyActionableData) {
                 emptyKeys.push(itemKey);
                 return;
@@ -352,15 +397,17 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             }
           }
           
-          // For team view or when auto-hide is on
           if (isAutoHiddenEmpty && !hasIpcOrTeamFilterMatch) {
+            emptyKeys.push(itemKey);
+          }
+          if (filterBatch !== 'ALL' && !hasIpcOrTeamFilterMatch) {
             emptyKeys.push(itemKey);
           }
         });
       });
     });
     return emptyKeys;
-  }, [isAutoHiddenEmpty, matrixBlocks, paymentMatrix, type, selectedTeamFilter, selectedIpcFilter, store.paymentMatrix, projectName]);
+  }, [isAutoHiddenEmpty, filterBatch, matrixBlocks, paymentMatrix, type, selectedTeamFilter, selectedIpcFilter, store.paymentMatrix, projectName]);
 
   const isColumnVisible = (itemKey) => !hiddenColumns.includes(itemKey) && !emptyColumnsKeys.includes(itemKey);
 
@@ -625,42 +672,115 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               total += parseFloat(match[1]);
             }
           }
+        } else {
+          const match = p.match(/(\d+(\.\d+)?)/);
+          if (match) {
+            if (p.includes('%')) {
+              total += (parseFloat(match[1]) / 100) * (parseFloat(totalApts) || 0);
+            } else {
+              total += parseFloat(match[1]);
+            }
+          }
         }
       }
     });
     return total;
   };
 
-  const displayCellValue = (rawVal, team) => {
+  const displayCellValue = React.useCallback((rawVal, team, batch = filterBatch, numApts = 0) => {
     if (!rawVal) return '';
 
     let display = rawVal;
     
     // Strip team names for specific team view
-    if (team !== 'ALL') {
+    if (team && team !== 'ALL') {
       const teamParts = rawVal.split(' + ').filter(p => p.includes(`(${team})`));
       if (teamParts.length > 0) {
         display = teamParts.map(p => p.replace(`(${team})`, '').trim()).join(' + ');
       } else {
         return '';
       }
-    } else if ((type === 'team' && team === 'ALL' && !showTeamNames) || type === 'ipc_select' || type === 'ipc') {
-      // In IPC mode with ALL teams, or when team names are hidden, strip all team names
-      store.teams.forEach(t => {
-        const escapedTeamName = t.teamName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
-      });
     }
 
-    // Extract quantities ONLY for ipc modes
+    // Filter by batch
+    if (batch && batch !== 'ALL') {
+      const batchParts = display.split(' + ').filter(p => p.includes(batch));
+      if (batchParts.length > 0) {
+        display = batchParts.join(' + ');
+      } else {
+        return '';
+      }
+    }
+
     if (type === 'ipc' || type === 'ipc_select') {
       const parts = display.split(' + ').map(p => p.trim());
-      // Removed the block that incorrectly strips 'ĐỢT' so it displays identically to 'IPC'
-      return parts.join(' + ');
+      display = parts.join(' + ');
+    }
+
+    if (displayMode === 'no_name') {
+      (store.teams || []).forEach(t => {
+        const tName = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
+        if (tName) {
+          const escapedTeamName = tName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
+        }
+      });
+      return display;
+    }
+
+    if (displayMode === 'name') {
+      return display;
+    }
+
+    const totalAptsNum = parseFloat(numApts) || 0;
+    const completedUnits = parseTotalUnitsForCell(display, totalAptsNum);
+
+    if (displayMode === 'percent') {
+      if (totalAptsNum > 0) {
+        const pct = Math.round((completedUnits / totalAptsNum) * 100);
+        return `${pct}%`;
+      } else if (completedUnits > 0) {
+        return '100%';
+      }
+      return '0%';
+    }
+
+    if (displayMode === 'ratio') {
+      const formattedCompleted = Number.isInteger(completedUnits) ? completedUnits : completedUnits.toFixed(1);
+      if (totalAptsNum > 0) {
+        return `${formattedCompleted}/${totalAptsNum} căn`;
+      } else if (completedUnits > 0) {
+        return `${formattedCompleted} căn`;
+      }
+      return '0/0 căn';
     }
 
     return display;
-  };
+  }, [type, displayMode, store.teams, filterBatch]);
+
+  const processedPaymentMatrix = React.useMemo(() => {
+    return paymentMatrix.filter(row => {
+      if (isAutoHiddenEmpty || filterBatch !== 'ALL') {
+        const hasVisibleData = matrixBlocks.some(block => {
+          const numAptsKey = `${block.blockName}_numApts`;
+          const blockNumApts = row.items[numAptsKey] || row.numApts || '';
+          return block.groups.some(group => {
+            return group.items.some(cat => {
+              const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
+              if (hiddenColumns.includes(itemKey) || emptyColumnsKeys.includes(itemKey)) return false;
+              const rawVal = row.items[itemKey] || '';
+              const displayVal = displayCellValue(rawVal, selectedTeamFilter, filterBatch, blockNumApts);
+              return displayVal && displayVal.trim() !== '';
+            });
+          });
+        });
+        if (isAutoHiddenEmpty && !hasVisibleData) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [paymentMatrix, matrixBlocks, isAutoHiddenEmpty, selectedTeamFilter, filterBatch, hiddenColumns, emptyColumnsKeys, displayCellValue]);
 
   const mergeCellValue = (rawVal, newVal, team) => {
     if (!team || team === 'ALL') return newVal;
@@ -732,38 +852,19 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   };
 
   const handleExportExcel = () => {
-    const exportData = paymentMatrix.map(row => {
-      const flatRow = {
-        'Tầng': row.floor,
-        'Số căn': row.numApts || '-'
-      };
-      
-      matrixBlocks.forEach(block => {
-        block.groups.forEach(group => {
-          group.items.forEach(cat => {
-            const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
-            if (isColumnVisible(itemKey)) {
-              const colName = `${block.blockName} - ${group.groupName} - ${cat}`;
-              
-              let cellValue = row.items[itemKey] || '';
-              if (type === 'ipc') {
-                 const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
-                 const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
-                 cellValue = ipcRow?.items?.[itemKey] || '';
-              } else {
-                 cellValue = displayCellValue(cellValue, selectedTeamFilter) || '';
-              }
-              
-              flatRow[colName] = cellValue;
-            }
-          });
-        });
-      });
-      return flatRow;
-    });
-
     const title = type === 'ipc' ? `IPC_${projectName}` : `Tien_Do_${projectName}`;
-    exportToExcel(exportData, title, 'DuLieu');
+    exportMatrixToExcel({
+      projectName,
+      matrixBlocks,
+      paymentMatrix: processedPaymentMatrix,
+      fileName: title,
+      sheetName: 'DuLieu',
+      type,
+      selectedTeamFilter,
+      isColumnVisible,
+      displayCellValue,
+      storeData: store
+    });
   };
 
   const handleImportExcel = async (e) => {
@@ -792,8 +893,22 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+      {/* Clean Print-Only Document Title Header */}
+      <div className="hidden print:block mb-4 text-center border-b border-gray-300 pb-3">
+        <h1 className="text-xl font-black text-gray-900 tracking-wide uppercase">
+          BẢNG TIẾN ĐỘ THI CÔNG - DỰ ÁN {projectName}
+        </h1>
+        {(selectedTeamFilter !== 'ALL' || filterBatch !== 'ALL' || filterBlock !== 'ALL') && (
+          <div className="flex justify-center items-center gap-4 text-xs font-bold text-gray-700 mt-1">
+            {selectedTeamFilter !== 'ALL' && <span>Tổ Đội: <b className="text-indigo-800">{selectedTeamFilter}</b></span>}
+            {filterBatch !== 'ALL' && <span>Đợt: <b className="text-indigo-800">{filterBatch}</b></span>}
+            {filterBlock !== 'ALL' && <span>Tháp: <b className="text-indigo-800">{filterBlock}</b></span>}
+          </div>
+        )}
+      </div>
+
       {/* Helper Toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs no-print">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 text-xs no-print print:hidden">
         {headerContent && (
           <div className="flex-shrink-0 flex items-center">
             {headerContent}
@@ -806,20 +921,22 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <Printer className="w-4 h-4" /> In Bảng
         </button>
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg border border-amber-200 shadow-sm transition-colors"
-          title="Nhập lại dữ liệu đã xuất từ file Excel để khôi phục"
-        >
-          <Upload className="w-4 h-4" /> Nhập Excel
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleImportExcel}
-            accept=".xlsx, .xls"
-            className="hidden"
-          />
-        </button>
+        {type !== 'ipc' && (
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-700 hover:bg-amber-100 font-bold rounded-lg border border-amber-200 shadow-sm transition-colors"
+            title="Nhập lại dữ liệu đã xuất từ file Excel để khôi phục"
+          >
+            <Upload className="w-4 h-4" /> Nhập Excel
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleImportExcel}
+              accept=".xlsx, .xls"
+              className="hidden"
+            />
+          </button>
+        )}
         <button 
           onClick={handleExportExcel}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-lg border border-emerald-200 shadow-sm transition-colors"
@@ -837,10 +954,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             setIsAutoHiddenEmpty(!isAutoHiddenEmpty);
             setHiddenColumns([]);
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 text-slate-700 hover:bg-slate-100 font-bold rounded-lg border border-slate-200 shadow-sm transition-colors"
-          title="Bật/Tắt tự động ẩn các cột chưa có dữ liệu thi công"
+          className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${
+            isAutoHiddenEmpty 
+              ? 'bg-indigo-100 text-indigo-800 border-indigo-300' 
+              : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
+          }`}
+          title="Bật/Tắt tự động ẩn các tầng và cột chưa có dữ liệu thi công"
         >
-          {isAutoHiddenEmpty ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} {isAutoHiddenEmpty ? 'Hiện cột trống' : 'Ẩn cột trống'}
+          {isAutoHiddenEmpty ? <Eye className="w-4 h-4 text-indigo-600" /> : <EyeOff className="w-4 h-4" />}
+          {isAutoHiddenEmpty ? 'Hiện ô trống' : 'Ẩn ô trống'}
         </button>
         {type === 'ipc' && (
           <button 
@@ -939,16 +1061,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             </button>
           </>
         )}
-        {type === 'team' && selectedTeamFilter === 'ALL' && (
-          <button
-            onClick={() => setShowTeamNames(!showTeamNames)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${showTeamNames ? 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200'}`}
-            title="Ẩn/Hiện tên đội trong bảng TỔNG"
+        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-700 font-bold rounded-lg border border-orange-200 shadow-xs transition-colors hover:bg-orange-100">
+          <Eye className="w-4 h-4 text-orange-600 flex-shrink-0" />
+          <select
+            value={displayMode}
+            onChange={(e) => setDisplayMode(e.target.value)}
+            className="bg-transparent text-xs font-bold text-orange-900 focus:outline-none cursor-pointer"
+            title="Đổi chế độ hiển thị nội dung ô"
           >
-            {showTeamNames ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            {showTeamNames ? 'Ẩn tên' : 'Hiện tên'}
-          </button>
-        )}
+            <option value="no_name">🙈 Ẩn tên tổ đội</option>
+            <option value="name">👁️ Hiện tên tổ đội</option>
+            <option value="percent">📊 Hiện % hoàn thành</option>
+            <option value="ratio">🏠 Căn làm / Căn tổng (VD: 16/18 căn)</option>
+          </select>
+        </div>
         </div>
         {filterContent && (
           <div className="flex-shrink-0 flex items-center">
@@ -1125,7 +1251,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             </tr>
           </thead>
           <tbody>
-            {paymentMatrix.map((row, idx) => (
+            {processedPaymentMatrix.map((row, idx) => (
               <tr key={idx} className="hover:bg-slate-50 transition border-b border-gray-200 group">
                 <td 
                   className="font-bold text-center bg-amber-100 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] border-r border-amber-200 text-slate-900 py-1.5 cursor-pointer hover:bg-amber-200 transition-colors"
@@ -1175,7 +1301,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
                       if (!isColumnVisible(itemKey)) return null;
                       let rawVal = row.items[itemKey];
-                      const displayVal = displayCellValue(rawVal, selectedTeamFilter);
+                      const displayVal = displayCellValue(rawVal, selectedTeamFilter, filterBatch, blockNumApts || row.numApts);
                       let ipcRawVal = '';
                       if (type === 'ipc' || type === 'ipc_select') {
                         const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
@@ -2188,7 +2314,49 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
     
   const filterBlock = store.matrixFilterBlock[projectName] || 'ALL';
   const filterGroup = store.matrixFilterGroup[projectName] || 'ALL';
+  const filterBatch = store.matrixFilterBatch[projectName] || 'ALL';
   const matrixKey = type === 'ipc' ? `${projectName}_ipc` : (type === 'team' || type === 'ipc_select') ? `${projectName}_team` : projectName;
+
+  const availableBatches = React.useMemo(() => {
+    const batches = new Set();
+    const matricesToScan = [
+      store.paymentMatrix[projectName] || [],
+      store.paymentMatrix[`${projectName}_team`] || [],
+      store.paymentMatrix[`${projectName}_ipc`] || []
+    ];
+
+    matricesToScan.forEach(matrix => {
+      if (!Array.isArray(matrix)) return;
+      matrix.forEach(row => {
+        if (!row.items) return;
+        Object.entries(row.items).forEach(([key, val]) => {
+          if (key.endsWith('_numApts') || !val) return;
+          val.split('+').forEach(part => {
+            let str = part.trim();
+            if (!str) return;
+
+            (store.teams || []).forEach(t => {
+              const tName = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
+              if (tName) {
+                const escaped = tName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                str = str.replace(new RegExp(`\\s*\\(${escaped}\\)`, 'g'), '');
+              }
+            });
+
+            const match = str.match(/^([^(:\-]+)/);
+            if (match) {
+              const bName = match[1].trim();
+              if (bName && bName.length > 0 && bName.length <= 30) {
+                batches.add(bName);
+              }
+            }
+          });
+        });
+      });
+    });
+
+    return Array.from(batches).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  }, [store.paymentMatrix, projectName, store.teams]);
 
   const uniqueBlocks = React.useMemo(() => rawBlocks.map(b => b.blockName), [rawBlocks]);
   const uniqueGroups = React.useMemo(() => {
@@ -2225,14 +2393,14 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
       newGroups.push(grp);
     }
     const newVal = newGroups.length === 0 ? 'ALL' : newGroups.join(',');
-    store.setMatrixFilter(projectName, filterBlock, newVal);
+    store.setMatrixFilter(projectName, filterBlock, newVal, filterBatch);
   };
 
   const handleSelectAllGroups = () => {
     if (selectedGroups.length === uniqueGroups.length) {
-      store.setMatrixFilter(projectName, filterBlock, 'ALL');
+      store.setMatrixFilter(projectName, filterBlock, 'ALL', filterBatch);
     } else {
-      store.setMatrixFilter(projectName, filterBlock, uniqueGroups.join(','));
+      store.setMatrixFilter(projectName, filterBlock, uniqueGroups.join(','), filterBatch);
     }
   };
 
@@ -2241,13 +2409,26 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
   };
 
   return (
-    <div className="flex items-center gap-2 ml-auto z-50">
+    <div className="flex flex-wrap items-center gap-2 ml-auto z-50 no-print print:hidden">
+      <select 
+        value={filterBatch} 
+        onChange={(e) => {
+          store.setMatrixFilter(projectName, filterBlock, filterGroup, e.target.value);
+        }}
+        className="px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs min-w-[140px] cursor-pointer"
+      >
+        <option value="ALL">Tất cả các Đợt</option>
+        {availableBatches.map(b => (
+          <option key={b} value={b}>{b}</option>
+        ))}
+      </select>
+
       <select 
         value={filterBlock} 
         onChange={(e) => {
-          store.setMatrixFilter(projectName, e.target.value, 'ALL');
+          store.setMatrixFilter(projectName, e.target.value, 'ALL', filterBatch);
         }}
-        className="px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs min-w-[150px] cursor-pointer"
+        className="px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs min-w-[140px] cursor-pointer"
       >
         <option value="ALL">Tất cả các Tháp</option>
         {uniqueBlocks.map(b => (

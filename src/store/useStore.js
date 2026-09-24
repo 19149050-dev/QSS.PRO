@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
+import { initialUsers, initialProjects, initialTeams, initialIPCs, initialMaterials, initialPaymentMatrix, defaultMatrixBlocks, standardBlocksTemplate, thachCaoBlocksTemplate, initialEquipments } from '@/lib/mockData';
 import { supabase } from '@/lib/supabase';
 
 let matrixSyncTimeouts = {};
@@ -57,6 +57,7 @@ export const useStore = create(
       teams: initialTeams,
       ipcs: initialIPCs,
       materials: initialMaterials,
+      equipments: initialEquipments,
       materialSheets: {},
       attendanceSheets: {},
       projectNotes: {},
@@ -67,9 +68,11 @@ export const useStore = create(
       shopDrawings: [],
       matrixFilterBlock: {},
       matrixFilterGroup: {},
-      setMatrixFilter: (projectName, block, group) => set((state) => ({
+      matrixFilterBatch: {},
+      setMatrixFilter: (projectName, block, group, batch = 'ALL') => set((state) => ({
         matrixFilterBlock: { ...state.matrixFilterBlock, [projectName]: block },
-        matrixFilterGroup: { ...state.matrixFilterGroup, [projectName]: group }
+        matrixFilterGroup: { ...state.matrixFilterGroup, [projectName]: group },
+        matrixFilterBatch: { ...state.matrixFilterBatch, [projectName]: batch }
       })),
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
       openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
@@ -989,17 +992,23 @@ export const useStore = create(
         });
         get().syncAttendanceSheetToSupabase(projectName);
       },
-      updateAttendanceCell: (projectName, rowId, teamKey, value) => {
+      updateAttendanceCell: (projectName, rowId, teamKey, value, note) => {
         set((state) => {
           const current = state.attendanceSheets[projectName] || { rows: [] };
           const nextRows = (current.rows || []).map(row => {
             if (row.id !== rowId) return row;
+            const newValues = { ...(row.values || {}) };
+            if (value !== undefined) {
+              newValues[teamKey] = value;
+            }
+            const newNotes = { ...(row.notes || {}) };
+            if (note !== undefined) {
+              newNotes[teamKey] = note;
+            }
             return {
               ...row,
-              values: {
-                ...(row.values || {}),
-                [teamKey]: value
-              }
+              values: newValues,
+              notes: newNotes
             };
           });
           const nextSheet = { ...current, rows: nextRows };
@@ -1042,6 +1051,66 @@ export const useStore = create(
           };
         });
         get().syncAttendanceSheetToSupabase(projectName);
+      },
+
+      // Equipment Store Actions
+      addEquipment: (item) => {
+        const newItem = {
+          id: `eq-${Date.now()}`,
+          name: item.name || '',
+          importDate: item.importDate || '',
+          price: parseFloat(item.price) || 0,
+          projectName: item.projectName || '',
+          warrantyPeriod: item.warrantyPeriod || '',
+          status: item.status || 'Mới',
+          notes: item.notes || ''
+        };
+        set((state) => ({
+          equipments: [newItem, ...(state.equipments || [])]
+        }));
+        get().syncEquipmentToSupabase(newItem);
+      },
+      updateEquipment: (id, updatedData) => {
+        set((state) => ({
+          equipments: (state.equipments || []).map(eq => eq.id === id ? { ...eq, ...updatedData } : eq)
+        }));
+        get().syncEquipmentToSupabase({ id, ...updatedData });
+      },
+      deleteEquipment: async (id) => {
+        set((state) => ({
+          equipments: (state.equipments || []).filter(eq => eq.id !== id)
+        }));
+        try {
+          const { error } = await supabase.from('equipments').delete().eq('id', String(id));
+          if (error) {
+            console.error('Lỗi xóa thiết bị trên Supabase:', error);
+          }
+        } catch (e) {
+          console.error('Lỗi deleteEquipment:', e);
+        }
+      },
+      syncEquipmentToSupabase: async (item) => {
+        try {
+          const payload = {
+            id: String(item.id),
+            name: item.name,
+            import_date: item.importDate,
+            price: item.price,
+            project_name: item.projectName,
+            warranty_period: item.warrantyPeriod,
+            status: item.status,
+            notes: item.notes,
+            updated_at: new Date().toISOString()
+          };
+          const { data: existing } = await supabase.from('equipments').select('id').eq('id', String(item.id)).maybeSingle();
+          if (existing) {
+            await supabase.from('equipments').update(payload).eq('id', String(item.id));
+          } else {
+            await supabase.from('equipments').insert([payload]);
+          }
+        } catch (err) {
+          console.error('Lỗi syncEquipmentToSupabase:', err);
+        }
       },
 
       // Payment Matrix Actions
@@ -1971,9 +2040,13 @@ export const useStore = create(
           if (!attError && attData) {
             const atts = {};
             attData.forEach(s => {
+              const currentSheet = get().attendanceSheets?.[s.project_name];
+              const existingInactive = currentSheet?.inactiveTeams || [];
+              const loadedInactive = s.inactive_teams || s.inactiveTeams || existingInactive;
               atts[s.project_name] = {
                 rows: s.rows || [],
-                customTeams: s.custom_teams || []
+                customTeams: s.custom_teams || [],
+                inactiveTeams: Array.isArray(loadedInactive) ? loadedInactive : []
               };
             });
             set((state) => ({
@@ -1991,6 +2064,22 @@ export const useStore = create(
           const { data: shopData, error: shopError } = await supabase.from('shop_drawings').select('*');
           if (!shopError && shopData) {
             set({ shopDrawings: shopData });
+          }
+
+          // Fetch Equipments
+          const { data: eqData, error: eqError } = await supabase.from('equipments').select('*');
+          if (!eqError && Array.isArray(eqData)) {
+            const mappedEq = eqData.map(e => ({
+              id: String(e.id),
+              name: e.name || e.equipment_name || '',
+              importDate: e.import_date || e.importDate || '',
+              price: parseFloat(e.price) || 0,
+              projectName: e.project_name || e.projectName || '',
+              warrantyPeriod: e.warranty_period || e.warrantyPeriod || '',
+              status: e.status || 'Mới',
+              notes: e.notes || ''
+            }));
+            set({ equipments: mappedEq });
           }
 
         } catch (err) {
@@ -2181,12 +2270,13 @@ export const useStore = create(
         }
         attendanceSyncTimeouts[projectName] = setTimeout(async () => {
           const state = get();
-          const sheet = state.attendanceSheets[projectName] || { rows: [], customTeams: [] };
+          const sheet = state.attendanceSheets[projectName] || { rows: [], customTeams: [], inactiveTeams: [] };
           try {
             const payload = {
               project_name: projectName,
               rows: sheet.rows || [],
               custom_teams: sheet.customTeams || [],
+              inactive_teams: sheet.inactiveTeams || [],
               updated_at: new Date().toISOString()
             };
             
@@ -2196,9 +2286,17 @@ export const useStore = create(
             if (existing) {
               const res = await supabase.from('attendance_sheets').update(payload).eq('project_name', projectName);
               error = res.error;
+              if (error && (error.code === '42703' || error.message?.includes('inactive_teams'))) {
+                delete payload.inactive_teams;
+                await supabase.from('attendance_sheets').update(payload).eq('project_name', projectName);
+              }
             } else {
               const res = await supabase.from('attendance_sheets').insert([payload]);
               error = res.error;
+              if (error && (error.code === '42703' || error.message?.includes('inactive_teams'))) {
+                delete payload.inactive_teams;
+                await supabase.from('attendance_sheets').insert([payload]);
+              }
             }
             
             if (error) {

@@ -631,11 +631,11 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                   </div>
                   
                   <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-210px)] relative print:max-h-none print:overflow-visible">
                       <table id="material-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
-                        <thead>
+                        <thead className="sticky top-0 z-30 bg-white shadow-md">
                           <tr>
-                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight sticky left-0 top-0 z-40 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.15)]">
                               {isExport ? 'TẦNG' : (
                                 <>
                                   NGÀY<br/>
@@ -831,10 +831,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               </td>
                             </tr>
                           )}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 z-20 bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.15)]">
                           {!isExport ? (
                             <>
                               <tr className="bg-slate-100 font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 sticky left-0 z-20 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">TỔNG</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 sticky left-0 z-30 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">TỔNG</td>
                                 {materialItems.map((item) => (
                                   <Fragment key={`${item.id}-totals`}>
                                     <td className="border border-slate-800 p-2 text-amber-900 bg-amber-200 font-extrabold text-sm">{formatCell(orderTotals[item.id] || 0)}</td>
@@ -843,7 +845,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 ))}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Vật tư chưa nhận</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Vật tư chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
                                   let bgColorClass = 'bg-green-400';
@@ -861,7 +863,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Sản lượng</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Sản lượng</td>
                                 {materialItems.map((item) => {
                                   const poQty = orderTotals[item.id] || 0;
                                   const recvQty = totals[item.id] || 0;
@@ -882,7 +884,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">IPC</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">IPC</td>
                                 {materialItems.map((item) => {
                                   const rawIpc = currentSheet.ipcMap?.[item.id];
                                   const ipcVal = typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order ?? '') : (rawIpc ?? '');
@@ -903,7 +905,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 })}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase sticky left-0 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">%</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">%</td>
                                 {materialItems.map((item) => {
                                   const recvQty = totals[item.id] || 0;
                                   const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
@@ -933,7 +935,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           ) : (
                             <>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100">Đã nhập</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Đã nhập</td>
                                 {materialItems.map((item) => (
                                   <td
                                     key={`${item.id}-imported`}
@@ -945,7 +947,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 ))}
                               </tr>
                               <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100">Đã xuất</td>
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Đã xuất</td>
                                 {materialItems.map((item) => {
                                   const imported = parseNumber(totals[item.id] || 0);
                                   const exported = parseNumber(exportTotals[item.id] || 0);
@@ -964,7 +966,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               </tr>
                             </>
                           )}
-                        </tbody>
+                        </tfoot>
                       </table>
                     </div>
                   </div>

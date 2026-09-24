@@ -36,7 +36,7 @@ export default function Navbar({ onOpenAddModal, searchSearch, onSearchChange })
   const { title, subtitle } = getHeaderInfo();
 
   return (
-    <header className="bg-white border-b border-gray-200 px-8 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 sticky top-0 z-10 shadow-sm">
+    <header className="bg-white border-b border-gray-200 px-8 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4 sticky top-0 z-10 shadow-sm no-print print:hidden">
       <div>
         <div className="flex items-center gap-2">
           <h2 className="text-xl font-bold text-gray-900 tracking-tight">{title}</h2>

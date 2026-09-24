@@ -11,7 +11,14 @@ import {
   RotateCcw, 
   Users,
   Edit2,
-  BarChart3
+  BarChart3,
+  Copy,
+  ClipboardPaste,
+  Sparkles,
+  ArrowDown,
+  Eraser,
+  MapPin,
+  X
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -64,18 +71,33 @@ export default function TeamAttendanceView() {
   const currentSheet = attendanceSheets[selectedProject] || { rows: [], customTeams: [] };
 
   // Determine active team columns (teams queried from project + any custom added teams)
+  const isTeamInactive = (id, name, rawName) => {
+    const list = currentSheet.inactiveTeams || [];
+    if (!list || list.length === 0) return false;
+    return list.includes(id) || 
+           (name && list.includes(name)) || 
+           (rawName && list.includes(rawName)) ||
+           (name && list.includes(name.toUpperCase()));
+  };
+
   const teamItems = useMemo(() => {
-    let items = projectTeams.map(t => ({
-      id: t.id || `team_${t.teamName || t.team_name}`,
-      name: (t.teamName || t.team_name || 'Tổ Đội').toUpperCase(),
-      isInactive: (currentSheet.inactiveTeams || []).includes(t.id || `team_${t.teamName || t.team_name}`)
-    }));
+    let items = projectTeams.map(t => {
+      const id = t.id || `team_${t.teamName || t.team_name}`;
+      const name = (t.teamName || t.team_name || 'Tổ Đội').toUpperCase();
+      const rawName = t.teamName || t.team_name || '';
+      return {
+        id,
+        name,
+        rawName,
+        isInactive: isTeamInactive(id, name, rawName)
+      };
+    });
 
     // If no teams set for project, provide default fallback team columns
     if (items.length === 0) {
       items = [
-        { id: 'team_a', name: 'ĐỘI A', isInactive: (currentSheet.inactiveTeams || []).includes('team_a') },
-        { id: 'team_b', name: 'ĐỘI B', isInactive: (currentSheet.inactiveTeams || []).includes('team_b') }
+        { id: 'team_a', name: 'ĐỘI A', rawName: 'Đội A', isInactive: isTeamInactive('team_a', 'ĐỘI A', 'Đội A') },
+        { id: 'team_b', name: 'ĐỘI B', rawName: 'Đội B', isInactive: isTeamInactive('team_b', 'ĐỘI B', 'Đội B') }
       ];
     }
 
@@ -83,7 +105,13 @@ export default function TeamAttendanceView() {
     if (currentSheet.customTeams && currentSheet.customTeams.length > 0) {
       currentSheet.customTeams.forEach(ct => {
         if (!items.some(c => c.id === ct.id)) {
-          items.push({ id: ct.id, name: ct.name.toUpperCase(), isInactive: (currentSheet.inactiveTeams || []).includes(ct.id) });
+          const name = ct.name.toUpperCase();
+          items.push({
+            id: ct.id,
+            name,
+            rawName: ct.name,
+            isInactive: isTeamInactive(ct.id, name, ct.name)
+          });
         }
       });
     }
@@ -131,6 +159,82 @@ export default function TeamAttendanceView() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(todayFormatted);
   const [showChart, setShowChart] = useState(false);
+  const [chartViewMode, setChartViewMode] = useState('month'); // 'day' | 'week' | 'month'
+  
+  // Right-click Context Menu & Copy/Paste States
+  const [contextMenu, setContextMenu] = useState(null);
+  const [copiedAttendanceData, setCopiedAttendanceData] = useState(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => setContextMenu(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  const handleCellContextMenu = (e, row, item, field = 'count') => {
+    e.preventDefault();
+    if (item.isInactive) return;
+    const count = row.values?.[item.id] ?? '';
+    const note = row.notes?.[item.id] || '';
+    const val = field === 'count' ? (count !== undefined ? String(count) : '') : (note || '');
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      rowId: row.id,
+      teamId: item.id,
+      teamName: item.name,
+      dateStr: row.date,
+      field,
+      val
+    });
+  };
+
+  const handleCellClick = (row, item, field = 'count') => {
+    if (item.isInactive) return;
+    if (copiedAttendanceData !== null) {
+      const targetCount = copiedAttendanceData.field === 'count' ? copiedAttendanceData.val : undefined;
+      const targetNote = copiedAttendanceData.field === 'note' ? copiedAttendanceData.val : undefined;
+      updateAttendanceCell(
+        selectedProject,
+        row.id,
+        item.id,
+        targetCount,
+        targetNote
+      );
+      return;
+    }
+    setAttendanceModal({
+      isOpen: true,
+      rowId: row.id,
+      teamId: item.id,
+      teamName: item.name,
+      dateStr: row.date,
+      count: row.values?.[item.id] ?? '',
+      note: row.notes?.[item.id] || ''
+    });
+  };
+
+  const [attendanceModal, setAttendanceModal] = useState({
+    isOpen: false,
+    rowId: null,
+    teamId: null,
+    teamName: '',
+    dateStr: '',
+    count: '',
+    note: ''
+  });
+
+  const handleSaveAttendanceModal = () => {
+    if (!attendanceModal.rowId || !attendanceModal.teamId) return;
+    updateAttendanceCell(
+      selectedProject,
+      attendanceModal.rowId,
+      attendanceModal.teamId,
+      attendanceModal.count,
+      attendanceModal.note
+    );
+    setAttendanceModal(prev => ({ ...prev, isOpen: false }));
+  };
 
   const toISO = (dateStr) => {
     if (!dateStr) return '';
@@ -229,37 +333,66 @@ export default function TeamAttendanceView() {
     return totals;
   }, [teamItems, filteredRows]);
 
-  // Chart Data grouped by Month
-  const chartDataByMonth = useMemo(() => {
+  // Chart Data grouped dynamically by Day / Week / Month
+  const chartData = useMemo(() => {
     const grouped = {};
     
-    filteredRows.forEach(row => {
+    // Sort chronological ascending for chart display
+    const chronologicalRows = [...filteredRows].sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return -1;
+      if (!dateB) return 1;
+      return dateA.getTime() - dateB.getTime();
+    });
+
+    chronologicalRows.forEach(row => {
       const d = parseDate(row.date);
       if (!d) return;
       
-      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const monthLabel = `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+      let key = '';
+      let label = '';
       
-      if (!grouped[monthKey]) {
-        grouped[monthKey] = {
-          monthKey,
-          name: monthLabel,
+      if (chartViewMode === 'day') {
+        const timeVal = d.getTime();
+        key = String(timeVal);
+        label = row.date;
+      } else if (chartViewMode === 'week') {
+        const tempD = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        const dayNum = tempD.getUTCDay() || 7;
+        tempD.setUTCDate(tempD.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(tempD.getUTCFullYear(), 0, 1));
+        const weekNo = Math.ceil((((tempD - yearStart) / 86400000) + 1) / 7);
+        const year = tempD.getUTCFullYear();
+        
+        key = `${year}-W${String(weekNo).padStart(2, '0')}`;
+        label = `Tuần ${weekNo}/${year}`;
+      } else {
+        // month
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        key = monthKey;
+        label = `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+      }
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          sortKey: key,
+          name: label,
         };
-        // Initialize all teams to 0 for this month
         teamItems.forEach(team => {
-          grouped[monthKey][team.id] = 0;
+          grouped[key][team.id] = 0;
         });
       }
       
       teamItems.forEach(team => {
-        grouped[monthKey][team.id] += parseNumber(row.values?.[team.id]);
+        grouped[key][team.id] += parseNumber(row.values?.[team.id]);
       });
     });
 
-    // Sort by month ascending
     const sortedKeys = Object.keys(grouped).sort();
-    return sortedKeys.map(key => grouped[key]);
-  }, [filteredRows, teamItems]);
+    return sortedKeys.map(k => grouped[k]);
+  }, [filteredRows, teamItems, chartViewMode]);
 
   // Actions
   const handleTeamHeaderClick = (item) => {
@@ -270,9 +403,14 @@ export default function TeamAttendanceView() {
 
     openGlobalConfirm(msg, () => {
       const currentInactive = currentSheet.inactiveTeams || [];
-      const nextInactive = isInactive 
-        ? currentInactive.filter(id => id !== item.id)
-        : [...currentInactive, item.id];
+      const identifiers = [item.id, item.name, item.rawName].filter(Boolean);
+      
+      let nextInactive;
+      if (isInactive) {
+        nextInactive = currentInactive.filter(id => !identifiers.includes(id) && !identifiers.includes(String(id).toUpperCase()));
+      } else {
+        nextInactive = Array.from(new Set([...currentInactive, ...identifiers]));
+      }
         
       setAttendanceSheet(selectedProject, {
         ...currentSheet,
@@ -389,34 +527,48 @@ export default function TeamAttendanceView() {
     }, 'Cảnh báo xóa dữ liệu');
   };
 
-  // Export to Excel
+  // Export to Excel (2 columns per team: Số CN | Vị trí thi công)
   const handleExportExcel = () => {
     try {
-      const exportData = [];
+      const headerRow1 = ['NGÀY'];
+      const headerRow2 = [''];
+      const merges = [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }]; // Merge NGÀY vertically
 
-      // Data Rows
-      rows.forEach(r => {
-        const rowData = { 'NGÀY': r.date || '' };
-        teamItems.forEach(item => {
-          rowData[item.name] = r.values?.[item.id] ?? 0;
-        });
-        exportData.push(rowData);
-      });
-
-      // Total Row
-      const totalRow = { 'NGÀY': 'TỔNG' };
+      let colIdx = 1;
       teamItems.forEach(item => {
-        totalRow[item.name] = columnTotals[item.id] || 0;
+        headerRow1.push(item.name, '');
+        headerRow2.push('Số CN', 'Vị trí thi công');
+        merges.push({ s: { r: 0, c: colIdx }, e: { r: 0, c: colIdx + 1 } });
+        colIdx += 2;
       });
-      exportData.push(totalRow);
 
-      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      const dataRows = [headerRow1, headerRow2];
+
+      filteredRows.forEach(r => {
+        const rowArr = [r.date || ''];
+        teamItems.forEach(item => {
+          const count = parseNumber(r.values?.[item.id]);
+          const note = r.notes?.[item.id] || '';
+          rowArr.push(count, note);
+        });
+        dataRows.push(rowArr);
+      });
+
+      const totalArr = ['TỔNG'];
+      teamItems.forEach(item => {
+        totalArr.push(columnTotals[item.id] || 0, '');
+      });
+      dataRows.push(totalArr);
+
+      const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
+      worksheet['!merges'] = merges;
+
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Điểm Danh Đội');
       XLSX.writeFile(workbook, `Diem_Danh_Doi_${selectedProject}.xlsx`);
     } catch (err) {
       console.error('Lỗi khi xuất Excel:', err);
-      alert('Không thể xuất file Excel!');
+      openGlobalAlert('Không thể xuất file Excel!');
     }
   };
 
@@ -479,10 +631,10 @@ export default function TeamAttendanceView() {
           </div>
         </div>
 
-        {/* Main Content Container (Matching Receive Materials Table & Toolbar Format 100%) */}
+        {/* Main Content Container */}
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm" id="print-attendance">
           <div className="space-y-4">
-            {/* Action Toolbar (Exact format matching Receive Materials) */}
+            {/* Action Toolbar */}
             <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide flex-nowrap md:flex-wrap w-full">
               <button
                 type="button"
@@ -551,17 +703,59 @@ export default function TeamAttendanceView() {
             </div>
 
             {/* Chart Section */}
-            {showChart && chartDataByMonth.length > 0 && (
+            {showChart && chartData.length > 0 && (
               <div className="mb-6 p-5 border border-slate-200 rounded-2xl bg-slate-50/50 print:hidden">
-                <div className="flex items-center gap-2 mb-6">
-                  <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
-                    <BarChart3 className="w-5 h-5" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                  <div className="flex items-center gap-2">
+                    <div className="p-2 bg-indigo-100 rounded-lg text-indigo-600">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <h3 className="text-base font-bold text-slate-800">
+                      Biểu Đồ Tổng Số Công Nhân {chartViewMode === 'day' ? 'Theo Ngày' : (chartViewMode === 'week' ? 'Theo Tuần' : 'Theo Tháng')}
+                    </h3>
                   </div>
-                  <h3 className="text-base font-bold text-slate-800">Biểu Đồ Tổng Số Công Nhân Theo Tháng</h3>
+
+                  {/* Chart View Mode Selector Buttons */}
+                  <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('day')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                        chartViewMode === 'day' 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Theo Ngày
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('week')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                        chartViewMode === 'week' 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Theo Tuần
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartViewMode('month')}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                        chartViewMode === 'month' 
+                          ? 'bg-indigo-600 text-white shadow-xs' 
+                          : 'text-slate-600 hover:bg-slate-100'
+                      }`}
+                    >
+                      Theo Tháng
+                    </button>
+                  </div>
                 </div>
+
                 <div className="h-[320px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={chartDataByMonth} margin={{ top: 10, right: 30, left: -20, bottom: 10 }}>
+                    <BarChart data={chartData} margin={{ top: 10, right: 30, left: -20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                       <XAxis 
                         dataKey="name" 
@@ -600,14 +794,14 @@ export default function TeamAttendanceView() {
               </div>
             )}
 
-            {/* Attendance Table (Exact Border-slate-800 Grid Format, Single Team Column, No Yêu cầu/Nhận split, Only TỔNG row) */}
+            {/* Attendance Table with 2 sub-columns per team: Số CN | Vị trí thi công */}
             <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
               <div className="overflow-x-auto">
                 <table id="attendance-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
                   <thead>
-                    {/* Header Row: NGÀY (DD/MM/YYYY) & Colored Team Name Headers */}
+                    {/* Row 1: NGÀY (rowSpan=2) & Colored Team Name Headers (colSpan=2) */}
                     <tr>
-                      <th className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[120px] max-w-[120px] text-center leading-tight">
+                      <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] min-w-[110px] text-center leading-tight">
                         NGÀY<br/>
                         <span className="text-[10px] opacity-80 font-medium">(DD/MM/YYYY)</span>
                       </th>
@@ -619,10 +813,10 @@ export default function TeamAttendanceView() {
                           : headerColors[index % headerColors.length];
                           
                         return (
-                          <th key={item.id} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
+                          <th key={item.id} colSpan={2} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
                             <div 
                               onClick={() => handleTeamHeaderClick(item)}
-                              className={`w-full h-full min-w-[140px] p-2.5 text-center font-bold uppercase text-xs tracking-wide min-h-[42px] flex flex-col items-center justify-center relative group ${colorClass.split(' ')[1]} cursor-pointer hover:brightness-95`}
+                              className={`w-full h-full min-w-[180px] p-2 text-center font-bold uppercase text-xs tracking-wide min-h-[38px] flex flex-col items-center justify-center relative group ${colorClass.split(' ')[1]} cursor-pointer hover:brightness-95`}
                               title="Click để đổi trạng thái nghỉ làm / đang làm"
                             >
                               <span>{item.name}</span>
@@ -659,12 +853,26 @@ export default function TeamAttendanceView() {
                         );
                       })}
                     </tr>
+
+                    {/* Row 2: Sub-headers (Số CN | Vị trí thi công) - Equal Width (120px each) */}
+                    <tr className="bg-slate-100 text-slate-800 text-[11px] font-bold uppercase tracking-wider">
+                      {teamItems.map((item) => (
+                        <React.Fragment key={`sub-${item.id}`}>
+                          <th className="border border-slate-800 py-1.5 px-2 w-[120px] min-w-[120px] max-w-[120px] bg-slate-100 text-slate-800 text-center">
+                            Số CN
+                          </th>
+                          <th className="border border-slate-800 py-1.5 px-2 w-[120px] min-w-[120px] max-w-[120px] bg-indigo-50/50 text-indigo-900 font-bold text-center">
+                            Vị trí thi công
+                          </th>
+                        </React.Fragment>
+                      ))}
+                    </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-800">
                     {filteredRows.length === 0 ? (
                       <tr>
-                        <td colSpan={teamItems.length + 1} className="py-12 text-slate-400 font-semibold text-xs text-center">
+                        <td colSpan={teamItems.length * 2 + 1} className="py-12 text-slate-400 font-semibold text-xs text-center">
                           Chưa có dữ liệu điểm danh (hoặc không có dữ liệu trong khoảng ngày lọc). Bấm <strong className="text-emerald-600">"+ Thêm dòng"</strong> để bắt đầu.
                         </td>
                       </tr>
@@ -675,7 +883,7 @@ export default function TeamAttendanceView() {
 
                         return (
                           <tr key={row.id || rIdx} className="hover:bg-slate-50 transition">
-                            {/* Left Column: Date (Click to edit date or delete row) */}
+                            {/* Left Column: Date */}
                             <td 
                               onClick={() => handleEditDate(row)}
                               className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs cursor-pointer hover:bg-indigo-50/50 transition select-none"
@@ -690,44 +898,54 @@ export default function TeamAttendanceView() {
                               )}
                             </td>
 
-                            {/* Team Attendance Headcount Cells */}
+                            {/* Team Attendance Headcount & Location Note Cells (Equal 120px width each) */}
                             {teamItems.map((item) => {
                               const rawVal = row.values?.[item.id];
                               const val = rawVal ?? '';
+                              const note = row.notes?.[item.id] || '';
                               const isZero = parseNumber(rawVal) === 0;
                               const isInactive = item.isInactive;
-                              
+
                               return (
-                                <td 
-                                  key={item.id} 
-                                  className={`border border-slate-800 p-1 text-center transition ${
-                                    isInactive 
-                                      ? 'bg-slate-200 cursor-not-allowed opacity-90' 
-                                      : 'bg-white cursor-pointer hover:bg-amber-50'
-                                  }`}
-                                  onClick={() => {
-                                    if (isInactive) return; // Prevent updating inactive team
-                                    
-                                    openGlobalPrompt(
-                                      `Nhập quân số của đội ${item.name}:`,
-                                      (newVal) => {
-                                        if (newVal !== null) {
-                                          updateAttendanceCell(selectedProject, row.id, item.id, newVal);
-                                        }
-                                      },
-                                      val || '',
-                                      'Nhập Quân Số',
-                                      'number'
-                                    );
-                                  }}
-                                  title={isInactive ? 'Đội đã nghỉ làm, không thể cập nhật' : 'Click để nhập số lượng'}
-                                >
-                                  <div className={`w-full text-center bg-transparent font-extrabold text-sm py-1 select-none ${
-                                    isInactive ? 'text-slate-500' : (isZero ? 'text-slate-300' : 'text-slate-900')
-                                  }`}>
-                                    {val || 0}
-                                  </div>
-                                </td>
+                                <React.Fragment key={`cell-${item.id}`}>
+                                  {/* Cell 1: Worker Count (120px) */}
+                                  <td 
+                                    onContextMenu={(e) => handleCellContextMenu(e, row, item, 'count')}
+                                    onClick={() => handleCellClick(row, item, 'count')}
+                                    className={`border border-slate-800 p-1.5 text-center transition w-[120px] min-w-[120px] max-w-[120px] ${
+                                      isInactive 
+                                        ? 'bg-slate-200 cursor-not-allowed opacity-90' 
+                                        : (copiedAttendanceData !== null ? 'bg-indigo-50/50 hover:ring-2 hover:ring-indigo-500 cursor-crosshair' : 'bg-white cursor-pointer hover:bg-amber-50')
+                                    }`}
+                                    title={isInactive ? 'Đội đã nghỉ làm' : (copiedAttendanceData !== null ? 'Click để dán Số CN' : 'Click để sửa / Chuột phải để Copy Số CN')}
+                                  >
+                                    <div className={`w-full text-center bg-transparent font-extrabold text-sm py-0.5 select-none ${
+                                      isInactive ? 'text-slate-500' : (isZero ? 'text-slate-300' : 'text-slate-900')
+                                    }`}>
+                                      {val || 0}
+                                    </div>
+                                  </td>
+
+                                  {/* Cell 2: Work Location Note (120px) */}
+                                  <td 
+                                    onContextMenu={(e) => handleCellContextMenu(e, row, item, 'note')}
+                                    onClick={() => handleCellClick(row, item, 'note')}
+                                    className={`border border-slate-800 p-1.5 text-center transition w-[120px] min-w-[120px] max-w-[120px] ${
+                                      isInactive 
+                                        ? 'bg-slate-200 cursor-not-allowed opacity-90' 
+                                        : (copiedAttendanceData !== null ? 'bg-indigo-50/50 hover:ring-2 hover:ring-indigo-500 cursor-crosshair' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50')
+                                    }`}
+                                    title={isInactive ? 'Đội đã nghỉ làm' : (copiedAttendanceData !== null ? 'Click để dán Vị trí' : (note ? `Vị trí: ${note}` : 'Click để nhập vị trí / Chuột phải để Copy Vị trí'))}
+                                  >
+                                    {note ? (
+                                      <span className="text-xs font-bold text-indigo-700 select-none truncate block max-w-[110px] mx-auto">
+                                        📍 {note}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300 italic text-[11px] select-none">-</span>
+                                    )}
+                                  </td>
+                                </React.Fragment>
                               );
                             })}
                           </tr>
@@ -735,15 +953,20 @@ export default function TeamAttendanceView() {
                       })
                     )}
 
-                    {/* Single Summary Row: TỔNG (Yellow bg-[#fffaf0] matching Materials Matrix total style) */}
+                    {/* Single Summary Row: TỔNG */}
                     <tr className="bg-[#fffaf0] font-black text-slate-900 border-t-2 border-slate-800">
                       <td className="border border-slate-800 p-2.5 font-extrabold text-xs text-amber-900 text-center uppercase tracking-wider">
                         TỔNG
                       </td>
                       {teamItems.map((item) => (
-                        <td key={item.id} className="border border-slate-800 p-2.5 text-center text-indigo-700 font-black text-sm">
-                          {columnTotals[item.id] || 0}
-                        </td>
+                        <React.Fragment key={`tot-${item.id}`}>
+                          <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm w-[120px] min-w-[120px] max-w-[120px]">
+                            {columnTotals[item.id] || 0}
+                          </td>
+                          <td className="border border-slate-800 p-2 text-center text-slate-400 font-bold text-xs w-[120px] min-w-[120px] max-w-[120px]">
+                            -
+                          </td>
+                        </React.Fragment>
                       ))}
                     </tr>
                   </tbody>
@@ -753,6 +976,178 @@ export default function TeamAttendanceView() {
           </div>
         </div>
       </div>
+
+      {/* Modal Nhập Quân Số & Vị Trí Thi Công */}
+      {attendanceModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 w-full max-w-md animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                <UserCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Điểm Danh & Vị Trí Thi Công</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Đội: <strong className="text-indigo-700">{attendanceModal.teamName}</strong> &bull; Ngày: <strong className="text-slate-700">{attendanceModal.dateStr}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  Quân số (Số người) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={attendanceModal.count}
+                  onChange={(e) => setAttendanceModal(prev => ({ ...prev, count: e.target.value }))}
+                  placeholder="Nhập số lượng công nhân (VD: 8)..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  Vị trí thi công / Ghi chú
+                </label>
+                <input
+                  type="text"
+                  value={attendanceModal.note}
+                  onChange={(e) => setAttendanceModal(prev => ({ ...prev, note: e.target.value }))}
+                  placeholder="Nhập vị trí thi công (VD: Tầng 3 Block A)..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveAttendanceModal();
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setAttendanceModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAttendanceModal}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/20 transition active:scale-95"
+              >
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Context Menu Popup on Right-Click */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-white border border-slate-200 shadow-2xl rounded-2xl py-1.5 w-60 text-xs overflow-hidden animate-in fade-in zoom-in duration-100"
+          style={{ 
+            top: Math.min(contextMenu.y, window.innerHeight - 200), 
+            left: Math.min(contextMenu.x, window.innerWidth - 250) 
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 font-extrabold text-slate-800 flex items-center justify-between">
+            <span className="truncate max-w-[120px]">{contextMenu.teamName}</span>
+            <span className="text-[10px] text-indigo-700 font-bold bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+              {contextMenu.field === 'count' ? 'Số CN' : 'Vị trí thi công'}
+            </span>
+          </div>
+
+          <button 
+            type="button"
+            className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-indigo-700 font-bold flex items-center gap-2 transition"
+            onClick={() => {
+              setCopiedAttendanceData({ field: contextMenu.field, val: contextMenu.val });
+              setContextMenu(null);
+            }}
+          >
+            <Copy className="w-4 h-4 text-indigo-600" />
+            <span>Sao chép ô này ({contextMenu.field === 'count' ? (contextMenu.val || 0) : (contextMenu.val ? `📍 ${contextMenu.val}` : 'Trống')})</span>
+          </button>
+
+          {copiedAttendanceData && (
+            <button 
+              type="button"
+              className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 text-emerald-700 font-bold flex items-center gap-2 border-t border-slate-100 transition"
+              onClick={() => {
+                const targetCount = copiedAttendanceData.field === 'count' ? copiedAttendanceData.val : undefined;
+                const targetNote = copiedAttendanceData.field === 'note' ? copiedAttendanceData.val : undefined;
+                updateAttendanceCell(selectedProject, contextMenu.rowId, contextMenu.teamId, targetCount, targetNote);
+                setContextMenu(null);
+              }}
+            >
+              <ClipboardPaste className="w-4 h-4 text-emerald-600" />
+              <span>Dán vào ô này</span>
+            </button>
+          )}
+
+          <button 
+            type="button"
+            className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-indigo-700 font-semibold flex items-center gap-2 border-t border-slate-100 transition"
+            onClick={() => {
+              const targetIdx = filteredRows.findIndex(r => r.id === contextMenu.rowId);
+              if (targetIdx !== -1) {
+                const targetCount = contextMenu.field === 'count' ? contextMenu.val : undefined;
+                const targetNote = contextMenu.field === 'note' ? contextMenu.val : undefined;
+                for (let i = targetIdx; i < filteredRows.length; i++) {
+                  updateAttendanceCell(selectedProject, filteredRows[i].id, contextMenu.teamId, targetCount, targetNote);
+                }
+              }
+              setContextMenu(null);
+            }}
+          >
+            <ArrowDown className="w-4 h-4 text-indigo-600" />
+            <span>Sao chép xuống tất cả dòng dưới</span>
+          </button>
+
+          <button 
+            type="button"
+            className="w-full text-left px-3.5 py-2 hover:bg-red-50 text-red-600 font-medium flex items-center gap-2 border-t border-slate-100 transition"
+            onClick={() => {
+              const targetCount = contextMenu.field === 'count' ? '' : undefined;
+              const targetNote = contextMenu.field === 'note' ? '' : undefined;
+              updateAttendanceCell(selectedProject, contextMenu.rowId, contextMenu.teamId, targetCount, targetNote);
+              setContextMenu(null);
+            }}
+          >
+            <Eraser className="w-3.5 h-3.5 text-red-500" />
+            <span>Xóa dữ liệu ô này</span>
+          </button>
+        </div>
+      )}
+
+      {/* Floating Banner for Quick-Paste Mode */}
+      {copiedAttendanceData !== null && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-5 py-2.5 rounded-full shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-5 border border-slate-700">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>Đang bật dán nhanh:</span>
+            <span className="bg-slate-800 text-indigo-300 px-2.5 py-0.5 rounded border border-slate-700 font-extrabold">
+              {copiedAttendanceData.field === 'count' 
+                ? `${copiedAttendanceData.val || 0} CN (Số CN)` 
+                : `📍 ${copiedAttendanceData.val || 'Trống'} (Vị trí)`
+              }
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 font-medium">&bull; Click ô tương ứng để dán</span>
+          <button 
+            onClick={() => setCopiedAttendanceData(null)}
+            className="ml-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded-full transition"
+            title="Tắt chế độ dán nhanh"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

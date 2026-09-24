@@ -20,7 +20,7 @@ export default function AcceptancePage() {
 
       <div className="p-8 space-y-8 w-full">
         {/* Header Project Selector */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print print:hidden">
           <div>
             <h1 className="text-xl font-extrabold text-gray-900 flex items-center gap-2">
               <ShieldCheck className="w-6 h-6 text-indigo-600" /> Hồ Sơ Nghiệm Thu & Ma Trận Đợt Thanh Toán
@@ -44,7 +44,7 @@ export default function AcceptancePage() {
         </div>
 
         {/* Acceptance Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 no-print print:hidden">
           <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-lg">
               <CheckCircle2 className="w-6 h-6" />

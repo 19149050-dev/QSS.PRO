@@ -207,6 +207,8 @@ CREATE POLICY "Allow public write attendance_sheets"
   FOR ALL
   USING (true);
 
+ALTER TABLE public.attendance_sheets ADD COLUMN IF NOT EXISTS inactive_teams jsonb DEFAULT '[]'::jsonb;
+
 -- ==============================================================================
 -- 9. CHECKLISTS TABLE (GLOBAL ADMIN CHECKLIST)
 -- ==============================================================================
@@ -267,4 +269,36 @@ CREATE POLICY "Allow public write shop_drawings"
   ON public.shop_drawings
   FOR ALL
   USING (true);
+
+-- ==============================================================================
+-- 11. EQUIPMENTS TABLE (KHO THIẾT BỊ & MÁY MÓC CÔNG TRÌNH)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.equipments (
+  id text PRIMARY KEY,
+  name text NOT NULL,
+  import_date text,
+  price numeric(15,2) DEFAULT 0,
+  project_name text,
+  warranty_period text,
+  status text DEFAULT 'Mới',
+  notes text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.equipments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read equipments" ON public.equipments;
+DROP POLICY IF EXISTS "Allow public write equipments" ON public.equipments;
+
+CREATE POLICY "Allow public read equipments"
+  ON public.equipments
+  FOR SELECT
+  USING (true);
+
+CREATE POLICY "Allow public write equipments"
+  ON public.equipments
+  FOR ALL
+  USING (true);
+
 

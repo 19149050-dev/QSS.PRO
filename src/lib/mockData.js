@@ -583,3 +583,56 @@ export const defaultMatrixBlocks = {
   'MINI HOTEL ỐP LÁT': standardBlocksTemplate,
   'CARA RIVER PARK': standardBlocksTemplate
 };
+
+export const initialEquipments = [
+  {
+    id: 'eq-1',
+    name: 'Máy trộn bê tông 350L',
+    importDate: '15/01/2026',
+    price: 18500000,
+    projectName: 'BCONS TĐH',
+    warrantyPeriod: '24 Tháng',
+    status: 'Đang sử dụng',
+    notes: 'Đã cấp cho đội thi công tầng 3'
+  },
+  {
+    id: 'eq-2',
+    name: 'Máy đầm bàn Mikasa 5.5HP',
+    importDate: '20/02/2026',
+    price: 12000000,
+    projectName: 'BCONS TĐH',
+    warrantyPeriod: '12 Tháng',
+    status: 'Đang sử dụng',
+    notes: 'Kiểm tra định kỳ hàng tháng'
+  },
+  {
+    id: 'eq-3',
+    name: 'Máy cắt sắt GQ40 3KW',
+    importDate: '05/03/2026',
+    price: 24500000,
+    projectName: 'SUNHOME',
+    warrantyPeriod: '36 Tháng',
+    status: 'Mới',
+    notes: 'Mới nhập kho dự phòng'
+  },
+  {
+    id: 'eq-4',
+    name: 'Máy uốn sắt GW40',
+    importDate: '10/11/2025',
+    price: 21000000,
+    projectName: 'THE ASPIRA',
+    warrantyPeriod: '24 Tháng',
+    status: 'Cần bảo trì',
+    notes: 'Kẹt động cơ, chờ thay linh kiện'
+  },
+  {
+    id: 'eq-5',
+    name: 'Máy phun sơn áp lực cao Graco',
+    importDate: '18/04/2026',
+    price: 45000000,
+    projectName: 'BCONS TĐH',
+    warrantyPeriod: '24 Tháng',
+    status: 'Đang sử dụng',
+    notes: 'Phục vụ công tác sơn hoàn thiện'
+  }
+];

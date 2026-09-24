@@ -20,6 +20,7 @@ import TrashView from '@/components/Views/TrashView';
 import MaterialsView from '@/components/Views/MaterialsView';
 import AcceptanceView from '@/components/Views/AcceptanceView';
 import ProjectNotesView from '@/components/Views/ProjectNotesView';
+import EquipmentStoreView from '@/components/Views/EquipmentStoreView';
 import ChecklistView from '@/components/Views/ChecklistView';
 import ShopView from '@/components/Views/ShopView';
 
@@ -49,6 +50,8 @@ export default function RootRouter() {
       return <TeamAttendanceView />;
     case 'project-notes':
       return <ProjectNotesView />;
+    case 'equipment-store':
+      return <EquipmentStoreView />;
     case 'ipc':
       return <IpcView />;
     case 'users':

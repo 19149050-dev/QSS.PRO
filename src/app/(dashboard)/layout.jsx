@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }) {
 
       <div className="flex-1 flex flex-col min-w-0 w-full overflow-hidden">
         {/* Mobile Header with Hamburger */}
-        <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0a0a] text-white border-b border-zinc-800">
+        <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0a0a] text-white border-b border-zinc-800 no-print print:hidden">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-black font-black text-sm">
               Q

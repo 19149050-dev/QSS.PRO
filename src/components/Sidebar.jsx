@@ -23,7 +23,8 @@ import {
   ClipboardList,
   UserCheck,
   CheckSquare,
-  X
+  X,
+  Wrench
 } from 'lucide-react';
 
 export default function Sidebar({ onCloseMobile }) {
@@ -49,6 +50,7 @@ export default function Sidebar({ onCloseMobile }) {
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
     { label: 'Điểm danh đội', id: 'team-attendance', icon: UserCheck },
     { label: 'Ghi chú', id: 'project-notes', icon: PenTool },
+    { label: 'Kho thiết bị', id: 'equipment-store', icon: Wrench },
   ];
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';

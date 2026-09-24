@@ -35,7 +35,7 @@ export default function TeamsPage() {
     <div className="pb-12">
       <div className="p-8 space-y-6 w-full">
         {/* Action Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print print:hidden">
           <div className="flex flex-wrap items-center gap-3">
             <select
               value={selectedProject}

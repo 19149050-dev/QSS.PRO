@@ -43,7 +43,7 @@ export default function ProjectDetailView() {
         </button>
 
         {/* Project Header Info */}
-        <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-200">
+        <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-200 no-print print:hidden">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-gray-100">
             <div>
               <div className="flex items-center gap-2 mb-2">
