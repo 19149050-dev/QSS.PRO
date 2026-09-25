@@ -645,14 +645,6 @@ export default function TeamAttendanceView() {
                 Thêm dòng
               </button>
 
-              <button
-                type="button"
-                onClick={handleResetData}
-                className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 transition shadow-xs shrink-0 whitespace-nowrap"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Clear dữ liệu
-              </button>
 
               <button
                 type="button"
@@ -938,7 +930,7 @@ export default function TeamAttendanceView() {
                                     title={isInactive ? 'Đội đã nghỉ làm' : (copiedAttendanceData !== null ? 'Click để dán Vị trí' : (note ? `Vị trí: ${note}` : 'Click để nhập vị trí / Chuột phải để Copy Vị trí'))}
                                   >
                                     {note ? (
-                                      <span className="text-xs font-bold text-indigo-700 select-none truncate block max-w-[110px] mx-auto">
+                                      <span className="text-xs font-bold text-indigo-700 select-none break-words whitespace-normal block text-left">
                                         📍 {note}
                                       </span>
                                     ) : (

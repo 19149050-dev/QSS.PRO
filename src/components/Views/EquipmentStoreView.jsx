@@ -23,13 +23,44 @@ import {
 import * as XLSX from 'xlsx-js-style';
 
 const formatVND = (amount) => {
-  if (amount === undefined || amount === null || isNaN(amount)) return '0 ₫';
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  if (amount === undefined || amount === null || isNaN(amount)) return '0 VNĐ';
+  return new Intl.NumberFormat('vi-VN').format(amount) + ' VNĐ';
+};
+
+const projectBgColors = [
+  'bg-blue-50/40', 'bg-emerald-50/40', 'bg-amber-50/40', 'bg-purple-50/40', 'bg-pink-50/40', 'bg-cyan-50/40', 'bg-orange-50/40'
+];
+
+const getProjectBgColor = (projectName) => {
+  if (!projectName) return 'bg-white';
+  let hash = 0;
+  for (let i = 0; i < projectName.length; i++) {
+    hash = projectName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % projectBgColors.length;
+  return projectBgColors[index];
+};
+
+const calculateDuration = (importDateStr) => {
+  if (!importDateStr) return '-';
+  const parts = importDateStr.split('/');
+  if (parts.length !== 3) return '-';
+  const [day, month, year] = parts.map(Number);
+  const importDate = new Date(year, month - 1, day);
+  const today = new Date();
+  const diffTime = today - importDate;
+  if (diffTime < 0) return '0 ngày';
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays < 30) return `${diffDays} ngày`;
+  if (diffDays < 365) return `${Math.floor(diffDays / 30)} tháng ${diffDays % 30} ngày`;
+  return `${Math.floor(diffDays / 365)} năm ${Math.floor((diffDays % 365) / 30)} tháng`;
 };
 
 export default function EquipmentStoreView() {
   const { 
     equipments = [], 
+    users = [],
     addEquipment, 
     updateEquipment, 
     deleteEquipment,
@@ -52,9 +83,11 @@ export default function EquipmentStoreView() {
     name: '',
     importDate: '',
     price: '',
+    repairCost: '',
     projectName: projects[0]?.name || 'BCONS TĐH',
     warrantyPeriod: '',
     status: 'Mới',
+    buyer: '',
     notes: ''
   });
 
@@ -91,9 +124,11 @@ export default function EquipmentStoreView() {
       name: '',
       importDate: todayStr,
       price: '',
+      repairCost: '',
       projectName: selectedProject !== 'ALL' ? selectedProject : (projects[0]?.name || 'BCONS TĐH'),
       warrantyPeriod: '12 Tháng',
       status: 'Mới',
+      buyer: '',
       notes: ''
     });
     setIsModalOpen(true);
@@ -104,10 +139,12 @@ export default function EquipmentStoreView() {
     setFormData({
       name: item.name || '',
       importDate: item.importDate || '',
-      price: item.price !== undefined ? String(item.price) : '',
+      price: item.price ? Number(item.price).toLocaleString('en-US') : '',
+      repairCost: item.repairCost ? Number(item.repairCost).toLocaleString('en-US') : '',
       projectName: item.projectName || (projects[0]?.name || 'BCONS TĐH'),
       warrantyPeriod: item.warrantyPeriod || '',
       status: item.status || 'Mới',
+      buyer: item.buyer || '',
       notes: item.notes || ''
     });
     setIsModalOpen(true);
@@ -123,10 +160,12 @@ export default function EquipmentStoreView() {
     const payload = {
       name: formData.name.trim(),
       importDate: formData.importDate.trim(),
-      price: parseFloat(formData.price) || 0,
+      price: parseFloat(String(formData.price).replace(/[^0-9]/g, '')) || 0,
+      repairCost: parseFloat(String(formData.repairCost).replace(/[^0-9]/g, '')) || 0,
       projectName: formData.projectName,
       warrantyPeriod: formData.warrantyPeriod.trim(),
       status: formData.status,
+      buyer: formData.buyer.trim(),
       notes: formData.notes.trim()
     };
 
@@ -154,10 +193,13 @@ export default function EquipmentStoreView() {
         'STT': idx + 1,
         'Tên thiết bị': item.name || '',
         'Ngày nhập': item.importDate || '',
+        'Thời gian SD': calculateDuration(item.importDate),
         'Giá mua (VNĐ)': item.price || 0,
+        'Tiền sửa chữa (VNĐ)': item.repairCost || 0,
         'Công trình': item.projectName || '',
         'Thời hạn / Bảo hành': item.warrantyPeriod || '',
         'Tình trạng': item.status || '',
+        'Người mua': item.buyer || '',
         'Ghi chú': item.notes || ''
       }));
 
@@ -352,58 +394,70 @@ export default function EquipmentStoreView() {
           {/* Equipment Table */}
           <div className="overflow-hidden rounded-xl border border-slate-800 bg-white shadow-2xs">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-slate-800 text-left text-xs">
+              <table className="w-full border-collapse border border-slate-800 text-left text-sm">
                 <thead>
-                  <tr className="bg-slate-900 text-white font-bold text-[11px] uppercase tracking-wider">
-                    <th className="border border-slate-800 p-3 text-center w-[50px]">STT</th>
-                    <th className="border border-slate-800 p-3 min-w-[180px]">Tên thiết bị</th>
-                    <th className="border border-slate-800 p-3 w-[110px] text-center">Ngày nhập</th>
-                    <th className="border border-slate-800 p-3 w-[130px] text-right">Giá mua</th>
-                    <th className="border border-slate-800 p-3 w-[140px]">Công trình</th>
-                    <th className="border border-slate-800 p-3 w-[120px] text-center">Thời hạn</th>
-                    <th className="border border-slate-800 p-3 w-[130px] text-center">Tình trạng</th>
-                    <th className="border border-slate-800 p-3 min-w-[150px]">Ghi chú</th>
-                    <th className="border border-slate-800 p-3 w-[90px] text-center no-print print:hidden">Thao tác</th>
+                  <tr className="bg-slate-900 text-white font-bold text-xs uppercase tracking-wider">
+                    <th className="border border-slate-800 p-2.5 w-[50px] text-center">STT</th>
+                    <th className="border border-slate-800 p-2.5 min-w-[200px]">Tên thiết bị</th>
+                    <th className="border border-slate-800 p-2.5 w-[100px] text-center whitespace-nowrap">Ngày nhập</th>
+                    <th className="border border-slate-800 p-2.5 w-[110px] text-center whitespace-nowrap">Thời gian SD</th>
+                    <th className="border border-slate-800 p-2.5 w-[150px] text-right whitespace-nowrap">Giá mua</th>
+                    <th className="border border-slate-800 p-2.5 w-[150px] text-right whitespace-nowrap">Tiền sửa chữa</th>
+                    <th className="border border-slate-800 p-2.5 min-w-[160px] whitespace-nowrap">Công trình</th>
+                    <th className="border border-slate-800 p-2.5 w-[120px] text-center whitespace-nowrap">Thời hạn</th>
+                    <th className="border border-slate-800 p-2.5 w-[120px] text-center whitespace-nowrap">Tình trạng</th>
+                    <th className="border border-slate-800 p-2.5 w-[140px] whitespace-nowrap">Người mua</th>
+                    <th className="border border-slate-800 p-2.5 min-w-[150px]">Ghi chú</th>
+                    <th className="border border-slate-800 p-2.5 w-[90px] text-center whitespace-nowrap no-print print:hidden">Thao tác</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-800">
                   {filteredEquipments.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="py-12 text-center text-slate-400 font-semibold">
+                      <td colSpan={11} className="py-12 text-center text-slate-400 font-semibold">
                         Không tìm thấy thiết bị nào phù hợp. Bấm <strong className="text-emerald-600">"+ Thêm thiết bị"</strong> để bắt đầu.
                       </td>
                     </tr>
                   ) : (
                     filteredEquipments.map((item, idx) => (
-                      <tr key={item.id || idx} className="hover:bg-slate-50 transition">
-                        <td className="border border-slate-800 p-3 text-center font-bold text-slate-500">
+                      <tr key={item.id || idx} className={`hover:brightness-95 transition ${getProjectBgColor(item.projectName)}`}>
+                        <td className="border border-slate-800 p-2.5 text-center font-bold text-slate-500 bg-white/40">
                           {idx + 1}
                         </td>
-                        <td className="border border-slate-800 p-3 font-extrabold text-slate-900">
+                        <td className="border border-slate-800 p-2.5 font-extrabold text-slate-900">
                           {item.name}
                         </td>
-                        <td className="border border-slate-800 p-3 text-center font-medium text-slate-700">
+                        <td className="border border-slate-800 p-2.5 text-center font-medium text-slate-700 whitespace-nowrap">
                           {item.importDate || '-'}
                         </td>
-                        <td className="border border-slate-800 p-3 text-right font-extrabold text-indigo-700">
+                        <td className="border border-slate-800 p-2.5 text-center font-bold text-slate-700 bg-white/50 whitespace-nowrap">
+                          {calculateDuration(item.importDate)}
+                        </td>
+                        <td className="border border-slate-800 p-2.5 text-right font-extrabold text-indigo-700 bg-white/40 whitespace-nowrap">
                           {formatVND(item.price)}
                         </td>
-                        <td className="border border-slate-800 p-3 font-bold text-slate-800">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-indigo-50 text-indigo-800 border border-indigo-200">
+                        <td className="border border-slate-800 p-2.5 text-right font-extrabold text-red-600 bg-white/40 whitespace-nowrap">
+                          {item.repairCost > 0 ? formatVND(item.repairCost) : '-'}
+                        </td>
+                        <td className="border border-slate-800 p-2.5 font-bold text-slate-800 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-indigo-50/80 text-indigo-800 border border-indigo-200">
                             <Building2 className="w-3.5 h-3.5" />
                             {item.projectName}
                           </span>
                         </td>
-                        <td className="border border-slate-800 p-3 text-center font-semibold text-slate-700">
+                        <td className="border border-slate-800 p-2.5 text-center font-semibold text-slate-700 bg-white/30 whitespace-nowrap">
                           {item.warrantyPeriod || '-'}
                         </td>
                         <td className="border border-slate-800 p-3 text-center">
-                          <span className={`inline-block px-2.5 py-1 rounded-full border text-[11px] font-bold ${getStatusBadge(item.status)}`}>
+                          <span className={`inline-block px-2.5 py-1 rounded-full border text-xs font-bold ${getStatusBadge(item.status)}`}>
                             {item.status}
                           </span>
                         </td>
-                        <td className="border border-slate-800 p-3 text-slate-600 font-medium">
+                        <td className="border border-slate-800 p-2.5 text-slate-800 font-bold bg-white/40 whitespace-nowrap">
+                          {item.buyer || '-'}
+                        </td>
+                        <td className="border border-slate-800 p-3 text-slate-600 font-medium bg-white/30">
                           {item.notes || '-'}
                         </td>
                         <td className="border border-slate-800 p-3 text-center no-print print:hidden">
@@ -496,10 +550,12 @@ export default function EquipmentStoreView() {
                     Giá mua (VNĐ)
                   </label>
                   <input
-                    type="number"
-                    min="0"
+                    type="text"
                     value={formData.price}
-                    onChange={(e) => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/[^0-9]/g, '');
+                      setFormData(prev => ({ ...prev, price: val ? Number(val).toLocaleString('en-US') : '' }));
+                    }}
                     placeholder="VD: 18500000..."
                     className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-xs font-bold text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
                   />
@@ -538,6 +594,24 @@ export default function EquipmentStoreView() {
                 </div>
               </div>
 
+              {editingItem && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                    Tiền sửa chữa (VNĐ)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.repairCost}
+                    onChange={(e) => {
+                      let val = e.target.value.replace(/[^0-9]/g, '');
+                      setFormData(prev => ({ ...prev, repairCost: val ? Number(val).toLocaleString('en-US') : '' }));
+                    }}
+                    placeholder="VD: 500000..."
+                    className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-xs font-bold text-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 bg-slate-50 focus:bg-white transition"
+                  />
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
                   Tình trạng
@@ -553,6 +627,25 @@ export default function EquipmentStoreView() {
                   <option value="Đã hỏng">Đã hỏng</option>
                   <option value="Thanh lý">Thanh lý</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wide">
+                  Người mua
+                </label>
+                <input
+                  type="text"
+                  list="employee-list"
+                  value={formData.buyer}
+                  onChange={(e) => setFormData(prev => ({ ...prev, buyer: e.target.value }))}
+                  placeholder="Chọn nhân viên hoặc tự nhập tên..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
+                />
+                <datalist id="employee-list">
+                  {users.map((u) => (
+                    <option key={u.id} value={u.name} />
+                  ))}
+                </datalist>
               </div>
 
               <div>
