@@ -31,7 +31,7 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
   const [selectedTeam, setSelectedTeam] = useState(''); // Team selection in standard mode
   const [customTeamName, setCustomTeamName] = useState(''); // Custom team name if custom selected
   const [batchName, setBatchName] = useState('');
-  const [batchUnits, setBatchUnits] = useState('');
+  const [batchUnitsObj, setBatchUnitsObj] = useState({});
   const [batchNote, setBatchNote] = useState('');
   const [activeGroupKey, setActiveGroupKey] = useState(null);
 
@@ -54,7 +54,7 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
         : '';
       setInputValue(isTeamMode ? defaultTeam : '');
       setBatchName('');
-      setBatchUnits('');
+      setBatchUnitsObj({});
       setBatchNote('');
     }
   }, [isOpen, isTeamMode, projectTeams]);
@@ -79,9 +79,9 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
 
   useEffect(() => {
     if (!isTeamMode && isOpen) {
-      setBatchUnits('');
+      setBatchUnitsObj({});
     }
-  }, [activeGroupKey, isApartmentGroup, isTeamMode, isOpen]);
+  }, [activeGroupKey, isTeamMode, isOpen]);
 
   if (!isOpen) return null;
 
@@ -145,8 +145,19 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
         toast.error('Vui lòng nhập Mã Đợt / IPC');
         return;
       }
-      if (!batchUnits.trim() && !isApartmentGroup) {
-        toast.error('Vui lòng nhập Số căn / Khối lượng');
+      
+      const selectedBlocks = Array.from(new Set(selectedItems.map(k => k.split('___')[0])));
+      let missingUnitBlock = null;
+      for (const block of selectedBlocks) {
+         const hasAptGroup = selectedItems.some(k => k.startsWith(`${block}___`) && k.toUpperCase().includes('CĂN HỘ'));
+         const val = (batchUnitsObj[block] || '').trim();
+         if (!val && !hasAptGroup) {
+            missingUnitBlock = block;
+            break;
+         }
+      }
+      if (missingUnitBlock) {
+        toast.error(`Vui lòng nhập Số căn / Khối lượng cho tháp ${missingUnitBlock}`);
         return;
       }
     }
@@ -178,8 +189,9 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
             }
           }
         } else {
-          let finalUnits = batchUnits.trim();
-          if (!finalUnits && isApartmentGroup) {
+          const isAptItem = groupName.toUpperCase().includes('CĂN HỘ');
+          let finalUnits = (batchUnitsObj[blockName] || '').trim();
+          if (!finalUnits && isAptItem) {
             finalUnits = floorApts;
           }
           
@@ -205,7 +217,7 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-gray-900/40 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl w-full max-w-[1400px] max-h-[95vh] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl w-full max-w-[1500px] max-h-[95vh] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between px-8 py-6 border-b border-gray-100 bg-gray-50/50">
           <div>
@@ -228,23 +240,23 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
         <div className="flex-1 overflow-y-auto p-8 flex flex-col lg:flex-row gap-6">
           
           {/* Left Column: Floors */}
-          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[500px]">
+          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[70vh]">
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <span className="font-bold text-base text-gray-800">1. Chọn Tầng ({selectedFloors.length}/{paymentMatrix.length})</span>
               <button onClick={handleSelectAllFloors} className="text-sm font-bold text-indigo-600 hover:text-indigo-800">
                 {selectedFloors.length === paymentMatrix.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
               {paymentMatrix.map((row, idx) => (
-                <label key={row.floor || idx} className={`flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-colors ${selectedFloors.includes(row.floor) ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50 border border-transparent'}`}>
+                <label key={row.floor || idx} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${selectedFloors.includes(row.floor) ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50 border border-transparent'}`}>
                   <input 
                     type="checkbox"
                     checked={selectedFloors.includes(row.floor)}
                     onChange={() => toggleFloor(row.floor)}
-                    className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                   />
-                  <span className={`text-base font-bold ${selectedFloors.includes(row.floor) ? 'text-indigo-900' : 'text-gray-700'}`}>{row.floor}</span>
+                  <span className={`text-sm font-bold ${selectedFloors.includes(row.floor) ? 'text-indigo-900' : 'text-gray-700'}`}>{row.floor}</span>
                 </label>
               ))}
               {paymentMatrix.length === 0 && (
@@ -254,14 +266,14 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
           </div>
 
           {/* Column 2: Groups */}
-          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[500px]">
+          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[70vh]">
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <span className="font-bold text-base text-gray-800">2. Chọn Nhóm</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-1">
+            <div className="flex-1 overflow-y-auto p-2">
               {rawBlocks.map(block => (
-                <div key={block.blockName} className="mb-4">
-                  <div className="px-3.5 py-3 bg-slate-800 rounded-xl text-base tracking-wide font-black text-white uppercase mb-3 shadow-md border-b-4 border-slate-900 flex items-center gap-2">
+                <div key={block.blockName} className="mb-3">
+                  <div className="px-3 py-2 bg-slate-800 rounded-lg text-sm tracking-wide font-black text-white uppercase mb-2 shadow-md border-b-[3px] border-slate-900 flex items-center gap-2">
                     <span className="text-slate-400">🏢</span> <span>{block.blockName}</span>
                   </div>
                   {block.groups.map(group => {
@@ -275,9 +287,9 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                       <div 
                         key={group.groupName} 
                         onClick={() => setActiveGroupKey(groupKey)}
-                        className={`flex justify-between items-center px-3 py-2.5 mb-1 rounded-xl cursor-pointer transition-colors ${isActive ? 'bg-indigo-100 border border-indigo-200' : 'hover:bg-gray-50 border border-transparent'}`}
+                        className={`flex justify-between items-center px-2 py-1.5 mb-0.5 rounded-lg cursor-pointer transition-colors ${isActive ? 'bg-indigo-100 border border-indigo-200' : 'hover:bg-gray-50 border border-transparent'}`}
                       >
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2">
                           <input 
                             type="checkbox"
                             checked={isAllGroupSelected}
@@ -289,9 +301,9 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                                 setSelectedItems(prev => Array.from(new Set([...prev, ...keys])));
                               }
                             }}
-                            className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                            className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                           />
-                          <span className={`text-sm font-bold ${isActive ? 'text-indigo-900' : 'text-gray-700'}`}>{group.groupName}</span>
+                          <span className={`text-xs font-bold ${isActive ? 'text-indigo-900' : 'text-gray-700'}`}>{group.groupName}</span>
                         </div>
                         {selectedCount > 0 && (
                           <span className="text-xs bg-indigo-500 text-white px-2 py-0.5 rounded-full font-bold">{selectedCount}/{keys.length}</span>
@@ -308,15 +320,15 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
           </div>
 
           {/* Column 3: Items */}
-          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[500px]">
+          <div className="flex-1 flex flex-col border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-sm h-[70vh]">
             <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
               <span className="font-bold text-base text-gray-800">3. Chọn Đầu Mục</span>
             </div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50/30">
+            <div className="flex-1 overflow-y-auto p-2 space-y-1 bg-gray-50/30">
               {activeGroupObj ? (
                 <>
-                  <div className="px-2 pb-2 mb-2 border-b border-gray-100 flex items-center justify-between">
-                    <span className="text-sm font-bold text-gray-500 uppercase">{activeGroupObj.groupName}</span>
+                  <div className="px-2 pb-2 mb-2 border-b border-gray-200 flex items-center justify-between">
+                    <span className="text-xs font-bold text-gray-500 uppercase">{activeGroupObj.groupName}</span>
                     <button 
                       onClick={() => {
                         const keys = activeGroupObj.items.map(i => `${activeBlockObj.blockName}___${activeGroupObj.groupName}___${i}`);
@@ -335,14 +347,14 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                   {activeGroupObj.items.map(item => {
                     const itemKey = `${activeBlockObj.blockName}___${activeGroupObj.groupName}___${item}`;
                     return (
-                      <label key={itemKey} className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors shadow-xs ${selectedItems.includes(itemKey) ? 'bg-indigo-50 border border-indigo-100' : 'bg-white hover:bg-gray-50 border border-gray-200'}`}>
+                      <label key={itemKey} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors shadow-xs ${selectedItems.includes(itemKey) ? 'bg-indigo-50 border border-indigo-100' : 'bg-white hover:bg-gray-50 border border-gray-200'}`}>
                         <input 
                           type="checkbox"
                           checked={selectedItems.includes(itemKey)}
                           onChange={() => toggleItem(itemKey)}
-                          className="w-5 h-5 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
+                          className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-gray-300"
                         />
-                        <span className={`text-base font-bold ${selectedItems.includes(itemKey) ? 'text-indigo-900' : 'text-gray-700'}`}>{item}</span>
+                        <span className={`text-sm font-bold ${selectedItems.includes(itemKey) ? 'text-indigo-900' : 'text-gray-700'}`}>{item}</span>
                       </label>
                     );
                   })}
@@ -356,50 +368,26 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
           </div>
 
           {/* Right Column: Value input */}
-          <div className="flex-1 flex flex-col gap-4">
-            <div className="border border-gray-200 rounded-2xl p-5 bg-white shadow-sm flex-1">
-              <span className="font-bold text-base text-gray-800 mb-2 block">4. Giá trị nhập</span>
-              <p className="text-xs text-gray-500 mb-4">
-                Giá trị này sẽ được rải đồng loạt vào các ô giao giữa (Tầng) và (Đầu mục) bạn đã tích chọn.
-              </p>
+          <div className="flex-[1.2] flex flex-col gap-4 h-[70vh]">
+            <div className="border border-gray-200 rounded-2xl bg-white shadow-sm flex-1 flex flex-col overflow-hidden">
+              <div className="bg-gray-50 p-4 border-b border-gray-200 flex items-center justify-between">
+                <span className="font-bold text-base text-gray-800">4. Giá trị nhập</span>
+              </div>
               
-              {isTeamMode ? (
-                <div>
-                  <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">
-                    CHỌN TỔ ĐỘI <span className="text-rose-500 font-bold">*</span>
-                  </span>
-                  <select 
-                    value={inputValue}
-                    onChange={e => setInputValue(e.target.value)}
-                    className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer bg-white text-base"
-                  >
-                    <option value="">-- Chọn Tổ Đội --</option>
-                    {projectTeams.map((t, idx) => {
-                      const name = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
-                      return <option key={idx} value={name}>{name}</option>;
-                    })}
-                    <option value="__CUSTOM__">+ Nhập tổ đội khác...</option>
-                  </select>
-                  {inputValue === '__CUSTOM__' && (
-                    <input 
-                      type="text"
-                      value={customTeamName}
-                      onChange={e => setCustomTeamName(e.target.value)}
-                      placeholder="Nhập tên tổ đội..."
-                      className="mt-2 w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
-                    />
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
+              <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                <p className="text-xs text-gray-500 mb-4 bg-gray-50 p-2.5 rounded-lg border border-gray-200">
+                  Giá trị này sẽ được rải đồng loạt vào các ô giao giữa (Tầng) và (Đầu mục) bạn đã chọn.
+                </p>
+                
+                {isTeamMode ? (
                   <div>
                     <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">
                       CHỌN TỔ ĐỘI <span className="text-rose-500 font-bold">*</span>
                     </span>
                     <select 
-                      value={selectedTeam}
-                      onChange={e => setSelectedTeam(e.target.value)}
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer bg-white text-base"
+                      value={inputValue}
+                      onChange={e => setInputValue(e.target.value)}
+                      className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer bg-white text-base"
                     >
                       <option value="">-- Chọn Tổ Đội --</option>
                       {projectTeams.map((t, idx) => {
@@ -408,60 +396,109 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                       })}
                       <option value="__CUSTOM__">+ Nhập tổ đội khác...</option>
                     </select>
-                    {selectedTeam === '__CUSTOM__' && (
+                    {inputValue === '__CUSTOM__' && (
                       <input 
                         type="text"
                         value={customTeamName}
                         onChange={e => setCustomTeamName(e.target.value)}
-                        placeholder="Nhập tên tổ đội mới..."
-                        className="mt-2 w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
+                        placeholder="Nhập tên tổ đội..."
+                        className="mt-2 w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
                       />
                     )}
                   </div>
-                  <div>
-                    <span className="text-xs font-bold text-gray-500 block mb-1">MÃ ĐỢT / IPC</span>
-                    <input 
-                      type="text"
-                      value={batchName}
-                      onChange={e => setBatchName(e.target.value)}
-                      placeholder="VD: Đợt 1, IPC 01"
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-gray-500 block mb-1">SỐ CĂN / KHỐI LƯỢNG</span>
-                    <input 
-                      type="text"
-                      value={batchUnits}
-                      onChange={e => setBatchUnits(e.target.value)}
-                      placeholder="VD: 5 căn, 50%"
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
-                    />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-gray-500 block mb-1">GHI CHÚ (Tùy chọn)</span>
-                    <input 
-                      type="text"
-                      value={batchNote}
-                      onChange={e => setBatchNote(e.target.value)}
-                      placeholder="VD: Tường nứt, thiếu vật tư..."
-                      className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
-                    />
-                  </div>
-                  {isApartmentGroup && (
-                    <div className="text-sm font-medium text-emerald-700 bg-emerald-50 p-3.5 rounded-xl border border-emerald-200 flex items-start gap-2 shadow-sm">
-                      <div className="mt-0.5 text-emerald-500">💡</div>
-                      <div>
-                        Vì đây là hạng mục <b>Căn hộ</b>, hệ thống sẽ tự động điền <b>số lượng căn hộ tương ứng của từng tầng</b> vào các ô dữ liệu nếu bạn <b>để trống ô Số căn / Khối lượng</b>. <br/>
-                        <div className="mt-1.5 flex flex-wrap gap-2">
-                          <span className="bg-white px-2.5 py-1 rounded-md border border-emerald-100 shadow-sm text-xs">Tổng dự án: <b className="text-emerald-800">{totalApts} căn</b></span>
-                          <span className="bg-white px-2.5 py-1 rounded-md border border-emerald-100 shadow-sm text-xs">Các tầng đang chọn: <b className="text-emerald-800">{selectedApts} căn</b></span>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">
+                        CHỌN TỔ ĐỘI <span className="text-rose-500 font-bold">*</span>
+                      </span>
+                      <select 
+                        value={selectedTeam}
+                        onChange={e => setSelectedTeam(e.target.value)}
+                        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all cursor-pointer bg-white text-base"
+                      >
+                        <option value="">-- Chọn Tổ Đội --</option>
+                        {projectTeams.map((t, idx) => {
+                          const name = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
+                          return <option key={idx} value={name}>{name}</option>;
+                        })}
+                        <option value="__CUSTOM__">+ Nhập tổ đội khác...</option>
+                      </select>
+                      {selectedTeam === '__CUSTOM__' && (
+                        <input 
+                          type="text"
+                          value={customTeamName}
+                          onChange={e => setCustomTeamName(e.target.value)}
+                          placeholder="Nhập tên tổ đội mới..."
+                          className="mt-2 w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
+                        />
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">MÃ ĐỢT / IPC <span className="text-rose-500 font-bold">*</span></span>
+                      <input 
+                        type="text"
+                        value={batchName}
+                        onChange={e => setBatchName(e.target.value)}
+                        placeholder="VD: Đợt 1, IPC 01"
+                        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
+                      />
+                    </div>
+                    {rawBlocks.filter(block => selectedItems.some(item => item.startsWith(`${block.blockName}___`))).length > 0 
+                      ? rawBlocks.filter(block => selectedItems.some(item => item.startsWith(`${block.blockName}___`))).map(block => (
+                          <div key={block.blockName}>
+                            <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">
+                              SỐ CĂN / KHỐI LƯỢNG {rawBlocks.length > 1 ? `(${block.blockName})` : ''}
+                              {!selectedItems.some(item => item.startsWith(`${block.blockName}___`) && item.toUpperCase().includes('CĂN HỘ')) && (
+                                <span className="text-rose-500 font-bold ml-1">*</span>
+                              )}
+                            </span>
+                            <input 
+                              type="text"
+                              value={batchUnitsObj[block.blockName] || ''}
+                              onChange={e => setBatchUnitsObj(prev => ({ ...prev, [block.blockName]: e.target.value }))}
+                              placeholder={`VD: 5 căn, 50% ${rawBlocks.length > 1 ? `cho ${block.blockName}` : ''}`}
+                              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
+                            />
+                          </div>
+                        ))
+                      : (
+                          <div>
+                            <span className="text-xs font-bold text-gray-700 block mb-1 uppercase">SỐ CĂN / KHỐI LƯỢNG <span className="text-rose-500 font-bold">*</span></span>
+                            <input 
+                              type="text"
+                              disabled
+                              placeholder="Vui lòng chọn hạng mục trước..."
+                              className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-400 bg-gray-50 focus:outline-none cursor-not-allowed text-base"
+                            />
+                          </div>
+                      )
+                    }
+                    <div>
+                      <span className="text-xs font-bold text-gray-500 block mb-1">GHI CHÚ (Tùy chọn)</span>
+                      <input 
+                        type="text"
+                        value={batchNote}
+                        onChange={e => setBatchNote(e.target.value)}
+                        placeholder="VD: Tường nứt, thiếu vật tư..."
+                        className="w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 font-bold text-gray-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all text-base"
+                      />
+                    </div>
+                    {isApartmentGroup && (
+                      <div className="text-xs font-medium text-emerald-700 bg-emerald-50/80 p-3 rounded-lg border border-emerald-200 flex items-start gap-2">
+                        <div className="mt-0.5 text-emerald-500">💡</div>
+                        <div>
+                          Nếu để trống Số căn, hệ thống sẽ tự động điền theo thiết kế. <br/>
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            <span className="bg-white px-2 py-0.5 rounded border border-emerald-100">Tổng: <b className="text-emerald-800">{totalApts}</b></span>
+                            <span className="bg-white px-2 py-0.5 rounded border border-emerald-100">Đang chọn: <b className="text-emerald-800">{selectedApts}</b></span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
             
             <button 
@@ -470,7 +507,10 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
                 selectedFloors.length === 0 || 
                 selectedItems.length === 0 || 
                 !finalTeamName ||
-                (!isTeamMode && (!batchName.trim() || (!isApartmentGroup && !batchUnits.trim())))
+                (!isTeamMode && (!batchName.trim() || !Array.from(new Set(selectedItems.map(k => k.split('___')[0]))).every(block => 
+                  selectedItems.some(item => item.startsWith(`${block}___`) && item.toUpperCase().includes('CĂN HỘ')) || 
+                  (batchUnitsObj[block] && batchUnitsObj[block].trim() !== '')
+                )))
               }
               className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-black py-4 rounded-2xl flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-600/20 text-lg"
             >

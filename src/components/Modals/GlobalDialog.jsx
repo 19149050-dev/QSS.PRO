@@ -72,7 +72,7 @@ export default function GlobalDialog() {
       />
       
       {/* Dialog Box */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[90%] max-w-md mx-auto overflow-hidden animate-in fade-in zoom-in duration-200">
+      <div className={`relative bg-white rounded-2xl shadow-2xl w-[90%] ${globalDialog.maxWidth || 'sm:max-w-xl'} mx-auto overflow-hidden animate-in fade-in zoom-in duration-200`}>
         <div className="p-6">
           <div className="flex items-start gap-4">
             <div className="shrink-0 p-2 bg-slate-50 rounded-full">
@@ -82,9 +82,9 @@ export default function GlobalDialog() {
               <h3 className="text-lg font-bold text-slate-900 mb-2">
                 {globalDialog.title}
               </h3>
-              <p className="text-slate-600 text-sm whitespace-pre-wrap leading-relaxed">
+              <div className="text-slate-600 text-sm whitespace-pre-wrap leading-relaxed w-full">
                 {globalDialog.message}
-              </p>
+              </div>
 
               {globalDialog.historyInfo && (
                 <div className="mt-3 text-xs font-medium text-indigo-700 bg-indigo-50 px-2.5 py-1.5 rounded-md inline-flex items-center gap-1.5 border border-indigo-100 shadow-sm">

@@ -75,7 +75,7 @@ export const useStore = create(
         matrixFilterBatch: { ...state.matrixFilterBatch, [projectName]: batch }
       })),
       globalDialog: { isOpen: false, type: 'alert', title: '', message: '', onConfirm: null, onCancel: null, defaultValue: '', inputPlaceholder: '', inputType: 'text', allowNote: false },
-      openGlobalAlert: (message, title = 'Thông báo') => set({ globalDialog: { isOpen: true, type: 'alert', title, message } }),
+      openGlobalAlert: (message, title = 'Thông báo', options = {}) => set({ globalDialog: { isOpen: true, type: 'alert', title, message, ...options } }),
       openGlobalConfirm: (message, onConfirm, title = 'Xác nhận') => set({ globalDialog: { isOpen: true, type: 'confirm', title, message, onConfirm } }),
       openGlobalPrompt: (message, onConfirm, defaultValue = '', title = 'Nhập liệu', inputType = 'text', allowNote = false, onCancel = null, onDelete = null, deleteLabel = 'Xóa', noteOptions = null, historyInfo = null) => set({ globalDialog: { isOpen: true, type: 'prompt', title, message, onConfirm, onCancel, onDelete, deleteLabel, defaultValue, inputType, allowNote, noteOptions, historyInfo } }),
       closeGlobalDialog: () => set((state) => ({ globalDialog: { ...state.globalDialog, isOpen: false } })),

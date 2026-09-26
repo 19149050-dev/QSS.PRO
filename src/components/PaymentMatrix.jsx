@@ -227,6 +227,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [topQuickAptsFloor, setTopQuickAptsFloor] = useState('ALL');
   const [isQuickAptsMenuOpen, setIsQuickAptsMenuOpen] = useState(false);
   const quickAptsMenuRef = useRef(null);
+  const [isVisibilityMenuOpen, setIsVisibilityMenuOpen] = useState(false);
+  const visibilityMenuRef = useRef(null);
 
   const [isFloorNumAptsModalOpen, setIsFloorNumAptsModalOpen] = useState(false);
   const [floorNumAptsData, setFloorNumAptsData] = useState({ floor: '', apts: {} });
@@ -255,6 +257,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     const handleClickOutside = (event) => {
       if (quickAptsMenuRef.current && !quickAptsMenuRef.current.contains(event.target)) {
         setIsQuickAptsMenuOpen(false);
+      }
+      if (visibilityMenuRef.current && !visibilityMenuRef.current.contains(event.target)) {
+        setIsVisibilityMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -943,35 +948,58 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
         >
           <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
         </button>
-        <button 
-          onClick={() => setIsColumnModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 hover:bg-sky-100 font-bold rounded-lg border border-sky-200 shadow-sm transition-colors"
-        >
-          <Eye className="w-4 h-4" /> Quản lý Ẩn/Hiện
-        </button>
-        <button 
-          onClick={() => {
-            setIsAutoHiddenEmpty(!isAutoHiddenEmpty);
-            setHiddenColumns([]);
-          }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${
-            isAutoHiddenEmpty 
-              ? 'bg-indigo-100 text-indigo-800 border-indigo-300' 
-              : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
-          }`}
-          title="Bật/Tắt tự động ẩn các tầng và cột chưa có dữ liệu thi công"
-        >
-          {isAutoHiddenEmpty ? <Eye className="w-4 h-4 text-indigo-600" /> : <EyeOff className="w-4 h-4" />}
-          {isAutoHiddenEmpty ? 'Hiện ô trống' : 'Ẩn ô trống'}
-        </button>
-        {type === 'ipc' && (
+        <div className="relative" ref={visibilityMenuRef}>
           <button 
-            onClick={() => setHideIpcQuantities(!hideIpcQuantities)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 text-purple-700 hover:bg-purple-100 font-bold rounded-lg border border-purple-200 shadow-sm transition-colors"
+            onClick={() => setIsVisibilityMenuOpen(!isVisibilityMenuOpen)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 font-bold rounded-lg border shadow-sm transition-colors ${isVisibilityMenuOpen ? 'bg-sky-100 text-sky-800 border-sky-300' : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border-sky-200'}`}
           >
-            {hideIpcQuantities ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />} {hideIpcQuantities ? 'Hiện Khối lượng' : 'Ẩn Khối lượng'}
+            <Eye className="w-4 h-4" /> Tùy chỉnh hiển thị <ChevronDown className="w-3.5 h-3.5 ml-0.5" />
           </button>
-        )}
+          
+          {isVisibilityMenuOpen && (
+            <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-gray-200 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] py-2 w-64">
+              <button 
+                onClick={() => { setIsColumnModalOpen(true); setIsVisibilityMenuOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <Eye className="w-4 h-4 text-sky-600" /> Cột hiển thị (Tùy chọn)
+              </button>
+              
+              <div className="h-px bg-gray-100 my-1 mx-4"></div>
+              
+              <button 
+                onClick={() => {
+                  setIsAutoHiddenEmpty(!isAutoHiddenEmpty);
+                  setHiddenColumns([]);
+                }}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center gap-2.5">
+                  {isAutoHiddenEmpty ? <Eye className="w-4 h-4 text-indigo-600" /> : <EyeOff className="w-4 h-4 text-gray-400" />} 
+                  <span>{isAutoHiddenEmpty ? 'Hiện ô trống' : 'Ẩn ô trống'}</span>
+                </div>
+                <div className={`w-8 h-4 rounded-full p-0.5 transition-colors flex items-center ${isAutoHiddenEmpty ? 'bg-indigo-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                  <div className="w-3 h-3 rounded-full bg-white shadow-sm"></div>
+                </div>
+              </button>
+
+              {type === 'ipc' && (
+                <button 
+                  onClick={() => setHideIpcQuantities(!hideIpcQuantities)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-left text-sm font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2.5">
+                    {hideIpcQuantities ? <Eye className="w-4 h-4 text-purple-600" /> : <EyeOff className="w-4 h-4 text-gray-400" />} 
+                    <span>{hideIpcQuantities ? 'Hiện Khối lượng' : 'Ẩn Khối lượng'}</span>
+                  </div>
+                  <div className={`w-8 h-4 rounded-full p-0.5 transition-colors flex items-center ${hideIpcQuantities ? 'bg-purple-500 justify-end' : 'bg-gray-300 justify-start'}`}>
+                    <div className="w-3 h-3 rounded-full bg-white shadow-sm"></div>
+                  </div>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
         <button 
           onClick={() => setIsBOQModalOpen(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 shadow-sm transition-colors"

@@ -51,6 +51,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedIpcFilter, setSelectedIpcFilter] = useState('ALL');
+  const [selectedPOFilter, setSelectedPOFilter] = useState('ALL');
 
   const projects = useAllowedProjects();
 
@@ -123,7 +124,65 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
 
-  const sortedMaterialRows = [...materialRows].sort((a, b) => {
+  const uniquePOs = useMemo(() => {
+    const pos = new Set();
+    if (!isExport && !isAttendance) {
+      (currentSheet.rows || []).forEach(r => {
+        materialItems.forEach(item => {
+          const val = r.values?.[item.id];
+          if (val) {
+            const match1 = String(val.order || '').match(/\((PO.*?)\)/i);
+            if (match1) pos.add(match1[1].toUpperCase());
+            const match2 = String(val.received || '').match(/\((PO.*?)\)/i);
+            if (match2) pos.add(match2[1].toUpperCase());
+          }
+        });
+      });
+    }
+    return Array.from(pos).sort();
+  }, [currentSheet.rows, materialItems, isExport, isAttendance]);
+
+  const filteredMaterialRows = useMemo(() => {
+    let rows = materialRows;
+    if (selectedPOFilter !== 'ALL' && !isExport && !isAttendance) {
+      rows = rows.reduce((acc, r) => {
+        let hasPO = false;
+        const newValues = {};
+        
+        materialItems.forEach(item => {
+          const val = r.values?.[item.id];
+          if (val) {
+            const strOrder = String(val.order || '');
+            const strReceived = String(val.received || '');
+            const matchOrder = strOrder.match(/\((PO.*?)\)/i);
+            const matchReceived = strReceived.match(/\((PO.*?)\)/i);
+            
+            const isOrderMatch = matchOrder && matchOrder[1].toUpperCase() === selectedPOFilter;
+            const isReceivedMatch = matchReceived && matchReceived[1].toUpperCase() === selectedPOFilter;
+            
+            // If the cell doesn't have an explicit PO in one field, but matches in the other, we keep it
+            // Or if they don't explicitly write PO in 'received', but 'order' matches, we keep the received value too.
+            // But if it explicitly has a DIFFERENT PO, we might want to hide it?
+            // Usually, if a cell is associated with the selected PO, we keep the cell.
+            if (isOrderMatch || isReceivedMatch) {
+              hasPO = true;
+              newValues[item.id] = val;
+            } else if (!matchOrder && !matchReceived) {
+               // If neither has PO explicitly, how do we know? We don't keep it because it doesn't match the filter.
+            }
+          }
+        });
+
+        if (hasPO) {
+          acc.push({ ...r, values: newValues });
+        }
+        return acc;
+      }, []);
+    }
+    return rows;
+  }, [materialRows, selectedPOFilter, isExport, isAttendance, materialItems]);
+
+  const sortedMaterialRows = [...filteredMaterialRows].sort((a, b) => {
     if (isExport) {
       const parseFloor = (str) => {
         if (!str) return -Infinity;
@@ -240,7 +299,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         if (newVal !== null) {
           handleUpdateRowDate(row.id, newVal);
         }
-      }, row.date || '', 'Nhập Tầng', 'text');
+      }, row.date || '', 'Nhập Tầng', 'text', false, null, () => {
+        openGlobalConfirm('Bạn có chắc chắn muốn xóa tầng này?', () => {
+          const nextRows = (currentSheet.exportRows || []).filter(r => r.id !== row.id);
+          setMaterialSheet(sheetKey, { ...currentSheet, exportRows: nextRows });
+        }, 'Xác nhận xóa tầng');
+      }, 'Xóa tầng');
       return;
     }
 
@@ -312,7 +376,27 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const addRow = () => {
-    const newRow = { id: `row-${Date.now()}`, date: '', values: {} };
+    let defaultDate = '';
+    if (isExport && materialRows.length > 0) {
+      let maxFloor = -Infinity;
+      materialRows.forEach(row => {
+        if (row.date) {
+          const num = parseInt(String(row.date).replace(/[^0-9]/g, ''), 10);
+          if (!isNaN(num) && num > maxFloor) {
+            maxFloor = num;
+          }
+        }
+      });
+      if (maxFloor !== -Infinity) {
+        defaultDate = `Tầng ${String(maxFloor + 1).padStart(2, '0')}`;
+      } else {
+        defaultDate = 'Tầng 01';
+      }
+    } else if (isExport && materialRows.length === 0) {
+      defaultDate = 'Tầng 01';
+    }
+
+    const newRow = { id: `row-${Date.now()}`, date: defaultDate, values: {} };
     setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
   };
 
@@ -402,6 +486,224 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   }, {}), [materialItems, currentSheet.rows]);
 
   const remainingByMaterial = (itemId) => parseNumber(orderTotals[itemId]) - parseNumber(totals[itemId]);
+
+  const handleReportPO = () => {
+    const shortages = {};
+    const NO_PO_KEY = 'CHƯA GẮN MÃ PO';
+    
+    uniquePOs.forEach(po => shortages[po] = []);
+    shortages[NO_PO_KEY] = [];
+    
+    materialItems.forEach(item => {
+      let totalOrdered = 0;
+      let totalReceived = 0;
+      const poOrders = {};
+      const poReceived = {};
+      
+      (currentSheet.rows || []).forEach(r => {
+         const val = r.values?.[item.id];
+         if (val) {
+           const strOrder = String(val.order || '');
+           const strReceived = String(val.received || '');
+           
+           const ordNum = parseNumber(strOrder);
+           if (ordNum > 0) {
+             const matchOrder = strOrder.match(/\((PO.*?)\)/i);
+             if (matchOrder) {
+               const po = matchOrder[1].toUpperCase();
+               poOrders[po] = (poOrders[po] || 0) + ordNum;
+             }
+             totalOrdered += ordNum;
+           }
+           
+           const recNum = parseNumber(strReceived);
+           if (recNum > 0) {
+             const matchReceived = strReceived.match(/\((PO.*?)\)/i);
+             if (matchReceived) {
+               const po = matchReceived[1].toUpperCase();
+               poReceived[po] = (poReceived[po] || 0) + recNum;
+             }
+             totalReceived += recNum;
+           }
+         }
+      });
+      
+      let sumPoShortages = 0;
+      const materialPoShorts = [];
+      uniquePOs.forEach(po => {
+        const ord = poOrders[po] || 0;
+        const rec = poReceived[po] || 0;
+        const short = ord - rec;
+        if (short > 0) {
+          materialPoShorts.push({ po, ord, rec, short, isOffset: false });
+          sumPoShortages += short;
+        }
+      });
+      
+      const totalShort = totalOrdered - totalReceived;
+      
+      if (totalShort < sumPoShortages) {
+         let surplus = sumPoShortages - Math.max(0, totalShort);
+         for (let i = 0; i < materialPoShorts.length; i++) {
+            if (surplus <= 0) break;
+            const s = materialPoShorts[i];
+            if (s.short <= surplus) {
+               surplus -= s.short;
+               s.short = 0;
+               s.isOffset = true;
+            } else {
+               s.short -= surplus;
+               surplus = 0;
+               s.isOffset = true;
+            }
+         }
+         
+         // Recalculate sumPoShortages after distribution
+         sumPoShortages = materialPoShorts.reduce((sum, s) => sum + s.short, 0);
+      }
+      
+      materialPoShorts.forEach(s => {
+         if (s.short > 0) {
+            shortages[s.po].push({
+               materialName: item.name || 'Chưa đặt tên',
+               ordered: s.ord,
+               received: s.ord - s.short, // Adjusted received amount
+               shortage: s.short,
+               isOffset: s.isOffset
+            });
+         }
+      });
+      
+      if (totalShort > sumPoShortages) {
+         shortages[NO_PO_KEY].push({
+            materialName: item.name || 'Chưa đặt tên',
+            ordered: totalOrdered,
+            received: totalReceived, 
+            shortage: totalShort - sumPoShortages
+         });
+      }
+    });
+    
+    let reportNode;
+    // Get POs that actually have shortages, NO_PO_KEY goes to the bottom
+    const poKeys = Object.keys(shortages).filter(k => shortages[k].length > 0).sort((a, b) => {
+      if (a === NO_PO_KEY) return 1;
+      if (b === NO_PO_KEY) return -1;
+      return a.localeCompare(b);
+    });
+    
+    const handlePrintReport = () => {
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Báo cáo PO chưa về đủ</title>
+            <style>
+              @page { size: A4; margin: 20mm; }
+              body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; color: #111; font-size: 16px; }
+              table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+              th, td { border: 1px solid #94a3b8; padding: 12px 16px; text-align: left; }
+              th { background-color: #f1f5f9; color: #334155; text-transform: uppercase; font-size: 14px; font-weight: bold; }
+              .text-right { text-align: right; }
+              .text-red { color: #dc2626; font-weight: bold; }
+              .text-green { color: #16a34a; }
+              .align-middle { vertical-align: middle; }
+              .bg-gray { background-color: #f8fafc; font-weight: bold; }
+              .bg-amber { background-color: #fef3c7 !important; }
+              h2 { color: #0f172a; margin-bottom: 8px; font-size: 24px; text-align: center; text-transform: uppercase; }
+              .subtitle { color: #475569; font-size: 14px; margin-bottom: 30px; text-align: center; font-style: italic; }
+            </style>
+          </head>
+          <body>
+            <h2>BÁO CÁO PO CHƯA VỀ ĐỦ VẬT TƯ</h2>
+            <div class="subtitle">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}</div>
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 15%">Mã PO</th>
+                  <th style="width: 40%">Tên vật tư</th>
+                  <th class="text-right" style="width: 15%">Yêu cầu</th>
+                  <th class="text-right" style="width: 15%">Đã nhận</th>
+                  <th class="text-right" style="width: 15%">Thiếu</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${poKeys.filter(po => shortages[po].length > 0).map(po => {
+                  return shortages[po].map((s, idx) => `
+                    <tr class="${s.isOffset ? 'bg-amber' : ''}">
+                      ${idx === 0 ? `<td rowspan="${shortages[po].length}" class="align-middle bg-gray text-center">${po}</td>` : ''}
+                      <td>${s.materialName}</td>
+                      <td class="text-right">${s.ordered.toLocaleString('vi-VN')}</td>
+                      <td class="text-right text-green">${s.received.toLocaleString('vi-VN')}</td>
+                      <td class="text-right text-red">${s.shortage.toLocaleString('vi-VN')}</td>
+                    </tr>
+                  `).join('')
+                }).join('')}
+              </tbody>
+            </table>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 300);
+    };
+
+    if (poKeys.some(po => shortages[po].length > 0)) {
+      reportNode = (
+        <div className="w-full">
+          <div className="flex justify-end mb-3 pb-2">
+            <button 
+              onClick={handlePrintReport}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+              In báo cáo
+            </button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto w-full custom-scrollbar border border-slate-200 rounded-xl">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10 shadow-sm">
+                <tr>
+                  <th className="px-4 py-2.5 border-r border-slate-200">Mã PO</th>
+                  <th className="px-4 py-2.5 border-r border-slate-200">Tên vật tư</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Yêu cầu</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Đã nhận</th>
+                  <th className="px-4 py-2.5 text-right text-red-600">Thiếu</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {poKeys.filter(po => shortages[po].length > 0).map(po => {
+                  return shortages[po].map((s, idx) => (
+                    <tr key={`${po}-${idx}`} className={`transition-colors ${s.isOffset ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-slate-50/50'}`}>
+                      {idx === 0 && (
+                        <td rowSpan={shortages[po].length} className="px-4 py-3 font-bold text-indigo-800 bg-indigo-50/30 border-r border-slate-200 align-middle text-center">
+                          {po}
+                        </td>
+                      )}
+                      <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{s.materialName}</td>
+                      <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{s.ordered.toLocaleString('vi-VN')}</td>
+                      <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{s.received.toLocaleString('vi-VN')}</td>
+                      <td className="px-4 py-3 text-right font-bold text-red-600 bg-red-50/30">{s.shortage.toLocaleString('vi-VN')}</td>
+                    </tr>
+                  ));
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+    
+    if (poKeys.length === 0) {
+      openGlobalAlert('Tuyệt vời! Tất cả các vật tư đều đã được nhận đủ.', 'Báo cáo vật tư');
+    } else {
+      openGlobalAlert(reportNode, 'Danh sách vật tư chưa về đủ', { maxWidth: 'sm:max-w-4xl' });
+    }
+  };
 
   const handleExportExcel = () => {
     const table = document.getElementById('material-table');
@@ -584,6 +886,28 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
                         >
                           NHẬP PO
+                        </button>
+                        <div className="relative ml-2">
+                          <select
+                            value={selectedPOFilter}
+                            onChange={(e) => setSelectedPOFilter(e.target.value)}
+                            className="appearance-none rounded-xl border border-cyan-500 bg-white pl-4 pr-8 py-2 text-sm font-bold text-cyan-600 hover:bg-cyan-50 shadow-sm focus:outline-none cursor-pointer"
+                          >
+                            <option value="ALL">LỌC PO</option>
+                            {uniquePOs.map(po => (
+                              <option key={po} value={po}>{po}</option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-cyan-500">
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleReportPO}
+                          className="inline-flex items-center gap-2 rounded-xl border border-purple-500 bg-white px-4 py-2 text-sm font-semibold text-purple-600 hover:bg-purple-50 ml-2 shadow-sm"
+                        >
+                          BÁO CÁO
                         </button>
                         {isAdminOrQS && (
                           <button
@@ -960,6 +1284,24 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                       className={`border border-slate-800 p-2 ${isWarning ? 'bg-orange-500 text-white' : 'bg-[#fff3e0] text-amber-900'}`}
                                     >
                                       {formatCell(exported)}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              <tr className="font-bold">
+                                <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Còn Tồn</td>
+                                {materialItems.map((item) => {
+                                  const imported = parseNumber(totals[item.id] || 0);
+                                  const exported = parseNumber(exportTotals[item.id] || 0);
+                                  const remaining = imported - exported;
+                                  
+                                  return (
+                                    <td
+                                      key={`${item.id}-remaining`}
+                                      colSpan={2}
+                                      className={`border border-slate-800 p-2 ${remaining < 0 ? 'bg-red-500 text-white' : 'bg-blue-50 text-blue-900'}`}
+                                    >
+                                      {formatCell(remaining)}
                                     </td>
                                   );
                                 })}
