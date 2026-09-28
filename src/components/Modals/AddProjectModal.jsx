@@ -12,6 +12,8 @@ export default function AddProjectModal({ isOpen, onClose }) {
     projectType: 'Sơn nước',
     subContractorInfo: '',
     address: '',
+    investor: '',
+    receiver: '',
     contractNo: '',
     contractDate: new Date().toISOString().split('T')[0],
     cht: [],
@@ -137,6 +139,47 @@ export default function AddProjectModal({ isOpen, onClose }) {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1">Địa chỉ</label>
+              <input
+                type="text"
+                placeholder="VD: Quận 9, TPHCM"
+                value={formData.address || ''}
+                onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1">Chủ đầu tư (Công ty)</label>
+              <input
+                type="text"
+                placeholder="VD: BCONS"
+                value={formData.investor || ''}
+                onChange={(e) => setFormData({ ...formData, investor: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1">Người nhận hàng</label>
+              <div className="relative">
+                <select
+                  value={formData.receiver || ''}
+                  onChange={(e) => setFormData({ ...formData, receiver: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none appearance-none cursor-pointer"
+                >
+                  <option value="">-- Chọn người nhận --</option>
+                  {users.map(u => (
+                    <option key={u.id} value={`${u.name}${u.phone ? ` (${u.phone})` : ''}`}>
+                      {u.name} {u.phone ? `- ${u.phone}` : ''} ({u.role})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
             </div>
           </div>
 

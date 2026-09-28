@@ -61,6 +61,7 @@ export const useStore = create(
       materialSheets: {},
       attendanceSheets: {},
       projectNotes: {},
+      materialOrders: [],
       paymentMatrix: initialPaymentMatrix,
       trashMatrix: {},
       matrixBlocks: defaultMatrixBlocksLocal,
@@ -123,8 +124,130 @@ export const useStore = create(
         }));
         get().syncProjectNotesToSupabase(projectName);
       },
+      addMaterialOrder: (order) => {
+        const newOrder = {
+          id: `ord-${Date.now()}`,
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+          ...order
+        };
+        set((state) => ({
+          materialOrders: [newOrder, ...(state.materialOrders || [])]
+        }));
+        get().syncMaterialOrderToSupabase(newOrder);
+      },
+      updateMaterialOrderStatus: (orderId, status) => {
+        set((state) => ({
+          materialOrders: (state.materialOrders || []).map(o => 
+            o.id === orderId ? { ...o, status } : o
+          )
+        }));
+        const updatedOrder = get().materialOrders?.find(o => o.id === orderId);
+        if (updatedOrder) get().syncMaterialOrderToSupabase(updatedOrder);
+      },
+      deleteMaterialOrder: async (orderId) => {
+        set((state) => ({
+          materialOrders: (state.materialOrders || []).filter(o => o.id !== orderId)
+        }));
+        
+        // delete from supabase
+        const { error } = await supabase.from('material_orders').delete().eq('id', orderId);
+        if (error) {
+          console.error("Failed to delete material order:", error);
+          get().openGlobalAlert("Lỗi xóa dữ liệu phiếu vật tư: " + error.message, "Lỗi");
+        }
+      },
+      updateMaterialOrder: (orderId, updatedData) => {
+        set((state) => ({
+          materialOrders: (state.materialOrders || []).map(o => 
+            o.id === orderId ? { ...o, ...updatedData } : o
+          )
+        }));
+        const updatedOrder = get().materialOrders?.find(o => o.id === orderId);
+        if (updatedOrder) get().syncMaterialOrderToSupabase(updatedOrder);
+      },
+      setOrderAsPlaced: (orderId, currentUser) => {
+        set((state) => {
+        const order = state.materialOrders?.find(o => o.id === orderId);
+        if (!order) return state;
 
-      // User Actions
+        const projectName = order.projectName;
+        const currentSheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+        const materialItems = currentSheet.items || [];
+        
+        let newDate = '';
+        if (order.date) {
+          const parts = order.date.split('-');
+          if (parts.length === 3) {
+            newDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
+          }
+        }
+
+        const now = new Date();
+        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+        const userStr = currentUser?.name || currentUser?.username || 'Unknown';
+
+        const newRowId = `row-${Date.now()}`;
+        const values = {};
+        materialItems.forEach(item => {
+          const q = order.quantities?.[item.id];
+          if (q) {
+            values[item.id] = {
+              order: `${q} (${order.name})`,
+              received: '',
+              orderUpdatedBy: userStr,
+              orderUpdatedAt: timeStr
+            };
+          }
+        });
+
+        const newRow = { id: newRowId, date: newDate, values };
+
+        const updatedOrders = (state.materialOrders || []).map(o => 
+          o.id === orderId ? { ...o, status: 'ordered' } : o
+        );
+
+        return {
+          materialOrders: updatedOrders,
+          materialSheets: {
+            ...state.materialSheets,
+            [projectName]: {
+              ...currentSheet,
+              rows: [...(currentSheet.rows || []), newRow]
+            }
+          }
+        };
+      });
+      const orderToSync = get().materialOrders?.find(o => o.id === orderId);
+      if (orderToSync) {
+        get().syncMaterialOrderToSupabase(orderToSync);
+        get().syncMaterialSheetToSupabase(orderToSync.projectName);
+      }
+    },
+
+    syncMaterialOrderToSupabase: async (order) => {
+      try {
+        const payload = {
+          id: order.id,
+          project_name: order.projectName,
+          name: order.name,
+          status: order.status,
+          date: order.date,
+          quantities: order.quantities,
+          note: order.note,
+          receiver: order.receiver,
+          updated_at: new Date().toISOString()
+        };
+        const { data: existing } = await supabase.from('material_orders').select('id').eq('id', order.id).maybeSingle();
+        if (existing) {
+          await supabase.from('material_orders').update(payload).eq('id', order.id);
+        } else {
+          await supabase.from('material_orders').insert([payload]);
+        }
+      } catch (err) {
+        console.error('Lỗi sync material order:', err);
+      }
+    },      // User Actions
       addUser: async (user) => {
         const newUser = { id: `u-${Date.now()}`, status: 'Active', ipHistory: ['1.54.25.78'], ...user };
         set((state) => ({ users: [newUser, ...state.users] }));
@@ -295,6 +418,9 @@ export const useStore = create(
           sub_contractor_count: 1,
           sub_contractor_info: project.subContractorInfo || '',
           address: project.address || '',
+          category: project.category || '',
+          investor: project.investor || '',
+          receiver: project.receiver || '',
           contract_no: project.contractNo || '',
           contract_date: project.contractDate || null,
           cht: project.cht || [],
@@ -407,6 +533,9 @@ export const useStore = create(
             order_type: updatedProj.projectType,
             sub_contractor_info: updatedProj.subContractorInfo,
             address: updatedProj.address,
+            category: updatedProj.category,
+            investor: updatedProj.investor,
+            receiver: updatedProj.receiver,
             contract_no: updatedProj.contractNo,
             cht: updatedProj.cht
           };
@@ -1889,6 +2018,9 @@ export const useStore = create(
               subContractorCount: p.sub_contractor_count,
               subContractorInfo: p.sub_contractor_info,
               address: p.address,
+              category: p.category,
+              investor: p.investor,
+              receiver: p.receiver,
               contractNo: p.contract_no,
               contractDate: p.contract_date,
               cht: p.cht || [],
@@ -2064,6 +2196,23 @@ export const useStore = create(
           const { data: shopData, error: shopError } = await supabase.from('shop_drawings').select('*');
           if (!shopError && shopData) {
             set({ shopDrawings: shopData });
+          }
+
+          // Fetch Material Orders
+          const { data: orderData, error: orderError } = await supabase.from('material_orders').select('*');
+          if (!orderError && Array.isArray(orderData)) {
+            const mappedOrders = orderData.map(o => ({
+              id: o.id,
+              projectName: o.project_name,
+              name: o.name,
+              status: o.status,
+              date: o.date,
+              quantities: o.quantities || {},
+              note: o.note || '',
+              receiver: o.receiver || '',
+              createdAt: o.created_at
+            }));
+            set({ materialOrders: mappedOrders });
           }
 
           // Fetch Equipments

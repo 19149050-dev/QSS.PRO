@@ -35,7 +35,10 @@ export default function EditUserModal({ isOpen, onClose, userToEdit }) {
     'QS',
     'CHT',
     'GSHT',
-    'QSA'
+    'QSA',
+    'GIÁM SÁT',
+    'KẾ TOÁN VẬT TƯ',
+    'GIÁM ĐỐC'
   ];
 
   const handleSubmit = (e) => {

@@ -21,7 +21,10 @@ export default function AddUserModal({ isOpen, onClose }) {
     'QS',
     'CHT',
     'GSHT',
-    'QSA'
+    'QSA',
+    'GIÁM SÁT',
+    'KẾ TOÁN VẬT TƯ',
+    'GIÁM ĐỐC'
   ];
 
   const handleSubmit = (e) => {

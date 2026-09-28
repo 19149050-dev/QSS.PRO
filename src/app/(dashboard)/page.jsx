@@ -23,6 +23,7 @@ import ProjectNotesView from '@/components/Views/ProjectNotesView';
 import EquipmentStoreView from '@/components/Views/EquipmentStoreView';
 import ChecklistView from '@/components/Views/ChecklistView';
 import ShopView from '@/components/Views/ShopView';
+import ApprovalView from '@/components/Views/ApprovalView';
 
 export default function RootRouter() {
   const { activeTab } = useStore();
@@ -52,6 +53,8 @@ export default function RootRouter() {
       return <ProjectNotesView />;
     case 'equipment-store':
       return <EquipmentStoreView />;
+    case 'approval':
+      return <ApprovalView />;
     case 'ipc':
       return <IpcView />;
     case 'users':

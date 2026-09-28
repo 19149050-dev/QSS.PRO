@@ -46,6 +46,7 @@ export default function Sidebar({ onCloseMobile }) {
     { label: 'Tổ Đội', id: 'teams', icon: Users },
     { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
     { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList, requiresPermission: 'allowViewIpcThuc' },
+    { label: 'Phê duyệt', id: 'approval', icon: ShieldCheck },
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
     { label: 'Điểm danh đội', id: 'team-attendance', icon: UserCheck },

@@ -48,6 +48,12 @@ export default function UsersPage() {
         return 'bg-amber-100 text-amber-800 font-bold border border-amber-300';
       case 'QSA':
         return 'bg-emerald-100 text-emerald-800 font-bold border border-emerald-300';
+      case 'KẾ TOÁN VẬT TƯ':
+        return 'bg-pink-100 text-pink-800 font-bold border border-pink-300';
+      case 'GIÁM ĐỐC':
+        return 'bg-blue-100 text-blue-800 font-bold border border-blue-300';
+      case 'GIÁM SÁT':
+        return 'bg-orange-100 text-orange-800 font-bold border border-orange-300';
       default:
         return 'bg-gray-100 text-gray-700 font-semibold';
     }

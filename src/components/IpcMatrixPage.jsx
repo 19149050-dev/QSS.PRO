@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
 import EnterPOModal from '@/components/Modals/EnterPOModal';
+import OrderMaterialModal from '@/components/Modals/OrderMaterialModal';
 
 const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
@@ -43,9 +44,10 @@ const getDefaultDinhMuc = (name = '') => {
 const formatCell = (value) => (value === '' || value === null || value === undefined ? '' : value);
 
 export default function IpcMatrixPage({ mode = 'planned' }) {
-  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm, teams } = useStore();
+  const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm, teams, addMaterialOrder } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
+  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
   const [dinhMucDraft, setDinhMucDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
@@ -86,6 +88,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   }, [paymentMatrix, selectedProject, activeTab.type]);
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
+  const isGiamSat = currentUser?.role === 'GIÁM SÁT';
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
   
   const sheetKey = isAttendance ? `attendance_${selectedProject}` : selectedProject;
@@ -869,14 +872,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                         Thêm cột
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={resetData}
-                      className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                    >
-                      <RotateCcw className="h-4 w-4" />
-                      Clear dữ liệu
-                    </button>
+                    {!isGiamSat && (
+                      <button
+                        type="button"
+                        onClick={resetData}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                        Clear dữ liệu
+                      </button>
+                    )}
 
                     {!isExport && (
                       <>
@@ -886,6 +891,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
                         >
                           NHẬP PO
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsOrderModalOpen(true)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-orange-500 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-600 hover:bg-orange-100 ml-2 shadow-sm"
+                        >
+                          ĐẶT VẬT TƯ
                         </button>
                         <div className="relative ml-2">
                           <select
@@ -902,13 +914,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleReportPO}
-                          className="inline-flex items-center gap-2 rounded-xl border border-purple-500 bg-white px-4 py-2 text-sm font-semibold text-purple-600 hover:bg-purple-50 ml-2 shadow-sm"
-                        >
-                          BÁO CÁO
-                        </button>
+                        {!isGiamSat && (
+                          <button
+                            type="button"
+                            onClick={handleReportPO}
+                            className="inline-flex items-center gap-2 rounded-xl border border-purple-500 bg-white px-4 py-2 text-sm font-semibold text-purple-600 hover:bg-purple-50 ml-2 shadow-sm"
+                          >
+                            BÁO CÁO
+                          </button>
+                        )}
                         {isAdminOrQS && (
                           <button
                             type="button"
@@ -936,22 +950,26 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
                     <div className="flex-1"></div>
 
-                    <button
-                      type="button"
-                      onClick={handleExportExcel}
-                      className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden"
-                    >
-                      <FileDown className="h-4 w-4" />
-                      Xuất Excel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePrint}
-                      className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden"
-                    >
-                      <Printer className="h-4 w-4" />
-                      In
-                    </button>
+                    {!isGiamSat && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleExportExcel}
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden"
+                        >
+                          <FileDown className="h-4 w-4" />
+                          Xuất Excel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handlePrint}
+                          className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden"
+                        >
+                          <Printer className="h-4 w-4" />
+                          In
+                        </button>
+                      </>
+                    )}
                   </div>
                   
                   <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white">
@@ -1385,6 +1403,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         onClose={() => setIsPOModalOpen(false)}
         materialItems={materialItems}
         onSubmit={handlePOModalSubmit}
+      />
+      <OrderMaterialModal
+        isOpen={isOrderModalOpen}
+        onClose={() => setIsOrderModalOpen(false)}
+        materialItems={materialItems}
+        projectName={selectedProject}
+        onSubmit={(orderData) => {
+          addMaterialOrder({ ...orderData, projectName: selectedProject });
+          openGlobalAlert('Đã gửi phiếu đặt vật tư cho QS phê duyệt thành công!', 'Gửi phê duyệt');
+        }}
       />
       {/* Modal Cấu Hình Định Mức Vật Tư Theo Tên */}
       {isDinhMucModalOpen && (

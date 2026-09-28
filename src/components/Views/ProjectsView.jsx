@@ -120,6 +120,10 @@ export default function ProjectsPage() {
                 <thead>
                   <tr>
                     <th>CÔNG TRÌNH</th>
+                    <th>ĐỊA CHỈ</th>
+                    <th>HẠNG MỤC</th>
+                    <th>CHỦ ĐẦU TƯ</th>
+                    <th>NGƯỜI NHẬN</th>
                     <th>CHỈ HUY TRƯỞNG</th>
                     <th>GS (GIÁM SÁT)</th>
                     <th className="text-center">TRẠNG THÁI</th>
@@ -141,7 +145,18 @@ export default function ProjectsPage() {
                         <button onClick={() => setActiveTab('project-detail', { id: proj.id })} className="font-extrabold text-gray-900 hover:text-indigo-600 transition flex items-center gap-1.5 text-left">
                           {proj.name} <ExternalLink className="w-3 h-3 text-gray-400" />
                         </button>
-                        <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-0.5">{proj.projectType}</div>
+                      </td>
+                      <td className="text-xs text-gray-700 max-w-[150px] truncate" title={proj.address || ''}>
+                        {proj.address || '---'}
+                      </td>
+                      <td>
+                        <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">{proj.projectType ? `Thi công ${proj.projectType}` : '---'}</div>
+                      </td>
+                      <td className="text-xs text-gray-700 max-w-[150px] truncate" title={proj.investor || ''}>
+                        {proj.investor || '---'}
+                      </td>
+                      <td className="text-xs font-bold text-slate-800 max-w-[120px] truncate" title={proj.receiver || ''}>
+                        {proj.receiver || '---'}
                       </td>
                       <td>
                         <div className="space-y-0.5">
@@ -233,11 +248,6 @@ export default function ProjectsPage() {
                       <Building2 className="w-5 h-5 text-indigo-500 shrink-0" />
                       <span className="truncate">{proj.name}</span>
                     </button>
-                    <div className="flex items-center gap-2 mt-2">
-                      <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2 py-0.5 rounded-md">
-                        {proj.projectType}
-                      </span>
-                    </div>
                   </div>
                   
                   <button
@@ -255,12 +265,39 @@ export default function ProjectsPage() {
                 </div>
 
                 <div className="space-y-3 mb-4">
-                  {proj.subContractorInfo && (
+                  {proj.address && (
                     <div className="flex items-start gap-2">
                       <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
                       <div>
-                        <div className="text-[10px] font-semibold text-gray-400">CĐT / TỔNG THẦU</div>
-                        <div className="text-xs font-medium text-gray-700">{proj.subContractorInfo}</div>
+                        <div className="text-[10px] font-semibold text-gray-400">ĐỊA CHỈ</div>
+                        <div className="text-xs font-medium text-gray-700">{proj.address}</div>
+                      </div>
+                    </div>
+                  )}
+                  {proj.projectType && (
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-[10px] font-semibold text-gray-400">HẠNG MỤC</div>
+                        <div className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">{`Thi công ${proj.projectType}`}</div>
+                      </div>
+                    </div>
+                  )}
+                  {proj.investor && (
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-[10px] font-semibold text-gray-400">CHỦ ĐẦU TƯ / CÔNG TY</div>
+                        <div className="text-xs font-medium text-gray-700">{proj.investor}</div>
+                      </div>
+                    </div>
+                  )}
+                  {proj.receiver && (
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-[10px] font-semibold text-gray-400">NGƯỜI NHẬN</div>
+                        <div className="text-xs font-medium text-slate-800">{proj.receiver}</div>
                       </div>
                     </div>
                   )}
