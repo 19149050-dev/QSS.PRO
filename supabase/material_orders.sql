@@ -11,9 +11,14 @@ CREATE TABLE IF NOT EXISTS public.material_orders (
   date text,
   quantities jsonb DEFAULT '{}'::jsonb,
   note text,
+  created_by_id text,
+  receiver text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),
   updated_at timestamp with time zone DEFAULT timezone('utc'::text, now())
 );
+
+ALTER TABLE public.material_orders ADD COLUMN IF NOT EXISTS created_by_id text;
+ALTER TABLE public.material_orders ADD COLUMN IF NOT EXISTS receiver text;
 
 -- Bật Row Level Security (RLS)
 ALTER TABLE public.material_orders ENABLE ROW LEVEL SECURITY;

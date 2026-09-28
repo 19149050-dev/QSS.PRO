@@ -112,6 +112,15 @@ export default function Sidebar({ onCloseMobile }) {
               <LogOut className="w-4 h-4" />
             </button>
           </div>
+          
+          <button 
+            type="button"
+            onClick={() => useStore.getState().setIsSignatureModalOpen(true)}
+            className="w-full mt-2 flex items-center justify-center gap-2 bg-[#1a1f2e] hover:bg-[#252b3d] border border-[#2d3748] text-zinc-300 hover:text-white py-2 rounded-lg font-bold transition-all text-[11px]"
+          >
+            <PenTool className="w-3.5 h-3.5 text-blue-400" />
+            Cập nhật chữ ký
+          </button>
         </div>
 
         {/* Main Navigation Menu */}

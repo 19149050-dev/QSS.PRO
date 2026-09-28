@@ -5,7 +5,7 @@ import ConfirmModal from '@/components/Modals/ConfirmModal';
 import OrderMaterialModal from '@/components/Modals/OrderMaterialModal';
 
 export default function ApprovalView() {
-  const { materialOrders, updateMaterialOrderStatus, updateMaterialOrder, deleteMaterialOrder, setOrderAsPlaced, currentUser, materialSheets, projects, openGlobalAlert, openGlobalConfirm } = useStore();
+  const { materialOrders, updateMaterialOrderStatus, updateMaterialOrder, deleteMaterialOrder, setOrderAsPlaced, currentUser, users, materialSheets, projects, openGlobalAlert, openGlobalConfirm } = useStore();
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'GIÁM ĐỐC';
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
   const isAdminOrKeToan = isAdmin || currentUser?.role === 'KẾ TOÁN' || currentUser?.role === 'KẾ TOÁN VẬT TƯ';
@@ -62,9 +62,9 @@ export default function ApprovalView() {
       const item = items.find(i => i.id === itemId);
       if (!qty) return null;
       return (
-        <div key={itemId} className="flex justify-between items-center text-sm py-1 border-b border-slate-100 last:border-0">
-          <span className="text-slate-600">{item ? item.name : 'Vật tư'}</span>
-          <span className="font-bold text-slate-800">{qty}</span>
+        <div key={itemId} className="flex justify-between items-center text-[14px] py-2.5 border-b border-slate-100 last:border-0">
+          <span className="text-slate-700 font-medium">{item ? item.name : 'Vật tư'}</span>
+          <span className="font-extrabold text-slate-900">{qty}</span>
         </div>
       );
     }).filter(Boolean);
@@ -197,7 +197,17 @@ export default function ApprovalView() {
           <div class="footer-section">
             <div class="signature-box">
               <div style="margin-bottom: 5px;">NGÀY ${dateParts[2] || '...'} THÁNG ${dateParts[1] || '...'} NĂM ${dateParts[0] || '202...'}</div>
-              <div class="font-bold">NGƯỜI LẬP</div>
+              <div class="font-bold uppercase">NGƯỜI LẬP</div>
+              ${(() => {
+                const creator = (users || []).find(u => u.id === order.createdById);
+                if (creator) {
+                  return `
+                    ${creator.signature ? `<div style="margin-top: 10px; margin-bottom: 10px;"><img src="${creator.signature}" alt="Chữ ký" style="height: 60px; max-width: 150px; object-fit: contain; margin: 0 auto;" /></div>` : '<div style="height: 80px;"></div>'}
+                    <div class="font-bold uppercase" style="margin-top: 5px;">${creator.name}</div>
+                  `;
+                }
+                return '<div style="height: 80px;"></div><div class="font-bold uppercase" style="margin-top: 5px;">...</div>';
+              })()}
             </div>
           </div>
           

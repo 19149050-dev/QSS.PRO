@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Sidebar from '@/components/Sidebar';
 import StoreInitializer from '@/components/StoreInitializer';
 import GlobalDialog from '@/components/Modals/GlobalDialog';
+import SignatureModal from '@/components/Modals/SignatureModal';
 import { useStore } from '@/store/useStore';
 import { Menu } from 'lucide-react';
 
@@ -67,6 +68,7 @@ export default function DashboardLayout({ children }) {
         </main>
       </div>
       <GlobalDialog />
+      <SignatureModal />
     </div>
   );
 }

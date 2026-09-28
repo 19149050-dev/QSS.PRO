@@ -89,6 +89,33 @@ export const useStore = create(
       viewMode: 'table', // 'table' | 'card'
       ipcSelections: {}, // stores selected cells for IPC: { "projectName_period": { "floor_category": true/false } }
       currentUser: null,
+      isSignatureModalOpen: false,
+
+      setIsSignatureModalOpen: (isOpen) => set({ isSignatureModalOpen: isOpen }),
+      
+      updateUserSignature: async (signatureDataUrl) => {
+        const user = get().currentUser;
+        if (!user) return;
+        
+        // Update local state
+        set({ currentUser: { ...user, signature: signatureDataUrl } });
+        set((state) => ({
+          users: state.users.map(u => u.id === user.id ? { ...u, signature: signatureDataUrl } : u)
+        }));
+
+        // Update supabase
+        const { error } = await supabase
+          .from('users')
+          .update({ signature_url: signatureDataUrl })
+          .eq('id', user.id);
+          
+        if (error) {
+          console.error('Lỗi khi cập nhật chữ ký:', error);
+          get().openGlobalAlert('Không thể lưu chữ ký vào cơ sở dữ liệu!', 'Lỗi');
+        } else {
+          get().openGlobalAlert('Cập nhật chữ ký điện tử thành công!', 'Thành công');
+        }
+      },
 
       loginUser: (user) => set({ currentUser: user }),
       logoutUser: () => set({ currentUser: null }),
@@ -125,10 +152,12 @@ export const useStore = create(
         get().syncProjectNotesToSupabase(projectName);
       },
       addMaterialOrder: (order) => {
+        const user = get().currentUser;
         const newOrder = {
           id: `ord-${Date.now()}`,
           status: 'pending',
           createdAt: new Date().toISOString(),
+          createdById: user?.id,
           ...order
         };
         set((state) => ({
@@ -236,6 +265,7 @@ export const useStore = create(
           quantities: order.quantities,
           note: order.note,
           receiver: order.receiver,
+          created_by_id: order.createdById,
           updated_at: new Date().toISOString()
         };
         const { data: existing } = await supabase.from('material_orders').select('id').eq('id', order.id).maybeSingle();
@@ -2210,6 +2240,7 @@ export const useStore = create(
               quantities: o.quantities || {},
               note: o.note || '',
               receiver: o.receiver || '',
+              createdById: o.created_by_id,
               createdAt: o.created_at
             }));
             set({ materialOrders: mappedOrders });
