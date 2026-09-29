@@ -378,7 +378,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             }
             
             if (filterBatch && filterBatch !== 'ALL') {
-              valForColor = (valForColor || '').split(' + ').filter(p => p.includes(filterBatch)).join(' + ');
+              const selectedBatches = filterBatch.split(',').filter(Boolean);
+              valForColor = (valForColor || '').split(' + ').filter(p => selectedBatches.some(b => p.includes(b))).join(' + ');
             }
 
             if (valForColor && valForColor.trim() !== '') {
@@ -709,7 +710,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
     // Filter by batch
     if (batch && batch !== 'ALL') {
-      const batchParts = display.split(' + ').filter(p => p.includes(batch));
+      const selectedBatches = batch.split(',').filter(Boolean);
+      const batchParts = display.split(' + ').filter(p => selectedBatches.some(b => p.includes(b)));
       if (batchParts.length > 0) {
         display = batchParts.join(' + ');
       } else {
@@ -2398,20 +2400,26 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
   }, [rawBlocks, filterBlock]);
 
   const [isGroupOpen, setIsGroupOpen] = useState(false);
+  const [isBatchOpen, setIsBatchOpen] = useState(false);
   const [isQuickEntryOpen, setIsQuickEntryOpen] = useState(false);
   const groupRef = useRef(null);
+  const batchRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (groupRef.current && !groupRef.current.contains(event.target)) {
         setIsGroupOpen(false);
       }
+      if (batchRef.current && !batchRef.current.contains(event.target)) {
+        setIsBatchOpen(false);
+      }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [groupRef]);
+  }, [groupRef, batchRef]);
 
   const selectedGroups = filterGroup === 'ALL' ? [] : filterGroup.split(',').filter(Boolean);
+  const selectedBatches = filterBatch === 'ALL' ? [] : filterBatch.split(',').filter(Boolean);
 
   const toggleGroup = (grp) => {
     let newGroups = [...selectedGroups];
@@ -2432,24 +2440,73 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
     }
   };
 
+  const toggleBatch = (btch) => {
+    let newBatches = [...selectedBatches];
+    if (newBatches.includes(btch)) {
+      newBatches = newBatches.filter(b => b !== btch);
+    } else {
+      newBatches.push(btch);
+    }
+    const newVal = newBatches.length === 0 ? 'ALL' : newBatches.join(',');
+    store.setMatrixFilter(projectName, filterBlock, filterGroup, newVal);
+  };
+
+  const handleSelectAllBatches = () => {
+    if (selectedBatches.length === availableBatches.length) {
+      store.setMatrixFilter(projectName, filterBlock, filterGroup, 'ALL');
+    } else {
+      store.setMatrixFilter(projectName, filterBlock, filterGroup, availableBatches.join(','));
+    }
+  };
+
   const handleNhậpNhanh = () => {
     setIsQuickEntryOpen(true);
   };
 
   return (
     <div className="flex flex-wrap items-center gap-2 ml-auto z-50 no-print print:hidden">
-      <select 
-        value={filterBatch} 
-        onChange={(e) => {
-          store.setMatrixFilter(projectName, filterBlock, filterGroup, e.target.value);
-        }}
-        className="px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs min-w-[140px] cursor-pointer"
-      >
-        <option value="ALL">Tất cả các Đợt</option>
-        {availableBatches.map(b => (
-          <option key={b} value={b}>{b}</option>
-        ))}
-      </select>
+      <div className="relative min-w-[140px]" ref={batchRef}>
+        <button
+          onClick={() => setIsBatchOpen(!isBatchOpen)}
+          className="w-full flex items-center justify-between px-4 py-2 bg-white border border-gray-200 rounded-2xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-xs cursor-pointer hover:bg-gray-50"
+        >
+          <span className="truncate max-w-[100px]">
+            {filterBatch === 'ALL' || selectedBatches.length === 0
+              ? 'Tất cả các Đợt'
+              : selectedBatches.length === 1 ? selectedBatches[0] : `Đã chọn (${selectedBatches.length})`}
+          </span>
+          <ChevronDown className="w-4 h-4 ml-2 text-gray-500" />
+        </button>
+
+        {isBatchOpen && (
+          <div className="absolute top-full left-0 mt-1 w-[200px] bg-white border border-gray-200 shadow-xl rounded-xl overflow-hidden z-50 flex flex-col max-h-[350px]">
+            <div className="p-2 border-b border-gray-100 bg-gray-50">
+              <label className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-gray-100 rounded text-xs font-bold text-gray-700">
+                <input 
+                  type="checkbox" 
+                  checked={selectedBatches.length > 0 && selectedBatches.length === availableBatches.length}
+                  onChange={handleSelectAllBatches}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                Chọn tất cả
+              </label>
+            </div>
+            <div className="overflow-y-auto p-1 scrollbar-thin">
+              {availableBatches.map(b => (
+                <label key={b} className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-indigo-50 rounded text-xs font-medium text-gray-700">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedBatches.includes(b)}
+                    onChange={() => toggleBatch(b)}
+                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  {b}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       <select 
         value={filterBlock} 

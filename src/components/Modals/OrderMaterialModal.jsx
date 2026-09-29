@@ -5,9 +5,33 @@ import { X, Calendar, Hash, FileText, CheckCircle2, Send } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 
 export default function OrderMaterialModal({ isOpen, onClose, materialItems, onSubmit, projectName, initialOrder = null }) {
-  const { materialOrders, materialSheets, projects } = useStore();
+  const { materialOrders, materialSheets, projects, users } = useStore();
   const currentProject = projects?.find(p => p.name === projectName);
-  const defaultReceiver = currentProject?.receiver || '';
+  
+  const defaultReceivers = useMemo(() => {
+    if (!currentProject) return [];
+    let list = [];
+    if (currentProject.receiver) list.push(currentProject.receiver);
+    
+    const addToList = (names) => {
+      if (!names) return;
+      const nameArr = Array.isArray(names) ? names : [names];
+      nameArr.forEach(name => {
+        const u = users?.find(user => user.name === name);
+        if (u && u.phone) {
+          list.push(`${name} (${u.phone})`);
+        } else {
+          list.push(name);
+        }
+      });
+    };
+
+    addToList(currentProject.cht);
+    addToList(currentProject.gs);
+    addToList(currentProject.gsht);
+
+    return [...new Set(list)].filter(Boolean);
+  }, [currentProject, users]);
 
   const [orderNameType, setOrderNameType] = useState('auto');
   const [customOrderName, setCustomOrderName] = useState('');
@@ -65,8 +89,8 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
         setDate(initialOrder.date || new Date().toISOString().split('T')[0]);
         setQuantities(initialOrder.quantities || {});
         setNote(initialOrder.note || '');
-        if (initialOrder.receiver && defaultReceiver && initialOrder.receiver === defaultReceiver) {
-          setReceiverType('default');
+        if (initialOrder.receiver && defaultReceivers.includes(initialOrder.receiver)) {
+          setReceiverType(initialOrder.receiver);
           setCustomReceiver('');
         } else {
           setReceiverType('custom');
@@ -78,8 +102,8 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
         setDate(new Date().toISOString().split('T')[0]);
         setQuantities({});
         setNote('');
-        if (defaultReceiver) {
-          setReceiverType('default');
+        if (defaultReceivers.length > 0) {
+          setReceiverType(defaultReceivers[0]);
           setCustomReceiver('');
         } else {
           setReceiverType('custom');
@@ -87,7 +111,7 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
         }
       }
     }
-  }, [isOpen, initialOrder, defaultReceiver]);
+  }, [isOpen, initialOrder, defaultReceivers]);
 
   if (!isOpen) return null;
 
@@ -106,7 +130,7 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
       date,
       quantities,
       note,
-      receiver: receiverType === 'default' ? defaultReceiver : customReceiver.trim()
+      receiver: receiverType !== 'custom' ? receiverType : customReceiver.trim()
     });
     onClose();
   };
@@ -172,18 +196,20 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
           <div>
             <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Người nhận hàng</label>
             <div className="flex gap-2">
-              {defaultReceiver && (
+              {defaultReceivers.length > 0 && (
                 <select
                   value={receiverType}
                   onChange={(e) => setReceiverType(e.target.value)}
-                  className={`px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${receiverType === 'default' ? 'w-full' : 'w-2/5'}`}
+                  className={`px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${receiverType !== 'custom' ? 'w-full' : 'w-2/5'}`}
                 >
-                  <option value="default">{defaultReceiver}</option>
+                  {defaultReceivers.map((rec) => (
+                    <option key={rec} value={rec}>{rec}</option>
+                  ))}
                   <option value="custom">Khác</option>
                 </select>
               )}
-              {(!defaultReceiver || receiverType === 'custom') && (
-                <div className={`relative ${defaultReceiver ? 'w-3/5' : 'w-full'}`}>
+              {(defaultReceivers.length === 0 || receiverType === 'custom') && (
+                <div className={`relative ${defaultReceivers.length > 0 ? 'w-3/5' : 'w-full'}`}>
                   <input 
                     type="text"
                     value={customReceiver}
@@ -195,25 +221,31 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
               )}
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ghi chú (Tùy chọn)</label>
-            <textarea
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 transition-all min-h-[80px]"
-              placeholder="Nhập ghi chú cho QS duyệt..."
-            />
-          </div>
-
           <div className="space-y-3">
             <h4 className="font-bold text-slate-800 flex items-center gap-2">
               <BoxesIcon className="w-5 h-5 text-orange-500" />
               Chi tiết số lượng vật tư cần đặt
             </h4>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {materialItems.map((item) => (
-                <div key={item.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:border-orange-300 transition-colors">
-                  <label className="block text-xs font-bold text-slate-600 mb-2 truncate" title={item.name}>
+              {materialItems.map((item, index) => {
+                const headerColors = [
+                  'bg-blue-500 text-white border-blue-600 shadow-blue-500/20',
+                  'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20',
+                  'bg-purple-500 text-white border-purple-600 shadow-purple-500/20',
+                  'bg-amber-500 text-white border-amber-600 shadow-amber-500/20',
+                  'bg-rose-500 text-white border-rose-600 shadow-rose-500/20',
+                  'bg-cyan-500 text-white border-cyan-600 shadow-cyan-500/20',
+                  'bg-indigo-500 text-white border-indigo-600 shadow-indigo-500/20',
+                  'bg-orange-500 text-white border-orange-600 shadow-orange-500/20'
+                ];
+                const colorClass = headerColors[index % headerColors.length];
+                const currentSheet = materialSheets?.[projectName];
+                const unit = currentSheet?.unitMap?.[item.id];
+                const placeholder = unit ? `Số lượng (${unit})...` : 'Số lượng...';
+
+                return (
+                <div key={item.id} className={`p-3 rounded-xl border shadow-sm hover:brightness-105 transition-all ${colorClass}`}>
+                  <label className="block text-xs font-bold mb-2 truncate text-white" title={item.name}>
                     {item.name || 'Vật tư chưa có tên'}
                   </label>
                   <div className="relative">
@@ -222,13 +254,24 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
                       type="number"
                       value={quantities[item.id] || ''}
                       onChange={(e) => setQuantities({...quantities, [item.id]: e.target.value})}
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold transition-all"
-                      placeholder="Số lượng..."
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-transparent rounded-lg focus:ring-2 focus:ring-white/50 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-400"
+                      placeholder={placeholder}
                     />
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ghi chú (Tùy chọn)</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 transition-all min-h-[60px]"
+              placeholder="Nhập ghi chú cho QS duyệt..."
+            />
           </div>
         </div>
 

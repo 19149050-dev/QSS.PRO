@@ -28,7 +28,7 @@ import {
 } from 'lucide-react';
 
 export default function Sidebar({ onCloseMobile }) {
-  const { activeTab, setActiveTab, currentUser, logoutUser } = useStore();
+  const { activeTab, setActiveTab, currentUser, logoutUser, materialOrders } = useStore();
 
   const handleLogout = () => {
     document.cookie = 'isAuthenticated=; path=/; max-age=0; samesite=lax';
@@ -41,12 +41,14 @@ export default function Sidebar({ onCloseMobile }) {
     if (onCloseMobile) onCloseMobile();
   };
 
+  const pendingApprovalsCount = (materialOrders || []).filter(o => o.status === 'pending').length;
+
   const mainNavItems = [
     { label: 'Trang Chủ', id: 'dashboard', icon: Home },
     { label: 'Tổ Đội', id: 'teams', icon: Users },
     { label: 'IPC Dự Kiến', id: 'ipc-du-kien', icon: FileSpreadsheet },
     { label: 'IPC Thực', id: 'ipc-thuc', icon: ClipboardList, requiresPermission: 'allowViewIpcThuc' },
-    { label: 'Phê duyệt', id: 'approval', icon: ShieldCheck },
+    { label: 'Phê duyệt', id: 'approval', icon: ShieldCheck, badge: pendingApprovalsCount > 0 ? pendingApprovalsCount.toString() : null },
     { label: 'Nhận Vật Tư', id: 'ipc-vat-tu', icon: Package },
     { label: 'Xuất Vật Tư', id: 'export-materials', icon: Package },
     { label: 'Điểm danh đội', id: 'team-attendance', icon: UserCheck },
@@ -150,9 +152,7 @@ export default function Sidebar({ onCloseMobile }) {
                   <span>{item.label}</span>
                 </div>
                 {item.badge && (
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                    item.badge === '17' ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-800 text-zinc-300'
-                  }`}>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white shadow-sm shadow-rose-500/30">
                     {item.badge}
                   </span>
                 )}

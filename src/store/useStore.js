@@ -201,7 +201,7 @@ export const useStore = create(
         if (!order) return state;
 
         const projectName = order.projectName;
-        const currentSheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+        const currentSheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
         const materialItems = currentSheet.items || [];
         
         let newDate = '';
@@ -912,23 +912,23 @@ export const useStore = create(
       },
       getMaterialSheet: (projectName) => {
         const state = get();
-        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
       },
-      setMaterialSheet: (projectName, sheetData) => {
+      setMaterialSheet: (projectName, sheetData, immediate = false) => {
         set((state) => ({
           materialSheets: {
             ...state.materialSheets,
             [projectName]: sheetData
           }
         }));
-        get().syncMaterialSheetToSupabase(projectName);
+        get().syncMaterialSheetToSupabase(projectName, immediate);
       },
       resetMaterialSheet: (projectName) => set((state) => {
         const current = state.materialSheets[projectName] || {};
         return {
           materialSheets: {
             ...state.materialSheets,
-            [projectName]: { ...current, items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} }
+            [projectName]: { ...current, items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} }
           }
         };
       }),
@@ -2184,11 +2184,24 @@ export const useStore = create(
             const mats = {};
             sheetsData.forEach(s => {
               const localSheet = get().materialSheets?.[s.project_name] || {};
+              const rawDinhMuc = s.dinh_muc_map || {};
+              const extractedDinhMuc = {};
+              const extractedUnit = {};
+              
+              Object.keys(rawDinhMuc).forEach(k => {
+                if (k.endsWith('__unit')) {
+                  extractedUnit[k.replace('__unit', '')] = rawDinhMuc[k];
+                } else {
+                  extractedDinhMuc[k] = rawDinhMuc[k];
+                }
+              });
+
               mats[s.project_name] = {
                 items: s.items || [],
                 rows: s.receive_rows || [],
                 exportRows: s.export_rows || [],
-                dinhMucMap: { ...(localSheet.dinhMucMap || {}), ...(s.dinh_muc_map || {}) },
+                dinhMucMap: { ...(localSheet.dinhMucMap || {}), ...extractedDinhMuc },
+                unitMap: { ...(localSheet.unitMap || {}), ...(s.unit_map || {}), ...extractedUnit },
                 ipcMap: { ...(localSheet.ipcMap || {}), ...(s.ipc_map || {}) }
               };
             });
@@ -2402,22 +2415,31 @@ export const useStore = create(
         get().syncMatrixDataToSupabase(projectName);
       },
 
-      syncMaterialSheetToSupabase: (projectName) => {
+      syncMaterialSheetToSupabase: (projectName, immediate = false) => {
         if (materialSyncTimeouts[projectName]) {
           clearTimeout(materialSyncTimeouts[projectName]);
         }
-        materialSyncTimeouts[projectName] = setTimeout(async () => {
+        
+        const doSync = async () => {
           const state = get();
           const sheet = state.materialSheets[projectName];
           if (!sheet) return;
           
           try {
+            // Merge unitMap into dinh_muc_map to avoid schema changes
+            const mergedDinhMucMap = { ...(sheet.dinhMucMap || {}) };
+            if (sheet.unitMap) {
+              Object.keys(sheet.unitMap).forEach(key => {
+                mergedDinhMucMap[`${key}__unit`] = sheet.unitMap[key];
+              });
+            }
+
             const payload = {
               project_name: projectName,
               items: sheet.items || [],
               receive_rows: sheet.rows || [],
               export_rows: sheet.exportRows || [],
-              dinh_muc_map: sheet.dinhMucMap || {},
+              dinh_muc_map: mergedDinhMucMap,
               ipc_map: sheet.ipcMap || {},
               updated_at: new Date().toISOString()
             };
@@ -2441,7 +2463,13 @@ export const useStore = create(
             console.error('Supabase material sheet sync error:', err);
             get().openGlobalAlert(`Lỗi đồng bộ (Exception): ${err.message || JSON.stringify(err)}`, 'Lỗi đồng bộ');
           }
-        }, 3000);
+        };
+
+        if (immediate) {
+          doSync();
+        } else {
+          materialSyncTimeouts[projectName] = setTimeout(doSync, 3000);
+        }
       },
 
       syncAttendanceSheetToSupabase: (projectName) => {

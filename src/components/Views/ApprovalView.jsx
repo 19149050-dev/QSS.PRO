@@ -166,7 +166,7 @@ export default function ApprovalView() {
                       <tr>
                         <td class="text-center">${idx + 1}</td>
                         <td>${data.item ? data.item.name : 'Vật tư'}</td>
-                        <td class="text-center">${data.item && data.item.unit ? data.item.unit : ''}</td>
+                        <td class="text-center">${data.item ? (currentSheet.unitMap?.[data.item.id] || data.item.unit || '') : ''}</td>
                         <td class="text-right">${Number(data.qty).toLocaleString('vi-VN')}</td>
                       </tr>
                     `).join('')}
@@ -182,7 +182,7 @@ export default function ApprovalView() {
                       <tr>
                         <td class="text-center">${idx + 1}</td>
                         <td>${data.item ? data.item.name : 'Vật tư'}</td>
-                        <td class="text-center">${data.item && data.item.unit ? data.item.unit : ''}</td>
+                        <td class="text-center">${data.item ? (currentSheet.unitMap?.[data.item.id] || data.item.unit || '') : ''}</td>
                         <td class="text-right">${Number(data.qty).toLocaleString('vi-VN')}</td>
                       </tr>
                     `).join('')}

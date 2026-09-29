@@ -50,6 +50,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
   const [dinhMucDraft, setDinhMucDraft] = useState({});
+  const [unitDraft, setUnitDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedIpcFilter, setSelectedIpcFilter] = useState('ALL');
@@ -92,7 +93,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const isAdminOrQS = isAdmin || currentUser?.role === 'QS';
   
   const sheetKey = isAttendance ? `attendance_${selectedProject}` : selectedProject;
-  const currentSheet = materialSheets[sheetKey] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, ipcMap: {} };
+  const currentSheet = materialSheets[sheetKey] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
 
   const projectTeams = useMemo(() => {
     if (!teams) return [];
@@ -401,6 +402,46 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
     const newRow = { id: `row-${Date.now()}`, date: defaultDate, values: {} };
     setMaterialSheet(sheetKey, { ...currentSheet, [isExport ? 'exportRows' : 'rows']: [...materialRows, newRow] });
+  };
+
+  const addMultipleRows = () => {
+    openGlobalPrompt('Nhập số lượng tầng muốn thêm (VD: 5):', (val) => {
+      if (val === null) return;
+      const count = parseInt(val, 10);
+      if (isNaN(count) || count <= 0) {
+        openGlobalAlert('Vui lòng nhập một số hợp lệ lớn hơn 0.', 'Lỗi nhập liệu');
+        return;
+      }
+      if (count > 50) {
+        openGlobalAlert('Số lượng tầng thêm một lúc không được vượt quá 50.', 'Lỗi nhập liệu');
+        return;
+      }
+
+      let maxFloor = 0;
+      if (materialRows.length > 0) {
+        materialRows.forEach(row => {
+          if (row.date) {
+            const num = parseInt(String(row.date).replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(num) && num > maxFloor) {
+              maxFloor = num;
+            }
+          }
+        });
+      }
+
+      const newRows = [];
+      const timestamp = Date.now();
+      for (let i = 1; i <= count; i++) {
+        const floorNum = maxFloor + i;
+        newRows.push({
+          id: `row-${timestamp}-${i}`,
+          date: `Tầng ${String(floorNum).padStart(2, '0')}`,
+          values: {}
+        });
+      }
+
+      setMaterialSheet(sheetKey, { ...currentSheet, exportRows: [...materialRows, ...newRows] });
+    }, '', 'Thêm nhiều tầng', 'number');
   };
 
   const handlePOModalSubmit = (poName, quantities, date) => {
@@ -862,6 +903,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <Plus className="h-4 w-4" />
                       Thêm dòng
                     </button>
+                    {isExport && (
+                      <button
+                        type="button"
+                        onClick={addMultipleRows}
+                        className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+                      >
+                        <Layers3 className="h-4 w-4" />
+                        Thêm nhiều tầng
+                      </button>
+                    )}
                     {!isExport && (
                       <button
                         type="button"
@@ -928,6 +979,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             type="button"
                             onClick={() => {
                               const initialDraft = { ...(currentSheet.dinhMucMap || {}) };
+                              const initialUnitDraft = { ...(currentSheet.unitMap || {}) };
                               materialItems.forEach(item => {
                                 if (initialDraft[item.id] === undefined || initialDraft[item.id] === '') {
                                   const defaultVal = getDefaultDinhMuc(item.name);
@@ -935,14 +987,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     initialDraft[item.id] = defaultVal;
                                   }
                                 }
+                                if (initialUnitDraft[item.id] === undefined) {
+                                  initialUnitDraft[item.id] = '';
+                                }
                               });
                               setDinhMucDraft(initialDraft);
+                              setUnitDraft(initialUnitDraft);
                               setIsDinhMucModalOpen(true);
                             }}
                             className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 ml-2 shadow-sm transition"
                           >
                             <SlidersHorizontal className="h-4 w-4" />
-                            ĐỊNH MỨC
+                            CẤU HÌNH VẬT TƯ
                           </button>
                         )}
                       </>
@@ -1420,7 +1476,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
             <div className="p-5 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-base">Cấu Hình Định Mức Vật Tư</h3>
+                <h3 className="font-bold text-base">Cấu Hình Thuộc Tính Vật Tư</h3>
                 <p className="text-xs text-indigo-100 mt-0.5">Dự án: <span className="font-bold">{selectedProject}</span></p>
               </div>
               <button onClick={() => setIsDinhMucModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
@@ -1433,19 +1489,44 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                 const name = item.name || `Cột ${idx + 1}`;
                 const defaultVal = getDefaultDinhMuc(name);
                 const currentVal = dinhMucDraft[item.id] ?? defaultVal;
+                const currentUnit = unitDraft[item.id] ?? '';
                 return (
-                  <div key={item.id} className="flex flex-col gap-2 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition shadow-sm">
+                  <div key={item.id} className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition shadow-sm">
                     <span className="font-bold text-slate-800 text-sm truncate w-full">{name}</span>
-                    <div className="flex items-center justify-between w-full">
-                      <span className="text-xs text-slate-500 font-semibold">Định mức:</span>
-                      <input
-                        type="number"
-                        step="any"
-                        placeholder={defaultVal || "0"}
-                        value={currentVal}
-                        onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
-                        className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none"
-                      />
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs text-slate-500 font-semibold">Định mức:</span>
+                        <input
+                          type="number"
+                          step="any"
+                          placeholder={defaultVal || "0"}
+                          value={currentVal}
+                          onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
+                          className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between w-full">
+                        <span className="text-xs text-slate-500 font-semibold">Đơn vị:</span>
+                        <select
+                          value={currentUnit}
+                          onChange={(e) => setUnitDraft({ ...unitDraft, [item.id]: e.target.value })}
+                          className="w-24 px-1 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none text-xs"
+                        >
+                          <option value="">Trống</option>
+                          <option value="Bao/40kg">Bao/40kg</option>
+                          <option value="Thùng/18l">Thùng/18l</option>
+                          <option value="Thùng/25kg">Thùng/25kg</option>
+                          <option value="Bao/20kg">Bao/20kg</option>
+                          <option value="Thùng/5l">Thùng/5l</option>
+                          <option value="Thùng/5kg">Thùng/5kg</option>
+                          <option value="kg">kg</option>
+                          <option value="lít">lít</option>
+                          <option value="cái">cái</option>
+                          <option value="cuộn">cuộn</option>
+                          <option value="m2">m2</option>
+                          <option value="bộ">bộ</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
                 );
@@ -1463,13 +1544,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
               <button
                 type="button"
                 onClick={() => {
-                  setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft });
+                  setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft, unitMap: unitDraft }, true);
                   setIsDinhMucModalOpen(false);
-                  openGlobalAlert('Đã lưu cấu hình định mức vật tư thành công!', 'Thành công');
+                  openGlobalAlert('Đã lưu cấu hình vật tư thành công!', 'Thành công');
                 }}
                 className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition text-xs shadow-md"
               >
-                Lưu Định Mức
+                Lưu Cấu Hình
               </button>
             </div>
           </div>
