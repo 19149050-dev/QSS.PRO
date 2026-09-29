@@ -212,10 +212,17 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   };
 
   const handleRemoveColumn = (colId) => {
-    openGlobalConfirm("Bạn có chắc chắn muốn xóa cột này? Toàn bộ dữ liệu của cột này sẽ bị mất.", () => {
-      const nextItems = materialItems.filter(item => item.id !== colId);
-      setMaterialSheet(sheetKey, { ...currentSheet, items: nextItems });
-    }, "Xác nhận xóa");
+    openGlobalPrompt("Vui lòng nhập mật khẩu để xác nhận xóa:", (pwd) => {
+      if (pwd === null) return;
+      if (pwd !== currentUser?.password && pwd !== '0000') {
+        openGlobalAlert('Mật khẩu không đúng!', 'Lỗi bảo mật');
+        return;
+      }
+      openGlobalConfirm("Bạn có chắc chắn muốn xóa cột này? Toàn bộ dữ liệu của cột này sẽ bị mất.", () => {
+        const nextItems = materialItems.filter(item => item.id !== colId);
+        setMaterialSheet(sheetKey, { ...currentSheet, items: nextItems });
+      }, "Xác nhận xóa");
+    }, '', 'Xác thực bảo mật', 'password');
   };
 
   const handleUpdateRowDate = (rowId, date) => {
@@ -304,10 +311,17 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           handleUpdateRowDate(row.id, newVal);
         }
       }, row.date || '', 'Nhập Tầng', 'text', false, null, () => {
-        openGlobalConfirm('Bạn có chắc chắn muốn xóa tầng này?', () => {
-          const nextRows = (currentSheet.exportRows || []).filter(r => r.id !== row.id);
-          setMaterialSheet(sheetKey, { ...currentSheet, exportRows: nextRows });
-        }, 'Xác nhận xóa tầng');
+        openGlobalPrompt("Vui lòng nhập mật khẩu để xác nhận xóa:", (pwd) => {
+          if (pwd === null) return;
+          if (pwd !== currentUser?.password && pwd !== '0000') {
+            openGlobalAlert('Mật khẩu không đúng!', 'Lỗi bảo mật');
+            return;
+          }
+          openGlobalConfirm('Bạn có chắc chắn muốn xóa tầng này?', () => {
+            const nextRows = (currentSheet.exportRows || []).filter(r => r.id !== row.id);
+            setMaterialSheet(sheetKey, { ...currentSheet, exportRows: nextRows });
+          }, 'Xác nhận xóa tầng');
+        }, '', 'Xác thực bảo mật', 'password');
       }, 'Xóa tầng');
       return;
     }
@@ -340,11 +354,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         }
       }
     }, toISO(row.date), 'Chọn Ngày', 'date', false, null, () => {
-      openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng này?', () => {
-        const listKey = isExport ? 'exportRows' : 'rows';
-        const nextRows = (isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])).filter(r => r.id !== row.id);
-        setMaterialSheet(sheetKey, { ...currentSheet, [listKey]: nextRows });
-      }, 'Xác nhận xóa dòng');
+      openGlobalPrompt("Vui lòng nhập mật khẩu để xác nhận xóa:", (pwd) => {
+        if (pwd === null) return;
+        if (pwd !== currentUser?.password && pwd !== '0000') {
+          openGlobalAlert('Mật khẩu không đúng!', 'Lỗi bảo mật');
+          return;
+        }
+        openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng này?', () => {
+          const listKey = isExport ? 'exportRows' : 'rows';
+          const nextRows = (isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || [])).filter(r => r.id !== row.id);
+          setMaterialSheet(sheetKey, { ...currentSheet, [listKey]: nextRows });
+        }, 'Xác nhận xóa dòng');
+      }, '', 'Xác thực bảo mật', 'password');
     });
   };
 
@@ -860,21 +881,11 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       `}</style>
       <div className="space-y-6 p-8 w-full">
         {(activeTab.type !== 'team' && activeTab.type !== 'ipc') && (
-          <div className="flex flex-col gap-4 rounded-3xl border border-indigo-100 bg-white px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600">
-                <Layers3 className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-xl font-extrabold tracking-tight text-slate-900">{activeTab.label}</h1>
-                <p className="text-sm text-slate-500">{activeTab.hint}</p>
-              </div>
-            </div>
-
+          <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center">
             <select
               value={selectedProject}
               onChange={(e) => setActiveProject(e.target.value)}
-              className="min-w-[180px] rounded-2xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="min-w-[140px] sm:min-w-[180px] rounded-lg sm:rounded-xl border border-gray-200 bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-bold text-gray-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               {projects.map((project) => (
                 <option key={project.id} value={project.name}>
@@ -894,22 +905,22 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
             <div className="mt-4 border-t border-slate-100 pt-4">
               {mode === 'materials' || mode === 'export_materials' ? (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                     <button
                       type="button"
                       onClick={addRow}
-                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                      className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-emerald-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
                     >
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                       Thêm dòng
                     </button>
                     {isExport && (
                       <button
                         type="button"
                         onClick={addMultipleRows}
-                        className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700"
+                        className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-teal-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-teal-700 whitespace-nowrap"
                       >
-                        <Layers3 className="h-4 w-4" />
+                        <Layers3 className="h-3 w-3 sm:h-4 sm:w-4" />
                         Thêm nhiều tầng
                       </button>
                     )}
@@ -917,20 +928,10 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       <button
                         type="button"
                         onClick={addColumn}
-                        className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                        className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-indigo-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
                       >
-                        <Plus className="h-4 w-4" />
+                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                         Thêm cột
-                      </button>
-                    )}
-                    {!isGiamSat && (
-                      <button
-                        type="button"
-                        onClick={resetData}
-                        className="inline-flex items-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                      >
-                        <RotateCcw className="h-4 w-4" />
-                        Clear dữ liệu
                       </button>
                     )}
 
@@ -939,22 +940,22 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                         <button
                           type="button"
                           onClick={() => setIsPOModalOpen(true)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-rose-500 bg-white px-4 py-2 text-sm font-semibold text-rose-500 hover:bg-rose-50 ml-2 shadow-sm"
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-rose-500 bg-white px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-rose-500 hover:bg-rose-50 shadow-sm whitespace-nowrap"
                         >
                           NHẬP PO
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsOrderModalOpen(true)}
-                          className="inline-flex items-center gap-2 rounded-xl border border-orange-500 bg-orange-50 px-4 py-2 text-sm font-semibold text-orange-600 hover:bg-orange-100 ml-2 shadow-sm"
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-orange-500 bg-orange-50 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-orange-600 hover:bg-orange-100 shadow-sm whitespace-nowrap"
                         >
                           ĐẶT VẬT TƯ
                         </button>
-                        <div className="relative ml-2">
+                        <div className="relative">
                           <select
                             value={selectedPOFilter}
                             onChange={(e) => setSelectedPOFilter(e.target.value)}
-                            className="appearance-none rounded-xl border border-cyan-500 bg-white pl-4 pr-8 py-2 text-sm font-bold text-cyan-600 hover:bg-cyan-50 shadow-sm focus:outline-none cursor-pointer"
+                            className="appearance-none rounded-md sm:rounded-xl border border-cyan-500 bg-white pl-2.5 sm:pl-4 pr-6 sm:pr-8 py-1 sm:py-2 text-[11px] sm:text-sm font-bold text-cyan-600 hover:bg-cyan-50 shadow-sm focus:outline-none cursor-pointer whitespace-nowrap"
                           >
                             <option value="ALL">LỌC PO</option>
                             {uniquePOs.map(po => (
@@ -969,7 +970,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <button
                             type="button"
                             onClick={handleReportPO}
-                            className="inline-flex items-center gap-2 rounded-xl border border-purple-500 bg-white px-4 py-2 text-sm font-semibold text-purple-600 hover:bg-purple-50 ml-2 shadow-sm"
+                            className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-purple-500 bg-white px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-purple-600 hover:bg-purple-50 shadow-sm whitespace-nowrap"
                           >
                             BÁO CÁO
                           </button>
@@ -995,33 +996,41 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                               setUnitDraft(initialUnitDraft);
                               setIsDinhMucModalOpen(true);
                             }}
-                            className="inline-flex items-center gap-2 rounded-xl border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-bold text-indigo-700 hover:bg-indigo-100 ml-2 shadow-sm transition"
+                            className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-bold text-indigo-700 hover:bg-indigo-100 shadow-sm transition whitespace-nowrap"
                           >
-                            <SlidersHorizontal className="h-4 w-4" />
+                            <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
                             CẤU HÌNH VẬT TƯ
                           </button>
                         )}
                       </>
                     )}
 
-                    <div className="flex-1"></div>
+                    <div className="flex-1 min-w-[20px]"></div>
 
                     {!isGiamSat && (
                       <>
                         <button
                           type="button"
-                          onClick={handleExportExcel}
-                          className="inline-flex items-center gap-2 rounded-xl bg-[#107c41] px-4 py-2 text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden"
+                          onClick={resetData}
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-red-200 bg-white px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-red-600 hover:bg-red-50 whitespace-nowrap print:hidden"
                         >
-                          <FileDown className="h-4 w-4" />
+                          <RotateCcw className="h-3 w-3 sm:h-4 sm:w-4" />
+                          Clear dữ liệu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleExportExcel}
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-[#107c41] px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-[#185c37] transition print:hidden whitespace-nowrap"
+                        >
+                          <FileDown className="h-3 w-3 sm:h-4 sm:w-4" />
                           Xuất Excel
                         </button>
                         <button
                           type="button"
                           onClick={handlePrint}
-                          className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden"
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-slate-800 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-slate-900 transition print:hidden whitespace-nowrap"
                         >
-                          <Printer className="h-4 w-4" />
+                          <Printer className="h-3 w-3 sm:h-4 sm:w-4" />
                           In
                         </button>
                       </>
@@ -1030,34 +1039,29 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                   
                   <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white">
                     <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-210px)] relative print:max-h-none print:overflow-visible">
-                      <table id="material-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
+                      <table id="material-table" className="w-full border-collapse border border-slate-800 text-center text-[10px] sm:text-sm">
                         <thead className="sticky top-0 z-30 bg-white shadow-md">
                           <tr>
-                            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] max-w-[110px] text-center leading-tight sticky left-0 top-0 z-40 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.15)]">
-                              {isExport ? 'TẦNG' : (
-                                <>
-                                  NGÀY<br/>
-                                  <span className="text-[10px] opacity-80">(DD/MM/YYYY)</span>
-                                </>
-                              )}
+                            <th rowSpan={2} className="border border-slate-800 bg-white p-1 sm:px-2 sm:py-2 font-bold text-slate-900 w-[70px] sm:w-[110px] max-w-[70px] sm:max-w-[110px] text-center leading-tight sticky left-0 top-0 z-40 shadow-[2px_2px_5px_-2px_rgba(0,0,0,0.15)]">
+                              {isExport ? 'TẦNG' : 'NGÀY'}
                             </th>
                             {materialItems.map((item, index) => {
                               const headerColors = [
-                                'bg-blue-500 text-white',
-                                'bg-emerald-500 text-white',
-                                'bg-purple-500 text-white',
-                                'bg-amber-500 text-white',
-                                'bg-rose-500 text-white',
-                                'bg-cyan-500 text-white',
-                                'bg-indigo-500 text-white',
-                                'bg-orange-500 text-white'
+                                'bg-blue-500 text-black',
+                                'bg-emerald-500 text-black',
+                                'bg-purple-500 text-black',
+                                'bg-amber-500 text-black',
+                                'bg-rose-500 text-black',
+                                'bg-cyan-500 text-black',
+                                'bg-indigo-500 text-black',
+                                'bg-orange-500 text-black'
                               ];
                               const colorClass = headerColors[index % headerColors.length];
                               return (
                                 <th key={item.id} colSpan={2} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
                                   <div
                                     onClick={!isExport ? () => handleEditName(item) : undefined}
-                                    className={`w-full h-full min-w-[120px] p-2 text-center font-bold uppercase min-h-[40px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${!isExport ? 'cursor-pointer hover:brightness-95' : ''}`}
+                                    className={`w-full h-full min-w-[80px] sm:min-w-[120px] p-1 sm:p-2 text-center font-bold uppercase min-h-[32px] sm:min-h-[40px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${!isExport ? 'cursor-pointer hover:brightness-95' : ''}`}
                                   >
                                     {item.name || <span className="opacity-50 font-normal italic">{isAttendance ? 'Tên tổ đội' : 'Tên vật tư'}</span>}
                                     {!isExport && (
@@ -1081,8 +1085,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <tr>
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
-                                <th className="border border-slate-800 bg-[#fffaf0] px-2 py-1 font-medium text-amber-900 min-w-[80px]">{isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU (PO)')}</th>
-                                <th className="border border-slate-800 bg-[#f2fbf3] px-2 py-1 font-medium text-emerald-900 min-w-[80px]">{isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN')}</th>
+                                <th className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU')}</th>
+                                <th className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN')}</th>
                               </Fragment>
                             ))}
                           </tr>
@@ -1095,7 +1099,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   <td className="border border-slate-800 p-0 sticky left-0 z-20 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
                                     <div
                                       onClick={() => handleEditDate(row)}
-                                      className="w-full h-full p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[36px] flex items-center justify-center"
+                                      className="w-full h-full p-1 sm:p-2 text-center cursor-pointer hover:bg-slate-50 min-h-[28px] sm:min-h-[36px] flex items-center justify-center"
                                     >
                                       {row.date || ''}
                                     </div>
@@ -1107,25 +1111,25 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     const hasReceived = receivedVal.toString().trim() !== '';
 
                                     const match = String(orderVal).match(/\((PO.*?)\)/i);
-                                    let orderBg = 'bg-[#fffaf0] hover:bg-[#ffecce]';
-                                    let orderText = 'text-amber-900';
+                                    let orderBg = 'bg-white hover:bg-slate-50';
+                                    let orderText = 'text-slate-900';
                                     
                                     if (match) {
                                       const po = match[1].toUpperCase();
                                       const colors = [
-                                        { bg: 'bg-yellow-200 hover:bg-yellow-300', text: 'text-yellow-900' },
-                                        { bg: 'bg-green-200 hover:bg-green-300', text: 'text-green-900' },
-                                        { bg: 'bg-blue-200 hover:bg-blue-300', text: 'text-blue-900' },
-                                        { bg: 'bg-red-200 hover:bg-red-300', text: 'text-red-900' },
-                                        { bg: 'bg-purple-200 hover:bg-purple-300', text: 'text-purple-900' },
-                                        { bg: 'bg-orange-200 hover:bg-orange-300', text: 'text-orange-900' },
-                                        { bg: 'bg-cyan-200 hover:bg-cyan-300', text: 'text-cyan-900' },
-                                        { bg: 'bg-pink-200 hover:bg-pink-300', text: 'text-pink-900' },
-                                        { bg: 'bg-lime-200 hover:bg-lime-300', text: 'text-lime-900' },
-                                        { bg: 'bg-indigo-200 hover:bg-indigo-300', text: 'text-indigo-900' },
-                                        { bg: 'bg-sky-200 hover:bg-sky-300', text: 'text-sky-900' },
-                                        { bg: 'bg-fuchsia-200 hover:bg-fuchsia-300', text: 'text-fuchsia-900' },
-                                        { bg: 'bg-rose-200 hover:bg-rose-300', text: 'text-rose-900' }
+                                        { bg: 'bg-yellow-200 hover:bg-yellow-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-green-200 hover:bg-green-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-blue-200 hover:bg-blue-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-red-200 hover:bg-red-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-purple-200 hover:bg-purple-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-orange-200 hover:bg-orange-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-cyan-200 hover:bg-cyan-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-pink-200 hover:bg-pink-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-lime-200 hover:bg-lime-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-indigo-200 hover:bg-indigo-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-sky-200 hover:bg-sky-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-fuchsia-200 hover:bg-fuchsia-300', text: 'text-black font-bold' },
+                                        { bg: 'bg-rose-200 hover:bg-rose-300', text: 'text-black font-bold' }
                                       ];
                                       let hash = 0;
                                       for (let i = 0; i < po.length; i++) {
@@ -1141,15 +1145,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                         <td className={`border border-slate-800 p-0 transition-colors ${orderBg}`}>
                                           <div
                                             onClick={() => handleEditValue(row, item, 'order', orderVal)}
-                                            className={`w-full h-full p-2 text-center cursor-pointer min-h-[36px] flex items-center justify-center font-medium ${orderText}`}
+                                            className={`w-full h-full p-1 sm:p-2 text-center cursor-pointer min-h-[28px] sm:min-h-[36px] flex items-center justify-center font-medium ${orderText}`}
                                           >
                                             {orderVal}
                                           </div>
                                         </td>
-                                        <td className={`p-0 transition-colors ${hasReceived ? 'border-[3px] border-red-500 z-10 relative bg-[#f2fbf3]' : 'border border-slate-800 bg-[#f2fbf3] hover:bg-[#dcf1dd]'}`}>
+                                        <td className={`p-0 transition-colors ${hasReceived ? 'border-[3px] border-red-500 z-10 relative bg-white' : 'border border-slate-800 bg-white hover:bg-slate-50'}`}>
                                           <div
                                             onClick={() => handleEditValue(row, item, 'received', receivedVal)}
-                                            className={`w-full h-full p-2 text-center cursor-pointer min-h-[36px] flex items-center justify-center ${hasReceived ? 'font-black text-red-700' : 'text-emerald-900 font-medium'}`}
+                                            className={`w-full h-full p-1 sm:p-2 text-center cursor-pointer min-h-[28px] sm:min-h-[36px] flex items-center justify-center ${hasReceived ? 'font-black text-red-700' : 'text-slate-900 font-medium'}`}
                                           >
                                             {receivedVal}
                                           </div>
@@ -1233,98 +1237,30 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                         <tfoot className="bg-white">
                           {!isExport ? (
                             <>
-                              <tr className="bg-slate-100 font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 sticky left-0 z-30 bg-slate-100 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">TỔNG</td>
+                              <tr className="bg-white font-bold text-black">
+                                <td className="border border-slate-800 p-1 sm:p-2 text-black sticky left-0 z-30 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] text-xs sm:text-[15px]">TỔNG</td>
                                 {materialItems.map((item) => (
                                   <Fragment key={`${item.id}-totals`}>
-                                    <td className="border border-slate-800 p-2 text-amber-900 bg-amber-200 font-extrabold text-sm">{formatCell(orderTotals[item.id] || 0)}</td>
-                                    <td className="border border-slate-800 p-2 text-emerald-900 bg-emerald-200 font-extrabold text-sm">{formatCell(totals[item.id] || 0)}</td>
+                                    <td className="border border-slate-800 p-1 sm:p-2 text-black bg-white font-extrabold text-xs sm:text-[15px]">{formatCell(orderTotals[item.id] || 0)}</td>
+                                    <td className="border border-slate-800 p-1 sm:p-2 text-black bg-white font-extrabold text-xs sm:text-[15px]">{formatCell(totals[item.id] || 0)}</td>
                                   </Fragment>
                                 ))}
                               </tr>
-                              <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-white uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Vật tư chưa nhận</td>
+                              <tr className="font-bold bg-white">
+                                <td className="border border-slate-800 p-1 sm:p-2 text-black uppercase sticky left-0 z-30 bg-white shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] leading-tight text-xs sm:text-[15px]">Vật tư<br className="sm:hidden"/> chưa nhận</td>
                                 {materialItems.map((item) => {
                                   const remaining = remainingByMaterial(item.id);
-                                  let bgColorClass = 'bg-green-400';
-                                  if (remaining > 0) bgColorClass = 'bg-red-400';
-                                  else if (remaining < 0) bgColorClass = 'bg-orange-400';
+                                  let textColorClass = 'text-black';
+                                  if (remaining > 0) textColorClass = 'text-red-600 font-extrabold';
+                                  else if (remaining < 0) textColorClass = 'text-orange-600 font-extrabold';
+                                  else textColorClass = 'text-green-600 font-extrabold';
                                   return (
                                     <td
                                       key={`${item.id}-remaining`}
                                       colSpan={2}
-                                      className={`border border-slate-800 p-2 ${bgColorClass} text-white`}
+                                      className={`border border-slate-800 p-1 sm:p-2 bg-white text-xs sm:text-[15px] ${textColorClass}`}
                                     >
                                       {remaining}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                              <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-indigo-50 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Sản lượng</td>
-                                {materialItems.map((item) => {
-                                  const poQty = orderTotals[item.id] || 0;
-                                  const recvQty = totals[item.id] || 0;
-                                  const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
-                                  const dinhMucVal = parseNumber(rawDinhMuc || 0);
-                                  const poSanLuong = poQty * dinhMucVal;
-                                  const recvSanLuong = recvQty * dinhMucVal;
-                                  return (
-                                    <Fragment key={`${item.id}-sanluong`}>
-                                      <td className="border border-slate-800 p-2 text-amber-950 bg-amber-100 font-extrabold text-sm text-center">
-                                        {formatCell(poSanLuong ? poSanLuong.toLocaleString('vi-VN') : 0)}
-                                      </td>
-                                      <td className="border border-slate-800 p-2 text-emerald-950 bg-emerald-100 font-extrabold text-sm text-center">
-                                        {formatCell(recvSanLuong ? recvSanLuong.toLocaleString('vi-VN') : 0)}
-                                      </td>
-                                    </Fragment>
-                                  );
-                                })}
-                              </tr>
-                              <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-sky-100 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">IPC</td>
-                                {materialItems.map((item) => {
-                                  const rawIpc = currentSheet.ipcMap?.[item.id];
-                                  const ipcVal = typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order ?? '') : (rawIpc ?? '');
-                                  return (
-                                    <td
-                                      key={`${item.id}-ipc`}
-                                      colSpan={2}
-                                      className="border border-slate-800 p-0 transition-colors bg-emerald-50 hover:bg-emerald-100 cursor-pointer"
-                                    >
-                                      <div
-                                        onClick={() => handleEditIpc(item, ipcVal)}
-                                        className="w-full h-full p-2 text-center min-h-[36px] flex items-center justify-center font-extrabold text-emerald-950 text-sm"
-                                      >
-                                        {formatCell(ipcVal !== '' ? parseNumber(ipcVal).toLocaleString('vi-VN') : '')}
-                                      </div>
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                              <tr className="font-bold">
-                                <td className="border border-slate-800 p-2 text-slate-900 bg-purple-100 uppercase sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">%</td>
-                                {materialItems.map((item) => {
-                                  const recvQty = totals[item.id] || 0;
-                                  const rawDinhMuc = currentSheet.dinhMucMap?.[item.id] ?? getDefaultDinhMuc(item.name);
-                                  const dinhMucVal = parseNumber(rawDinhMuc || 0);
-                                  const recvSanLuong = recvQty * dinhMucVal;
-
-                                  const rawIpc = currentSheet.ipcMap?.[item.id];
-                                  const ipcVal = parseNumber(typeof rawIpc === 'object' ? (rawIpc?.received ?? rawIpc?.order) : rawIpc);
-
-                                  const percent = recvSanLuong > 0 ? (ipcVal / recvSanLuong) * 100 : 0;
-                                  const isRed = recvSanLuong > 0 && percent < 80;
-
-                                  return (
-                                    <td
-                                      key={`${item.id}-percent`}
-                                      colSpan={2}
-                                      className={`border border-slate-800 p-2 text-sm text-center font-extrabold transition-colors ${
-                                        isRed ? 'bg-red-500 text-white' : 'bg-emerald-100 text-emerald-950'
-                                      }`}
-                                    >
-                                      {recvSanLuong > 0 ? `${percent.toFixed(1)}%` : '0%'}
                                     </td>
                                   );
                                 })}

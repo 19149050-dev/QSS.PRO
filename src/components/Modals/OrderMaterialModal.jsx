@@ -144,7 +144,7 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
               <Send className="w-6 h-6" />
             </div>
             <div>
-              <h3 className="font-bold text-xl">{initialOrder ? 'CHỈNH SỬA PHIẾU ĐẶT VẬT TƯ' : 'ĐẶT VẬT TƯ MỚI'}</h3>
+              <h3 className="font-bold text-xl uppercase">{initialOrder ? 'CHỈNH SỬA PHIẾU ĐẶT VẬT TƯ' : `ĐẶT VẬT TƯ ${projectName}`}</h3>
               <p className="text-sm text-orange-100">{initialOrder ? 'Cập nhật lại thông tin phiếu yêu cầu' : 'Lập phiếu yêu cầu cung cấp vật tư'}</p>
             </div>
           </div>
@@ -153,15 +153,15 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
           </button>
         </div>
 
-        <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Tên/Mã Phiếu</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Tên/Mã Phiếu</label>
               <div className="flex gap-2">
                 <select
                   value={orderNameType}
                   onChange={(e) => setOrderNameType(e.target.value)}
-                  className={`px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${orderNameType === 'auto' ? 'w-full' : 'w-2/5'}`}
+                  className={`px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${orderNameType === 'auto' ? 'w-full' : 'w-2/5'}`}
                 >
                   <option value="auto">{autoNextPO}</option>
                   <option value="custom">Khác</option>
@@ -173,7 +173,7 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
                       type="text"
                       value={customOrderName}
                       onChange={(e) => setCustomOrderName(e.target.value.toUpperCase())}
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all text-sm"
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all"
                       placeholder="Nhập mã phiếu..."
                     />
                   </div>
@@ -181,26 +181,26 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ngày yêu cầu</label>
+              <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Ngày yêu cầu</label>
               <div className="relative">
-                <Calendar className="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input 
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all"
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all"
                 />
               </div>
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Người nhận hàng</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Người nhận hàng</label>
             <div className="flex gap-2">
               {defaultReceivers.length > 0 && (
                 <select
                   value={receiverType}
                   onChange={(e) => setReceiverType(e.target.value)}
-                  className={`px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${receiverType !== 'custom' ? 'w-full' : 'w-2/5'}`}
+                  className={`px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all cursor-pointer ${receiverType !== 'custom' ? 'w-full' : 'w-2/5'}`}
                 >
                   {defaultReceivers.map((rec) => (
                     <option key={rec} value={rec}>{rec}</option>
@@ -214,7 +214,7 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
                     type="text"
                     value={customReceiver}
                     onChange={(e) => setCustomReceiver(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all"
+                    className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-bold text-slate-700 transition-all"
                     placeholder="VD: Trần Văn A (098...)"
                   />
                 </div>
@@ -226,35 +226,32 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
               <BoxesIcon className="w-5 h-5 text-orange-500" />
               Chi tiết số lượng vật tư cần đặt
             </h4>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
               {materialItems.map((item, index) => {
-                const headerColors = [
-                  'bg-blue-500 text-white border-blue-600 shadow-blue-500/20',
-                  'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20',
-                  'bg-purple-500 text-white border-purple-600 shadow-purple-500/20',
-                  'bg-amber-500 text-white border-amber-600 shadow-amber-500/20',
-                  'bg-rose-500 text-white border-rose-600 shadow-rose-500/20',
-                  'bg-cyan-500 text-white border-cyan-600 shadow-cyan-500/20',
-                  'bg-indigo-500 text-white border-indigo-600 shadow-indigo-500/20',
-                  'bg-orange-500 text-white border-orange-600 shadow-orange-500/20'
-                ];
-                const colorClass = headerColors[index % headerColors.length];
+                const nameStr = (item.name || '').toUpperCase();
+                let colorClass = 'bg-slate-50 text-slate-800 border-slate-200';
+                if (nameStr.includes('NỘI THẤT')) {
+                  colorClass = 'bg-blue-50 text-blue-900 border-blue-200';
+                } else if (nameStr.includes('NGOẠI THẤT')) {
+                  colorClass = 'bg-emerald-50 text-emerald-900 border-emerald-200';
+                }
+
                 const currentSheet = materialSheets?.[projectName];
                 const unit = currentSheet?.unitMap?.[item.id];
-                const placeholder = unit ? `Số lượng (${unit})...` : 'Số lượng...';
+                const placeholder = unit ? `SL (${unit})` : 'SL...';
 
                 return (
-                <div key={item.id} className={`p-3 rounded-xl border shadow-sm hover:brightness-105 transition-all ${colorClass}`}>
-                  <label className="block text-xs font-bold mb-2 truncate text-white" title={item.name}>
+                <div key={item.id} className={`p-2 rounded-lg border shadow-sm hover:brightness-95 transition-all flex flex-col justify-between ${colorClass}`}>
+                  <label className="block text-[11px] font-bold mb-1.5 leading-tight break-words" title={item.name}>
                     {item.name || 'Vật tư chưa có tên'}
                   </label>
-                  <div className="relative">
-                    <Hash className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <div className="relative mt-auto">
+                    <Hash className="w-3.5 h-3.5 opacity-40 absolute left-2 top-1/2 -translate-y-1/2" />
                     <input 
                       type="number"
                       value={quantities[item.id] || ''}
                       onChange={(e) => setQuantities({...quantities, [item.id]: e.target.value})}
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-transparent rounded-lg focus:ring-2 focus:ring-white/50 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-400"
+                      className="w-full pl-6 pr-2 py-1.5 text-xs bg-white border border-transparent rounded-md focus:ring-2 focus:ring-black/5 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-400"
                       placeholder={placeholder}
                     />
                   </div>
@@ -264,12 +261,12 @@ export default function OrderMaterialModal({ isOpen, onClose, materialItems, onS
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Ghi chú (Tùy chọn)</label>
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Ghi chú (Tùy chọn)</label>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={2}
-              className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 transition-all min-h-[60px]"
+              className="w-full px-3 py-1.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-orange-500 outline-none font-medium text-slate-700 transition-all min-h-[50px]"
               placeholder="Nhập ghi chú cho QS duyệt..."
             />
           </div>

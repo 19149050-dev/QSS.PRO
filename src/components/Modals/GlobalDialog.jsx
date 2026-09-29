@@ -31,10 +31,13 @@ export default function GlobalDialog() {
   const handleConfirm = () => {
     if (globalDialog.onConfirm) {
       if (globalDialog.type === 'prompt') {
-        if (globalDialog.allowNote && String(noteValue).trim()) {
-          globalDialog.onConfirm(`${String(inputValue).trim()} (${String(noteValue).trim()})`);
+        const trimmedInput = String(inputValue).trim();
+        if (!trimmedInput || trimmedInput === '0') {
+          globalDialog.onConfirm('');
+        } else if (globalDialog.allowNote && String(noteValue).trim()) {
+          globalDialog.onConfirm(`${trimmedInput} (${String(noteValue).trim()})`);
         } else {
-          globalDialog.onConfirm(String(inputValue).trim() || inputValue);
+          globalDialog.onConfirm(trimmedInput);
         }
       } else {
         globalDialog.onConfirm();
