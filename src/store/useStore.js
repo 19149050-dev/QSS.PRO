@@ -59,7 +59,125 @@ export const useStore = create(
       materials: initialMaterials,
       equipments: initialEquipments,
       materialSheets: {},
-      attendanceSheets: {},
+      
+      bhldSheets: {},
+      setBhldSheets: (sheets) => set({ bhldSheets: sheets }),
+      setBhldSheet: (projectName, sheetData) => {
+        set((state) => ({
+          bhldSheets: {
+            ...state.bhldSheets,
+            [projectName]: sheetData
+          }
+        }));
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      addBhldRow: (projectName, dateStr = '') => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const newRow = {
+            id: 'bhld-row-' + Date.now(),
+            date: dateStr || '',
+            bhld: {}
+          };
+          const nextRows = [...(current.rows || []), newRow];
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      updateBhldRowField: (projectName, rowId, field, value) => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            return { ...row, [field]: value };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      deleteBhldRow: (projectName, rowId) => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).filter(row => row.id !== rowId);
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      updateBhldCellNew: (projectName, rowId, teamKey, field, value) => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            const newBhld = { ...(row.bhld || {}) };
+            const teamBhld = { ...(newBhld[teamKey] || { aoGS: '', aoCN: '', khac: '' }) };
+            teamBhld[field] = value;
+            newBhld[teamKey] = teamBhld;
+            return { ...row, bhld: newBhld };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      syncBhldSheetToSupabase: async (projectName) => {
+        const { supabase, bhldSheets } = get();
+        if (!supabase) return;
+        const sheet = bhldSheets[projectName];
+        if (!sheet) return;
+        try {
+          const { data, error } = await supabase
+            .from('bhld_sheets')
+            .select('id')
+            .eq('project_name', projectName)
+            .maybeSingle();
+
+          if (error) {
+            console.error('Error fetching bhld_sheet:', error);
+            return;
+          }
+          if (data) {
+            await supabase.from('bhld_sheets').update({
+              rows: sheet.rows || [],
+              custom_teams: sheet.customTeams || [],
+              inactive_teams: sheet.inactiveTeams || [],
+              updated_at: new Date().toISOString()
+            }).eq('project_name', projectName);
+          } else {
+            await supabase.from('bhld_sheets').insert({
+              project_name: projectName,
+              rows: sheet.rows || [],
+              custom_teams: sheet.customTeams || [],
+              inactive_teams: sheet.inactiveTeams || []
+            });
+          }
+        } catch (err) {
+          console.error('Catch error syncBhldSheet:', err);
+        }
+      },
+attendanceSheets: {},
       projectNotes: {},
       materialOrders: [],
       paymentMatrix: initialPaymentMatrix,
@@ -175,9 +293,54 @@ export const useStore = create(
         if (updatedOrder) get().syncMaterialOrderToSupabase(updatedOrder);
       },
       deleteMaterialOrder: async (orderId) => {
+        const state = get();
+        const order = state.materialOrders?.find(o => o.id === orderId);
+        
         set((state) => ({
           materialOrders: (state.materialOrders || []).filter(o => o.id !== orderId)
         }));
+
+        if (order && order.projectName && order.name) {
+          const poName = order.name.toUpperCase();
+          const sheet = get().materialSheets[order.projectName];
+          if (sheet && sheet.rows) {
+            const nextRows = sheet.rows.map(row => {
+              let changed = false;
+              const newValues = { ...row.values };
+              for (const [itemId, val] of Object.entries(newValues)) {
+                if (!val) continue;
+                let valChanged = false;
+                let newOrderStr = val.order || '';
+                let newReceivedStr = val.received || '';
+                
+                if (newOrderStr.toUpperCase().includes(`(${poName})`)) {
+                  newOrderStr = newOrderStr.replace(new RegExp(`\\d*\\.?\\d*\\s*\\(${poName}\\)\\+?\\s*`, 'gi'), '').trim();
+                  if (newOrderStr.endsWith('+')) newOrderStr = newOrderStr.slice(0, -1).trim();
+                  valChanged = true;
+                }
+                if (newReceivedStr.toUpperCase().includes(`(${poName})`)) {
+                  newReceivedStr = newReceivedStr.replace(new RegExp(`\\d*\\.?\\d*\\s*\\(${poName}\\)\\+?\\s*`, 'gi'), '').trim();
+                  if (newReceivedStr.endsWith('+')) newReceivedStr = newReceivedStr.slice(0, -1).trim();
+                  valChanged = true;
+                }
+
+                if (valChanged) {
+                  newValues[itemId] = { ...val, order: newOrderStr, received: newReceivedStr };
+                  changed = true;
+                }
+              }
+              return changed ? { ...row, values: newValues } : row;
+            });
+
+            // Filter out completely empty rows
+            const finalRows = nextRows.filter(row => {
+               const hasData = Object.values(row.values || {}).some(v => (v.order && String(v.order).trim()) || (v.received && String(v.received).trim()));
+               return hasData;
+            });
+
+            get().setMaterialSheet(order.projectName, { ...sheet, rows: finalRows });
+          }
+        }
         
         // delete from supabase
         const { error } = await supabase.from('material_orders').delete().eq('id', orderId);
@@ -1168,6 +1331,30 @@ export const useStore = create(
               ...row,
               values: newValues,
               notes: newNotes
+            };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            attendanceSheets: {
+              ...state.attendanceSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncAttendanceSheetToSupabase(projectName);
+      },
+      updateBhldCell: (projectName, rowId, teamKey, field, value) => {
+        set((state) => {
+          const current = state.attendanceSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            const newBhld = { ...(row.bhld || {}) };
+            const teamBhld = { ...(newBhld[teamKey] || { aoGS: '', aoCN: '', khac: '' }) };
+            teamBhld[field] = value;
+            newBhld[teamKey] = teamBhld;
+            return {
+              ...row,
+              bhld: newBhld
             };
           });
           const nextSheet = { ...current, rows: nextRows };
@@ -2547,9 +2734,13 @@ export const useStore = create(
           }
         },
       })),
-      partialize: (state) => {
-        const { ...rest } = state;
-        return rest;
+            partialize: (state) => {
+        const {
+          currentUser,
+          activeTab,
+          selectedProject
+        } = state;
+        return { currentUser, activeTab, selectedProject };
       },
       // An empty project list is valid. Do not re-add mock projects after users
       // intentionally delete every project and refresh the browser.

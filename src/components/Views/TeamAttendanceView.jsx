@@ -18,7 +18,8 @@ import {
   ArrowDown,
   Eraser,
   MapPin,
-  X
+  X,
+  HardHat
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
@@ -43,7 +44,14 @@ export default function TeamAttendanceView() {
     setAttendanceSheet,
     openGlobalConfirm,
     openGlobalPrompt,
-    openGlobalAlert
+    openGlobalAlert,
+    updateBhldCell,
+    bhldSheets,
+    addBhldRow,
+    updateBhldRowField,
+    deleteBhldRow,
+    updateBhldCellNew,
+    setBhldSheet
   } = useStore();
 
   const projects = useAllowedProjects();
@@ -69,6 +77,7 @@ export default function TeamAttendanceView() {
 
   // Current sheet for selected project
   const currentSheet = attendanceSheets[selectedProject] || { rows: [], customTeams: [] };
+  const currentBhldSheet = bhldSheets[selectedProject] || { rows: [], customTeams: [] };
 
   // Determine active team columns (teams queried from project + any custom added teams)
   const isTeamInactive = (id, name, rawName) => {
@@ -152,6 +161,7 @@ export default function TeamAttendanceView() {
   }, [selectedProject]);
 
   const rows = currentSheet.rows || [];
+  const bhldRows = currentBhldSheet.rows || [];
 
   const today = new Date();
   const todayFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
@@ -159,6 +169,7 @@ export default function TeamAttendanceView() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState(todayFormatted);
   const [showChart, setShowChart] = useState(false);
+  const [showBHLD, setShowBHLD] = useState(false);
   const [chartViewMode, setChartViewMode] = useState('month'); // 'day' | 'week' | 'month'
   
   // Right-click Context Menu & Copy/Paste States
@@ -224,6 +235,17 @@ export default function TeamAttendanceView() {
     note: ''
   });
 
+  const [bhldModal, setBhldModal] = useState({
+    isOpen: false,
+    rowId: null,
+    teamId: null,
+    teamName: '',
+    dateStr: '',
+    aoGS: '',
+    aoCN: '',
+    khac: ''
+  });
+
   const handleSaveAttendanceModal = () => {
     if (!attendanceModal.rowId || !attendanceModal.teamId) return;
     updateAttendanceCell(
@@ -271,6 +293,34 @@ export default function TeamAttendanceView() {
     }
     return null;
   };
+
+  const bhldFilteredRows = useMemo(() => {
+    const result = bhldRows.filter(row => {
+      const rowDate = parseDate(row.date);
+      if (!rowDate) return true;
+      let from = null;
+      let to = null;
+      if (fromDate) {
+        from = parseDate(fromDate);
+        if (from) from.setHours(0,0,0,0);
+      }
+      if (toDate) {
+        to = parseDate(toDate);
+        if (to) to.setHours(23,59,59,999);
+      }
+      if (from && rowDate < from) return false;
+      if (to && rowDate > to) return false;
+      return true;
+    });
+    return result.sort((a, b) => {
+      const dateA = parseDate(a.date);
+      const dateB = parseDate(b.date);
+      if (!dateA && !dateB) return 0;
+      if (!dateA) return 1;
+      if (!dateB) return -1;
+      return dateB.getTime() - dateA.getTime();
+    });
+  }, [bhldRows, fromDate, toDate]);
 
   const filteredRows = useMemo(() => {
     const result = rows.filter(row => {
@@ -434,12 +484,23 @@ export default function TeamAttendanceView() {
         }
       }
       
-      if (rows.some(r => r.date === formattedDate)) {
-        openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng điểm danh!`);
-        return;
+      if (showBHLD) {
+        if (bhldRows.some(r => r.date === formattedDate)) {
+          openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng BHLĐ!`);
+          return;
+        }
+      } else {
+        if (rows.some(r => r.date === formattedDate)) {
+          openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng điểm danh!`);
+          return;
+        }
       }
       
-      addAttendanceRow(selectedProject, formattedDate);
+      if (showBHLD) {
+          addBhldRow(selectedProject, formattedDate);
+        } else {
+          addAttendanceRow(selectedProject, formattedDate);
+        }
     }, isoToday, 'Thêm Ngày Điểm Danh', 'date');
   };
 
@@ -648,11 +709,22 @@ export default function TeamAttendanceView() {
 
               <button
                 type="button"
-                onClick={() => setShowChart(!showChart)}
+                onClick={() => { setShowBHLD(false); setShowChart(!showChart); }}
                 className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-xs shrink-0 whitespace-nowrap"
               >
                 <BarChart3 className="h-4 w-4" />
-                {showChart ? 'Ẩn biểu đồ' : 'Xem biểu đồ'}
+                {showChart && !showBHLD ? 'Ẩn biểu đồ' : 'Xem biểu đồ'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setShowChart(false); setShowBHLD(!showBHLD); }}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition shadow-xs shrink-0 whitespace-nowrap ${
+                  showBHLD ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <HardHat className="h-4 w-4" />
+                Bảo hộ lao động
               </button>
 
               <div className="flex-1"></div>
@@ -787,6 +859,7 @@ export default function TeamAttendanceView() {
             )}
 
             {/* Attendance Table with 2 sub-columns per team: Số CN | Vị trí thi công */}
+            {!showBHLD && (
             <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
               <div className="overflow-x-auto">
                 <table id="attendance-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
@@ -965,6 +1038,139 @@ export default function TeamAttendanceView() {
                 </table>
               </div>
             </div>
+)}
+{showBHLD && (
+  <div id="print-bhld-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
+    <div className="overflow-x-auto">
+      <table id="bhld-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
+        <thead>
+          <tr>
+            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[110px] min-w-[110px] text-center leading-tight">
+              NGÀY<br/>
+              <span className="text-[10px] opacity-80 font-medium">(DD/MM/YYYY)</span>
+            </th>
+            {teamItems.map((item, index) => {
+              const colorClass = item.isInactive ? 'bg-slate-500 text-white' : headerColors[index % headerColors.length];
+              return (
+                <th key={item.id} colSpan={3} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
+                  <div className={`w-full h-full min-w-[240px] p-2 text-center font-bold uppercase text-xs tracking-wide min-h-[38px] flex flex-col items-center justify-center ${colorClass.split(' ')[1]}`}>
+                    <span>{item.name}</span>
+                  </div>
+                </th>
+              );
+            })}
+          
+            <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[60px] min-w-[60px] text-center">
+              Xóa
+            </th>
+          </tr>
+          <tr className="bg-slate-100 text-slate-800 text-[11px] font-bold uppercase tracking-wider">
+            {teamItems.map((item) => (
+              <React.Fragment key={`bhld-sub-${item.id}`}>
+                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-100 text-slate-800 text-center">Áo GS</th>
+                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-indigo-50 text-indigo-900 text-center">Áo CN</th>
+                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-amber-50 text-amber-900 text-center">Khác</th>
+              </React.Fragment>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-800">
+          {bhldFilteredRows.length === 0 ? (
+            <tr>
+              <td colSpan={teamItems.length * 3 + 2} className="py-12 text-slate-400 font-semibold text-xs text-center">
+                Chưa có dữ liệu BHLĐ. Bấm <strong className="text-emerald-600">"+ Thêm dòng"</strong> để bắt đầu.
+              </td>
+            </tr>
+          ) : (
+            bhldFilteredRows.map((row) => (
+              <tr key={row.id} className="hover:bg-slate-50 transition">
+                <td className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs select-none text-slate-900 w-[110px]">
+                  {row.date || <span className="text-slate-400 italic text-[11px]">Chọn ngày</span>}
+                </td>
+                {teamItems.map((item) => {
+                  const bhld = row.bhld?.[item.id] || { aoGS: '', aoCN: '', khac: '' };
+                  const isInactive = item.isInactive;
+                  return (
+                    <React.Fragment key={`bhld-cell-${item.id}`}>
+                      <td 
+                        onClick={() => {
+                          if (isInactive) return;
+                          setBhldModal({
+                            isOpen: true,
+                            rowId: row.id,
+                            teamId: item.id,
+                            teamName: item.name,
+                            dateStr: row.date,
+                            aoGS: bhld.aoGS || '',
+                            aoCN: bhld.aoCN || '',
+                            khac: bhld.khac || ''
+                          });
+                        }}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-white cursor-pointer hover:bg-amber-50'}`}
+                      >
+                        <div className="font-bold text-sm text-slate-900">{bhld.aoGS || '-'}</div>
+                      </td>
+                      <td 
+                        onClick={() => {
+                          if (isInactive) return;
+                          setBhldModal({
+                            isOpen: true,
+                            rowId: row.id,
+                            teamId: item.id,
+                            teamName: item.name,
+                            dateStr: row.date,
+                            aoGS: bhld.aoGS || '',
+                            aoCN: bhld.aoCN || '',
+                            khac: bhld.khac || ''
+                          });
+                        }}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50'}`}
+                      >
+                        <div className="font-bold text-sm text-indigo-900">{bhld.aoCN || '-'}</div>
+                      </td>
+                      <td 
+                        onClick={() => {
+                          if (isInactive) return;
+                          setBhldModal({
+                            isOpen: true,
+                            rowId: row.id,
+                            teamId: item.id,
+                            teamName: item.name,
+                            dateStr: row.date,
+                            aoGS: bhld.aoGS || '',
+                            aoCN: bhld.aoCN || '',
+                            khac: bhld.khac || ''
+                          });
+                        }}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-amber-50/20 cursor-pointer hover:bg-amber-50'}`}
+                      >
+                        <div className="font-bold text-xs text-amber-900 break-words">{bhld.khac || '-'}</div>
+                      </td>
+                    </React.Fragment>
+                  );
+                })}
+                <td className="border border-slate-800 bg-white p-2 text-center w-[60px]">
+                  <button
+                    onClick={() => {
+                      openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng BHLĐ này?', () => {
+                        deleteBhldRow(selectedProject, row.id);
+                      }, 'Xác nhận xóa');
+                    }}
+                    className="p-1.5 bg-red-50 text-red-600 hover:bg-red-100 rounded-lg transition"
+                    title="Xóa dòng BHLĐ"
+                  >
+                    <Trash2 className="w-4 h-4 mx-auto" />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
           </div>
         </div>
       </div>
@@ -1037,6 +1243,97 @@ export default function TeamAttendanceView() {
           </div>
         </div>
       )}
+            {/* Modal BHLĐ */}
+      {bhldModal.isOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 w-full max-w-md animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                <HardHat className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-slate-900 text-base">Cập Nhật BHLĐ</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Đội: <strong className="text-amber-700">{bhldModal.teamName}</strong> &bull; Ngày: <strong className="text-slate-700">{bhldModal.dateStr}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  Áo Giám Sát (Áo GS)
+                </label>
+                <input
+                  type="text"
+                  value={bhldModal.aoGS}
+                  onChange={(e) => setBhldModal(prev => ({ ...prev, aoGS: e.target.value }))}
+                  placeholder="Nhập SL hoặc ghi chú..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  Áo Công Nhân (Áo CN)
+                </label>
+                <input
+                  type="text"
+                  value={bhldModal.aoCN}
+                  onChange={(e) => setBhldModal(prev => ({ ...prev, aoCN: e.target.value }))}
+                  placeholder="Nhập SL hoặc ghi chú..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
+                  Khác
+                </label>
+                <input
+                  type="text"
+                  value={bhldModal.khac}
+                  onChange={(e) => setBhldModal(prev => ({ ...prev, khac: e.target.value }))}
+                  placeholder="Mũ nón, giày, dây đai..."
+                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
+                      updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
+                      updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'khac', bhldModal.khac);
+                      setBhldModal(prev => ({ ...prev, isOpen: false }));
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setBhldModal(prev => ({ ...prev, isOpen: false }))}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
+                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
+                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'khac', bhldModal.khac);
+                  setBhldModal(prev => ({ ...prev, isOpen: false }));
+                }}
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-500/20 transition active:scale-95"
+              >
+                Xác nhận
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Context Menu Popup on Right-Click */}
       {contextMenu && (
         <div 

@@ -317,6 +317,13 @@ export default function ApprovalView() {
                     Từ chối
                   </button>
                   <button
+                    onClick={() => setEditingOrder(order)}
+                    className="flex-1 py-2.5 bg-white border border-amber-500 text-amber-500 rounded-lg font-bold text-sm hover:bg-amber-50 transition flex items-center justify-center gap-2"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                    Sửa
+                  </button>
+                  <button
                     onClick={() => handleApprove(order.id)}
                     className="flex-1 py-2.5 bg-emerald-500 text-white rounded-lg font-bold text-sm hover:bg-emerald-600 transition flex items-center justify-center gap-2"
                   >
