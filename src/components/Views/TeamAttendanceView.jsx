@@ -583,72 +583,52 @@ export default function TeamAttendanceView() {
   };
 
   const validateBhld = (aoGS, aoCN, khac) => {
-    const row = bhldRows.find(r => r.id === bhldModal.rowId);
-    if (!row) return true;
-    
-    if (bhldModal.teamId === 'nhap_tong_thau') {
-      let currentTotalExport_aoGS = 0;
-      let currentTotalExport_aoCN = 0;
-      let currentTotalExport_khac = 0;
-      
+    let globalImport_aoGS = 0;
+    let globalImport_aoCN = 0;
+    let globalImport_khac = 0;
+
+    let globalExport_aoGS = 0;
+    let globalExport_aoCN = 0;
+    let globalExport_khac = 0;
+
+    bhldRows.forEach(r => {
+      // Import
+      if (r.id === bhldModal.rowId && bhldModal.teamId === 'nhap_tong_thau') {
+        globalImport_aoGS += parseNumber(aoGS);
+        globalImport_aoCN += parseNumber(aoCN);
+        globalImport_khac += parseNumber(khac);
+      } else {
+        const nhap = r.bhld?.['nhap_tong_thau'] || {};
+        globalImport_aoGS += parseNumber(nhap.aoGS);
+        globalImport_aoCN += parseNumber(nhap.aoCN);
+        globalImport_khac += parseNumber(nhap.khac);
+      }
+
+      // Export
       teamItems.forEach(team => {
-        const teamBhld = row.bhld?.[team.id] || {};
-        currentTotalExport_aoGS += parseNumber(teamBhld.aoGS);
-        currentTotalExport_aoCN += parseNumber(teamBhld.aoCN);
-        currentTotalExport_khac += parseNumber(teamBhld.khac);
+        if (r.id === bhldModal.rowId && team.id === bhldModal.teamId) {
+          globalExport_aoGS += parseNumber(aoGS);
+          globalExport_aoCN += parseNumber(aoCN);
+          globalExport_khac += parseNumber(khac);
+        } else {
+          const teamBhld = r.bhld?.[team.id] || {};
+          globalExport_aoGS += parseNumber(teamBhld.aoGS);
+          globalExport_aoCN += parseNumber(teamBhld.aoCN);
+          globalExport_khac += parseNumber(teamBhld.khac);
+        }
       });
-
-      const newNhap_aoGS = parseNumber(aoGS);
-      const newNhap_aoCN = parseNumber(aoCN);
-      const newNhap_khac = parseNumber(khac);
-
-      if (newNhap_aoGS < currentTotalExport_aoGS) {
-        openGlobalAlert(`Số lượng nhập Áo GS (${newNhap_aoGS}) không được nhỏ hơn tổng xuất Áo GS (${currentTotalExport_aoGS})!`);
-        return false;
-      }
-      if (newNhap_aoCN < currentTotalExport_aoCN) {
-        openGlobalAlert(`Số lượng nhập Áo CN (${newNhap_aoCN}) không được nhỏ hơn tổng xuất Áo CN (${currentTotalExport_aoCN})!`);
-        return false;
-      }
-      if (newNhap_khac < currentTotalExport_khac) {
-        openGlobalAlert(`Số lượng nhập Khác (${newNhap_khac}) không được nhỏ hơn tổng xuất Khác (${currentTotalExport_khac})!`);
-        return false;
-      }
-      return true;
-    }
-    
-    const nhapTongThau = row.bhld?.['nhap_tong_thau'] || { aoGS: '', aoCN: '', khac: '' };
-    const max_aoGS = parseNumber(nhapTongThau.aoGS);
-    const max_aoCN = parseNumber(nhapTongThau.aoCN);
-    const max_khac = parseNumber(nhapTongThau.khac);
-    
-    let totalExportOtherTeams_aoGS = 0;
-    let totalExportOtherTeams_aoCN = 0;
-    let totalExportOtherTeams_khac = 0;
-    
-    teamItems.forEach(team => {
-      if (team.id !== bhldModal.teamId) {
-        const teamBhld = row.bhld?.[team.id] || {};
-        totalExportOtherTeams_aoGS += parseNumber(teamBhld.aoGS);
-        totalExportOtherTeams_aoCN += parseNumber(teamBhld.aoCN);
-        totalExportOtherTeams_khac += parseNumber(teamBhld.khac);
-      }
     });
 
-    const newExport_aoGS = totalExportOtherTeams_aoGS + parseNumber(aoGS);
-    const newExport_aoCN = totalExportOtherTeams_aoCN + parseNumber(aoCN);
-    const newExport_khac = totalExportOtherTeams_khac + parseNumber(khac);
-
-    if (newExport_aoGS > max_aoGS) {
-      openGlobalAlert(`Tổng xuất Áo GS (${newExport_aoGS}) không được vượt quá số lượng nhập (${max_aoGS})!`);
+    if (globalImport_aoGS < globalExport_aoGS) {
+      openGlobalAlert(`Tổng xuất Áo GS toàn dự án (${globalExport_aoGS}) không được vượt quá tổng lượng nhập (${globalImport_aoGS})!`);
       return false;
     }
-    if (newExport_aoCN > max_aoCN) {
-      openGlobalAlert(`Tổng xuất Áo CN (${newExport_aoCN}) không được vượt quá số lượng nhập (${max_aoCN})!`);
+    if (globalImport_aoCN < globalExport_aoCN) {
+      openGlobalAlert(`Tổng xuất Áo CN toàn dự án (${globalExport_aoCN}) không được vượt quá tổng lượng nhập (${globalImport_aoCN})!`);
       return false;
     }
-    if (newExport_khac > max_khac) {
-      openGlobalAlert(`Tổng xuất Khác (${newExport_khac}) không được vượt quá số lượng nhập (${max_khac})!`);
+    if (globalImport_khac < globalExport_khac) {
+      openGlobalAlert(`Tổng xuất Khác toàn dự án (${globalExport_khac}) không được vượt quá tổng lượng nhập (${globalImport_khac})!`);
       return false;
     }
 
@@ -1308,7 +1288,7 @@ export default function TeamAttendanceView() {
                 let totalNhapGS = 0, totalNhapCN = 0, totalNhapKhac = 0;
                 let totalXuatGS = 0, totalXuatCN = 0, totalXuatKhac = 0;
 
-                bhldFilteredRows.forEach(row => {
+                bhldRows.forEach(row => {
                   const nhap = row.bhld?.['nhap_tong_thau'] || {};
                   totalNhapGS += parseNumber(nhap.aoGS);
                   totalNhapCN += parseNumber(nhap.aoCN);
