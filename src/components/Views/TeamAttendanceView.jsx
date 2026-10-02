@@ -74,6 +74,13 @@ export default function TeamAttendanceView() {
     };
   }, [currentProjectObj, users]);
 
+  const individualChtsGss = useMemo(() => {
+    const list = [];
+    chts.forEach(c => list.push({ id: `cht_${c}`, name: `CHT\n${c}`, rawName: c, bgColor: 'bg-teal-50', textColor: 'text-teal-800' }));
+    gss.forEach(g => list.push({ id: `gsht_${g}`, name: `GSHT\n${g}`, rawName: g, bgColor: 'bg-cyan-50', textColor: 'text-cyan-800' }));
+    return list;
+  }, [chts, gss]);
+
   // Filter teams assigned to selected project (handles both array and comma-separated string)
   const projectTeams = useMemo(() => {
     return teams.filter(t => {
@@ -618,7 +625,7 @@ export default function TeamAttendanceView() {
       }
 
       // Export
-      ['cht', 'gsht', ...teamItems.map(t => t.id)].forEach(teamId => {
+      [...individualChtsGss.map(p => p.id), ...teamItems.map(t => t.id)].forEach(teamId => {
         if (r.id === bhldModal.rowId && teamId === bhldModal.teamId) {
           globalExport_aoGS += parseNumber(aoGS);
           globalExport_aoCN += parseNumber(aoCN);
@@ -1135,18 +1142,11 @@ export default function TeamAttendanceView() {
             <th colSpan={3} className="border border-slate-800 bg-slate-200 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
               NHẬP TỪ TỔNG THẦU
             </th>
-            <th colSpan={1} className="border border-slate-800 bg-teal-50 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
-              CHT
-              {chts.length > 0 && (
-                <div className="text-[9px] font-normal mt-0.5 text-teal-800 whitespace-pre-wrap break-words">{chts.join(', ')}</div>
-              )}
-            </th>
-            <th colSpan={1} className="border border-slate-800 bg-cyan-50 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
-              GSHT
-              {gss.length > 0 && (
-                <div className="text-[9px] font-normal mt-0.5 text-cyan-800 whitespace-pre-wrap break-words">{gss.join(', ')}</div>
-              )}
-            </th>
+            {individualChtsGss.map((person) => (
+              <th key={person.id} colSpan={1} className={`border border-slate-800 ${person.bgColor} px-2 py-2 font-bold text-slate-900 text-center leading-tight`}>
+                <div className={`text-[10px] whitespace-pre-wrap break-words ${person.textColor}`}>{person.name}</div>
+              </th>
+            ))}
             {teamItems.map((item, index) => {
               const colorClass = item.isInactive ? 'bg-slate-500 text-white' : headerColors[index % headerColors.length];
               return (
@@ -1166,8 +1166,9 @@ export default function TeamAttendanceView() {
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo GS</th>
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo CN</th>
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Khác</th>
-            <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-teal-100 text-slate-800 text-center">Áo GS</th>
-            <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-cyan-100 text-slate-800 text-center">Áo GS</th>
+            {individualChtsGss.map((person) => (
+              <th key={`sub-${person.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${person.bgColor.replace('50', '100')} text-slate-800 text-center`}>Áo GS</th>
+            ))}
             {teamItems.map((item) => (
               <React.Fragment key={`bhld-sub-${item.id}`}>
                 <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-100 text-slate-800 text-center">Áo GS</th>
@@ -1180,7 +1181,7 @@ export default function TeamAttendanceView() {
         <tbody className="divide-y divide-slate-800">
           {bhldFilteredRows.length === 0 ? (
             <tr>
-              <td colSpan={teamItems.length * 3 + 7} className="py-12 text-slate-400 font-semibold text-xs text-center">
+              <td colSpan={teamItems.length * 3 + individualChtsGss.length + 5} className="py-12 text-slate-400 font-semibold text-xs text-center">
                 Chưa có dữ liệu BHLĐ. Bấm <strong className="text-emerald-600">"+ Thêm dòng"</strong> để bắt đầu.
               </td>
             </tr>
@@ -1229,35 +1230,20 @@ export default function TeamAttendanceView() {
                   );
                 })()}
 
-                {(() => {
-                  const cht = row.bhld?.['cht'] || { aoGS: '' };
-                  const handleEditCht = () => {
+                {individualChtsGss.map((person) => {
+                  const pData = row.bhld?.[person.id] || { aoGS: '' };
+                  const handleEditPerson = () => {
                     setBhldModal({
-                      isOpen: true, rowId: row.id, teamId: 'cht', teamName: 'CHT', dateStr: row.date,
-                      aoGS: cht.aoGS || '', aoCN: '', khac: ''
+                      isOpen: true, rowId: row.id, teamId: person.id, teamName: person.name.replace('\n', ' - '), dateStr: row.date,
+                      aoGS: pData.aoGS || '', aoCN: '', khac: ''
                     });
                   };
                   return (
-                    <td onClick={handleEditCht} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${cht.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-teal-50/50 hover:bg-teal-100'}`}>
-                      <div className={`font-bold text-sm ${cht.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{cht.aoGS || '-'}</div>
+                    <td key={person.id} onClick={handleEditPerson} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${pData.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : `${person.bgColor} hover:opacity-80`}`}>
+                      <div className={`font-bold text-sm ${pData.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{pData.aoGS || '-'}</div>
                     </td>
                   );
-                })()}
-
-                {(() => {
-                  const gsht = row.bhld?.['gsht'] || { aoGS: '' };
-                  const handleEditGsht = () => {
-                    setBhldModal({
-                      isOpen: true, rowId: row.id, teamId: 'gsht', teamName: 'GSHT', dateStr: row.date,
-                      aoGS: gsht.aoGS || '', aoCN: '', khac: ''
-                    });
-                  };
-                  return (
-                    <td onClick={handleEditGsht} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${gsht.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-cyan-50/50 hover:bg-cyan-100'}`}>
-                      <div className={`font-bold text-sm ${gsht.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{gsht.aoGS || '-'}</div>
-                    </td>
-                  );
-                })()}
+                })}
 
                 {teamItems.map((item) => {
                   const bhld = row.bhld?.[item.id] || { aoGS: '', aoCN: '', khac: '' };
@@ -1352,7 +1338,7 @@ export default function TeamAttendanceView() {
                   totalNhapCN += parseNumber(nhap.aoCN);
                   totalNhapKhac += parseNumber(nhap.khac);
 
-                  ['cht', 'gsht', ...teamItems.map(t => t.id)].forEach(teamId => {
+                  [...individualChtsGss.map(p => p.id), ...teamItems.map(t => t.id)].forEach(teamId => {
                     const teamBhld = row.bhld?.[teamId] || {};
                     totalXuatGS += parseNumber(teamBhld.aoGS);
                     totalXuatCN += parseNumber(teamBhld.aoCN);
@@ -1378,8 +1364,9 @@ export default function TeamAttendanceView() {
                   </React.Fragment>
                 );
               })()}
-              <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
-              <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+              {individualChtsGss.map((person) => (
+                <td key={`tot-${person.id}`} className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+              ))}
               {teamItems.map((item) => (
                 <React.Fragment key={`tot-bhld-${item.id}`}>
                   <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
@@ -1497,7 +1484,7 @@ export default function TeamAttendanceView() {
                   className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      if (bhldModal.teamId === 'cht' || bhldModal.teamId === 'gsht') {
+                      if (bhldModal.teamId?.startsWith('cht_') || bhldModal.teamId?.startsWith('gsht_')) {
                         if (!validateBhld(bhldModal.aoGS, bhldModal.aoCN, bhldModal.khac)) return;
                         updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
                         updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
@@ -1510,7 +1497,7 @@ export default function TeamAttendanceView() {
                 />
               </div>
 
-              {bhldModal.teamId !== 'cht' && bhldModal.teamId !== 'gsht' && (
+              {(!bhldModal.teamId?.startsWith('cht_') && !bhldModal.teamId?.startsWith('gsht_')) && (
                 <>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
