@@ -1142,11 +1142,6 @@ export default function TeamAttendanceView() {
             <th colSpan={3} className="border border-slate-800 bg-slate-200 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
               NHẬP TỪ TỔNG THẦU
             </th>
-            {individualChtsGss.map((person) => (
-              <th key={person.id} colSpan={1} className={`border border-slate-800 ${person.bgColor} px-2 py-2 font-bold text-slate-900 text-center leading-tight`}>
-                <div className={`text-[10px] whitespace-pre-wrap break-words ${person.textColor}`}>{person.name}</div>
-              </th>
-            ))}
             {teamItems.map((item, index) => {
               const colorClass = item.isInactive ? 'bg-slate-500 text-white' : headerColors[index % headerColors.length];
               return (
@@ -1157,6 +1152,11 @@ export default function TeamAttendanceView() {
                 </th>
               );
             })}
+            {individualChtsGss.map((person) => (
+              <th key={person.id} colSpan={1} className={`border border-slate-800 ${person.bgColor} px-2 py-2 font-bold text-slate-900 text-center leading-tight`}>
+                <div className={`text-[10px] whitespace-pre-wrap break-words ${person.textColor}`}>{person.name}</div>
+              </th>
+            ))}
           
             <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[60px] min-w-[60px] text-center">
               Xóa
@@ -1166,15 +1166,15 @@ export default function TeamAttendanceView() {
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo GS</th>
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo CN</th>
             <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Khác</th>
-            {individualChtsGss.map((person) => (
-              <th key={`sub-${person.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${person.bgColor.replace('50', '100')} text-slate-800 text-center`}>Áo GS</th>
-            ))}
             {teamItems.map((item) => (
               <React.Fragment key={`bhld-sub-${item.id}`}>
                 <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-100 text-slate-800 text-center">Áo GS</th>
                 <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-indigo-50 text-indigo-900 text-center">Áo CN</th>
                 <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-amber-50 text-amber-900 text-center">Khác</th>
               </React.Fragment>
+            ))}
+            {individualChtsGss.map((person) => (
+              <th key={`sub-${person.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${person.bgColor.replace('50', '100')} text-slate-800 text-center`}>Áo GS</th>
             ))}
           </tr>
         </thead>
@@ -1229,21 +1229,6 @@ export default function TeamAttendanceView() {
                     </React.Fragment>
                   );
                 })()}
-
-                {individualChtsGss.map((person) => {
-                  const pData = row.bhld?.[person.id] || { aoGS: '' };
-                  const handleEditPerson = () => {
-                    setBhldModal({
-                      isOpen: true, rowId: row.id, teamId: person.id, teamName: person.name.replace('\n', ' - '), dateStr: row.date,
-                      aoGS: pData.aoGS || '', aoCN: '', khac: ''
-                    });
-                  };
-                  return (
-                    <td key={person.id} onClick={handleEditPerson} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${pData.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : `${person.bgColor} hover:opacity-80`}`}>
-                      <div className={`font-bold text-sm ${pData.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{pData.aoGS || '-'}</div>
-                    </td>
-                  );
-                })}
 
                 {teamItems.map((item) => {
                   const bhld = row.bhld?.[item.id] || { aoGS: '', aoCN: '', khac: '' };
@@ -1307,6 +1292,21 @@ export default function TeamAttendanceView() {
                     </React.Fragment>
                   );
                 })}
+
+                {individualChtsGss.map((person) => {
+                  const pData = row.bhld?.[person.id] || { aoGS: '' };
+                  const handleEditPerson = () => {
+                    setBhldModal({
+                      isOpen: true, rowId: row.id, teamId: person.id, teamName: person.name.replace('\n', ' - '), dateStr: row.date,
+                      aoGS: pData.aoGS || '', aoCN: '', khac: ''
+                    });
+                  };
+                  return (
+                    <td key={person.id} onClick={handleEditPerson} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${pData.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : `${person.bgColor} hover:opacity-80`}`}>
+                      <div className={`font-bold text-sm ${pData.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{pData.aoGS || '-'}</div>
+                    </td>
+                  );
+                })}
                 <td className="border border-slate-800 bg-white p-2 text-center w-[60px]">
                   <button
                     onClick={() => {
@@ -1364,15 +1364,15 @@ export default function TeamAttendanceView() {
                   </React.Fragment>
                 );
               })()}
-              {individualChtsGss.map((person) => (
-                <td key={`tot-${person.id}`} className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
-              ))}
               {teamItems.map((item) => (
                 <React.Fragment key={`tot-bhld-${item.id}`}>
                   <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
                   <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
                   <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
                 </React.Fragment>
+              ))}
+              {individualChtsGss.map((person) => (
+                <td key={`tot-${person.id}`} className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
               ))}
               <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
             </tr>
