@@ -655,6 +655,23 @@ export default function TeamAttendanceView() {
     return true;
   };
 
+  const handleEditBhldDate = (row) => {
+    openGlobalPrompt('Chọn ngày BHLĐ (YYYY-MM-DD):', (val) => {
+      if (val !== null) {
+        if (!val) {
+          openGlobalAlert('Ngày không được để trống!');
+          return;
+        }
+        const formattedDate = formatToDDMMYYYY(val);
+        updateBhldRowField(selectedProject, row.id, 'date', formattedDate);
+      }
+    }, toISO(row.date), 'Chọn Ngày', 'date', false, null, () => {
+      openGlobalConfirm('Bạn có chắc chắn muốn xóa dòng BHLĐ này?', () => {
+        deleteBhldRow(selectedProject, row.id);
+      }, 'Xác nhận xóa dòng');
+    });
+  };
+
   const handleResetData = () => {
     openGlobalConfirm('Bạn có chắc chắn muốn xóa toàn bộ dữ liệu điểm danh của công trình này?', () => {
       setAttendanceSheet(selectedProject, { rows: [], customTeams: [] });
@@ -1163,8 +1180,18 @@ export default function TeamAttendanceView() {
           ) : (
             bhldFilteredRows.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50 transition">
-                <td className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs select-none text-slate-900 w-[110px]">
-                  {row.date || <span className="text-slate-400 italic text-[11px]">Chọn ngày</span>}
+                <td 
+                  onClick={() => handleEditBhldDate(row)}
+                  className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs cursor-pointer hover:bg-amber-50/50 transition select-none w-[110px]"
+                  title="Click để chọn/sửa ngày"
+                >
+                  {row.date ? (
+                    <span className="font-extrabold text-xs text-slate-900">
+                      {row.date}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">Chọn ngày</span>
+                  )}
                 </td>
                 {(() => {
                   const nhap = row.bhld?.['nhap_tong_thau'] || { aoGS: '', aoCN: '', khac: '' };
