@@ -33,6 +33,7 @@ const parseNumber = (value) => {
 
 export default function TeamAttendanceView() {
   const { 
+    users,
     teams, 
     activeProject, 
     setActiveProject, 
@@ -60,6 +61,18 @@ export default function TeamAttendanceView() {
   const selectedProject = (activeProject && projects.some(p => p.name === activeProject)) 
     ? activeProject 
     : projects[0]?.name || '';
+
+  const currentProjectObj = useMemo(() => projects.find(p => p.name === selectedProject) || {}, [projects, selectedProject]);
+  const { chts, gss } = useMemo(() => {
+    const projectUsers = currentProjectObj.cht?.map(c => {
+      const u = users?.find(user => user.name === c);
+      return { name: c, role: u ? u.role : 'UNKNOWN' };
+    }) || [];
+    return {
+      chts: projectUsers.filter(u => u.role !== 'GSHT').map(u => u.name),
+      gss: projectUsers.filter(u => u.role === 'GSHT').map(u => u.name)
+    };
+  }, [currentProjectObj, users]);
 
   // Filter teams assigned to selected project (handles both array and comma-separated string)
   const projectTeams = useMemo(() => {
@@ -1124,9 +1137,15 @@ export default function TeamAttendanceView() {
             </th>
             <th colSpan={1} className="border border-slate-800 bg-teal-50 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
               CHT
+              {chts.length > 0 && (
+                <div className="text-[9px] font-normal mt-0.5 text-teal-800 whitespace-pre-wrap break-words">{chts.join(', ')}</div>
+              )}
             </th>
             <th colSpan={1} className="border border-slate-800 bg-cyan-50 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
               GSHT
+              {gss.length > 0 && (
+                <div className="text-[9px] font-normal mt-0.5 text-cyan-800 whitespace-pre-wrap break-words">{gss.join(', ')}</div>
+              )}
             </th>
             {teamItems.map((item, index) => {
               const colorClass = item.isInactive ? 'bg-slate-500 text-white' : headerColors[index % headerColors.length];
