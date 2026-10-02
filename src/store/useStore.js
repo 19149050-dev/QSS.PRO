@@ -143,7 +143,7 @@ export const useStore = create(
         get().syncBhldSheetToSupabase(projectName);
       },
       syncBhldSheetToSupabase: async (projectName) => {
-        const { supabase, bhldSheets } = get();
+        const { bhldSheets } = get();
         if (!supabase) return;
         const sheet = bhldSheets[projectName];
         if (!sheet) return;
