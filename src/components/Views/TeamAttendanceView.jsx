@@ -76,8 +76,8 @@ export default function TeamAttendanceView() {
 
   const individualChtsGss = useMemo(() => {
     const list = [];
-    chts.forEach(c => list.push({ id: `cht_${c}`, name: `CHT\n${c}`, rawName: c, bgColor: 'bg-teal-50', textColor: 'text-teal-800' }));
-    gss.forEach(g => list.push({ id: `gsht_${g}`, name: `GSHT\n${g}`, rawName: g, bgColor: 'bg-cyan-50', textColor: 'text-cyan-800' }));
+    chts.forEach(c => list.push({ id: `cht_${c}`, name: c, rawName: c, bgColor: 'bg-teal-50', textColor: 'text-teal-800' }));
+    gss.forEach(g => list.push({ id: `gsht_${g}`, name: g, rawName: g, bgColor: 'bg-cyan-50', textColor: 'text-cyan-800' }));
     return list;
   }, [chts, gss]);
 
