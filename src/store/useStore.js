@@ -2416,6 +2416,22 @@ attendanceSheets: {},
             }));
           }
 
+          // Fetch BHLD Sheets
+          const { data: bhldData, error: bhldError } = await supabase.from('bhld_sheets').select('*');
+          if (!bhldError && bhldData) {
+            const bhlds = {};
+            bhldData.forEach(s => {
+              bhlds[s.project_name] = {
+                rows: s.rows || [],
+                customTeams: s.custom_teams || [],
+                inactiveTeams: s.inactive_teams || []
+              };
+            });
+            set((state) => ({
+              bhldSheets: { ...state.bhldSheets, ...bhlds }
+            }));
+          }
+
           // Fetch Checklists
           const { data: checkData, error: checkError } = await supabase.from('checklists').select('*');
           if (!checkError && checkData) {
