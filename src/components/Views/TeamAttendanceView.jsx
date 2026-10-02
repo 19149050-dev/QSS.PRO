@@ -1209,14 +1209,14 @@ export default function TeamAttendanceView() {
                   };
                   return (
                     <React.Fragment>
-                      <td onClick={handleEditNhap} className="border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] bg-slate-100 cursor-pointer hover:bg-slate-200">
-                        <div className="font-bold text-sm text-slate-900">{nhap.aoGS || '-'}</div>
+                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
+                        <div className={`font-bold text-sm ${nhap.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.aoGS || '-'}</div>
                       </td>
-                      <td onClick={handleEditNhap} className="border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] bg-slate-100 cursor-pointer hover:bg-slate-200">
-                        <div className="font-bold text-sm text-slate-900">{nhap.aoCN || '-'}</div>
+                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.aoCN ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
+                        <div className={`font-bold text-sm ${nhap.aoCN ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.aoCN || '-'}</div>
                       </td>
-                      <td onClick={handleEditNhap} className="border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] bg-slate-100 cursor-pointer hover:bg-slate-200">
-                        <div className="font-bold text-xs text-slate-900 break-words">{nhap.khac || '-'}</div>
+                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.khac ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
+                        <div className={`font-bold text-xs break-words ${nhap.khac ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.khac || '-'}</div>
                       </td>
                     </React.Fragment>
                   );
@@ -1240,9 +1240,9 @@ export default function TeamAttendanceView() {
                             khac: bhld.khac || ''
                           });
                         }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-white cursor-pointer hover:bg-amber-50'}`}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.aoGS ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-white cursor-pointer hover:bg-amber-50')}`}
                       >
-                        <div className="font-bold text-sm text-slate-900">{bhld.aoGS || '-'}</div>
+                        <div className={`font-bold text-sm ${bhld.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{bhld.aoGS || '-'}</div>
                       </td>
                       <td 
                         onClick={() => {
@@ -1258,9 +1258,9 @@ export default function TeamAttendanceView() {
                             khac: bhld.khac || ''
                           });
                         }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50'}`}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.aoCN ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50')}`}
                       >
-                        <div className="font-bold text-sm text-indigo-900">{bhld.aoCN || '-'}</div>
+                        <div className={`font-bold text-sm ${bhld.aoCN ? 'text-indigo-900' : 'text-indigo-900'}`}>{bhld.aoCN || '-'}</div>
                       </td>
                       <td 
                         onClick={() => {
@@ -1276,9 +1276,9 @@ export default function TeamAttendanceView() {
                             khac: bhld.khac || ''
                           });
                         }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : 'bg-amber-50/20 cursor-pointer hover:bg-amber-50'}`}
+                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.khac ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-amber-50/20 cursor-pointer hover:bg-amber-50')}`}
                       >
-                        <div className="font-bold text-xs text-amber-900 break-words">{bhld.khac || '-'}</div>
+                        <div className={`font-bold text-xs break-words ${bhld.khac ? 'text-indigo-900' : 'text-amber-900'}`}>{bhld.khac || '-'}</div>
                       </td>
                     </React.Fragment>
                   );
