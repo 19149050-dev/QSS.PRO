@@ -1299,6 +1299,57 @@ export default function TeamAttendanceView() {
               </tr>
             ))
           )}
+          {bhldFilteredRows.length > 0 && (
+            <tr className="bg-[#fffaf0] font-black text-slate-900 border-t-2 border-slate-800">
+              <td className="border border-slate-800 p-2.5 font-extrabold text-xs text-amber-900 text-center uppercase tracking-wider">
+                CÒN LẠI
+              </td>
+              {(() => {
+                let totalNhapGS = 0, totalNhapCN = 0, totalNhapKhac = 0;
+                let totalXuatGS = 0, totalXuatCN = 0, totalXuatKhac = 0;
+
+                bhldFilteredRows.forEach(row => {
+                  const nhap = row.bhld?.['nhap_tong_thau'] || {};
+                  totalNhapGS += parseNumber(nhap.aoGS);
+                  totalNhapCN += parseNumber(nhap.aoCN);
+                  totalNhapKhac += parseNumber(nhap.khac);
+
+                  teamItems.forEach(team => {
+                    const teamBhld = row.bhld?.[team.id] || {};
+                    totalXuatGS += parseNumber(teamBhld.aoGS);
+                    totalXuatCN += parseNumber(teamBhld.aoCN);
+                    totalXuatKhac += parseNumber(teamBhld.khac);
+                  });
+                });
+
+                const remainGS = totalNhapGS - totalXuatGS;
+                const remainCN = totalNhapCN - totalXuatCN;
+                const remainKhac = totalNhapKhac - totalXuatKhac;
+
+                return (
+                  <React.Fragment>
+                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
+                      {remainGS}
+                    </td>
+                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
+                      {remainCN}
+                    </td>
+                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
+                      {remainKhac}
+                    </td>
+                  </React.Fragment>
+                );
+              })()}
+              {teamItems.map((item) => (
+                <React.Fragment key={`tot-bhld-${item.id}`}>
+                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+                </React.Fragment>
+              ))}
+              <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
