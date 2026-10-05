@@ -1682,7 +1682,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             )}
 
             {/* Add batch form */}
-            {!(type === 'team' && selectedTeamFilter === 'ALL') && (
+            {(!(type === 'team' && selectedTeamFilter === 'ALL') || isAdmin) && (
               <div className="bg-gray-50 p-3.5 rounded-2xl border border-gray-200 mb-4 space-y-3">
                 <label className="block text-[11px] font-bold text-gray-600 uppercase tracking-wider">
                   Thêm đợt thi công mới:
