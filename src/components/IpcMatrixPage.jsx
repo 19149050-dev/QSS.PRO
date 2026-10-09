@@ -1,13 +1,16 @@
 'use client';
 
 import { Fragment, useMemo, useState, useRef } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck } from 'lucide-react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck, FileBarChart } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
 import ExportEntriesModal from '@/components/Modals/ExportEntriesModal';
+import AddExportEntryModal from '@/components/Modals/AddExportEntryModal';
+import ExportReportModal from '@/components/Modals/ExportReportModal';
 import EnterPOModal from '@/components/Modals/EnterPOModal';
 import OrderMaterialModal from '@/components/Modals/OrderMaterialModal';
+import AttendanceReportModal from '@/components/Modals/AttendanceReportModal';
 
 const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
@@ -46,9 +49,12 @@ const formatCell = (value) => (value === '' || value === null || value === undef
 export default function IpcMatrixPage({ mode = 'planned' }) {
   const { currentUser, activeProject, setActiveProject, materialSheets, setMaterialSheet, openGlobalPrompt, openGlobalAlert, openGlobalConfirm, teams, addMaterialOrder } = useStore();
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isAddExportModalOpen, setIsAddExportModalOpen] = useState(false);
+  const [isExportReportModalOpen, setIsExportReportModalOpen] = useState(false);
   const [isPOModalOpen, setIsPOModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
+  const [isAttendanceReportModalOpen, setIsAttendanceReportModalOpen] = useState(false);
   const [dinhMucDraft, setDinhMucDraft] = useState({});
   const [unitDraft, setUnitDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
@@ -79,7 +85,14 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           if (val && typeof val === 'string') {
             val.split(' + ').forEach(part => {
               const match = part.match(/^([^()]+)/);
-              if (match) ipcs.add(match[1].trim());
+              if (match) {
+                let ipcName = match[1].trim();
+                ipcName = ipcName.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `IPC ${p2.padStart(2, '0')}`);
+                if (ipcName.replace(/\s/g, '').toUpperCase() === 'IPC05') ipcName = 'IPC 05';
+                if (ipcName.replace(/\s/g, '').toUpperCase() === 'IPC04') ipcName = 'IPC 04';
+                if (ipcName.replace(/\s/g, '').toUpperCase() === 'IPC06') ipcName = 'IPC 06';
+                ipcs.add(ipcName);
+              }
             });
           }
         });
@@ -94,6 +107,10 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   
   const sheetKey = isAttendance ? `attendance_${selectedProject}` : selectedProject;
   const currentSheet = materialSheets[sheetKey] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
+
+  const allMatrixBlocks = useStore().matrixBlocks || {};
+  const matrixBlocks = allMatrixBlocks[selectedProject] || [];
+  const exportBlocks = isExport && matrixBlocks.length > 0 ? matrixBlocks : [{ blockName: 'DEFAULT' }];
 
   const projectTeams = useMemo(() => {
     if (!teams) return [];
@@ -126,7 +143,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     return items;
   }, [currentSheet.items, isAttendance, projectTeams]);
 
-  const materialRows = isExport ? (currentSheet.exportRows || []) : (currentSheet.rows || []);
+  const materialRows = isExport 
+    ? (currentSheet.exportRows || []).filter(row => row.date && row.date.trim() !== '') 
+    : (currentSheet.rows || []);
 
   const uniquePOs = useMemo(() => {
     const pos = new Set();
@@ -535,7 +554,15 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     acc[item.id] = (currentSheet.exportRows || []).reduce((sum, row) => {
       const cellData = row.values?.[item.id];
       if (Array.isArray(cellData)) {
-        return sum + cellData.reduce((s, entry) => s + parseNumber(entry.quantity), 0);
+        return sum + cellData.reduce((s, entry) => {
+          let entryTotal = parseNumber(entry.quantity);
+          if (entry.quantities) {
+            Object.values(entry.quantities).forEach(q => {
+              entryTotal += parseNumber(q);
+            });
+          }
+          return s + entryTotal;
+        }, 0);
       }
       return sum;
     }, 0);
@@ -860,25 +887,27 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   return (
     <div className="pb-12">
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
+      {activeTab.type === 'materials' && (
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            #print-section, #print-section * {
+              visibility: visible;
+            }
+            #print-section {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+            }
+            .overflow-x-auto {
+              overflow: visible !important;
+            }
           }
-          #print-section, #print-section * {
-            visibility: visible;
-          }
-          #print-section {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-          .overflow-x-auto {
-            overflow: visible !important;
-          }
-        }
-      `}</style>
+        `}</style>
+      )}
       <div className="space-y-6 p-8 w-full">
         {(activeTab.type !== 'team' && activeTab.type !== 'ipc') && (
           <div className="flex flex-col gap-3 sm:gap-4 sm:flex-row sm:items-center">
@@ -906,22 +935,33 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
               {mode === 'materials' || mode === 'export_materials' ? (
                 <div className="space-y-4">
                   <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                    <button
-                      type="button"
-                      onClick={addRow}
-                      className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-emerald-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
-                    >
-                      <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                      Thêm dòng
-                    </button>
-                    {isExport && (
+                    {isExport ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setIsAddExportModalOpen(true)}
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-emerald-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
+                        >
+                          <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                          Nhập xuất vật tư
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsExportReportModalOpen(true)}
+                          className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-indigo-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-indigo-700 whitespace-nowrap"
+                        >
+                          <FileBarChart className="h-3 w-3 sm:h-4 sm:w-4" />
+                          Báo cáo
+                        </button>
+                      </>
+                    ) : (
                       <button
                         type="button"
-                        onClick={addMultipleRows}
-                        className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-teal-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-teal-700 whitespace-nowrap"
+                        onClick={addRow}
+                        className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-emerald-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-emerald-700 whitespace-nowrap"
                       >
-                        <Layers3 className="h-3 w-3 sm:h-4 sm:w-4" />
-                        Thêm nhiều tầng
+                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                        Thêm dòng
                       </button>
                     )}
                     {!isExport && (
@@ -932,6 +972,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                       >
                         <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                         Thêm cột
+                      </button>
+                    )}
+                    {isAttendance && (
+                      <button
+                        type="button"
+                        onClick={() => setIsAttendanceReportModalOpen(true)}
+                        className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl bg-sky-600 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-white hover:bg-sky-700 shadow-sm whitespace-nowrap"
+                      >
+                        <FileBarChart className="h-3 w-3 sm:h-4 sm:w-4" />
+                        Báo cáo
                       </button>
                     )}
 
@@ -1057,8 +1107,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                 'bg-orange-500 text-black'
                               ];
                               const colorClass = headerColors[index % headerColors.length];
+                              const colSpanAmount = (!isExport || exportBlocks.length <= 1) ? 2 : (exportBlocks.length + 1);
                               return (
-                                <th key={item.id} colSpan={2} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
+                                <th key={item.id} colSpan={colSpanAmount} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
                                   <div
                                     onClick={!isExport ? () => handleEditName(item) : undefined}
                                     className={`w-full h-full min-w-[80px] sm:min-w-[120px] p-1 sm:p-2 text-center font-bold uppercase min-h-[32px] sm:min-h-[40px] flex items-center justify-center relative group ${colorClass.split(' ')[1]} ${!isExport ? 'cursor-pointer hover:brightness-95' : ''}`}
@@ -1085,7 +1136,13 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <tr>
                             {materialItems.map((item) => (
                               <Fragment key={`${item.id}-pair`}>
-                                <th className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU')}</th>
+                                {!isExport || exportBlocks.length <= 1 ? (
+                                  <th className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{isAttendance ? 'KẾ HOẠCH' : (isExport ? 'SỐ LƯỢNG' : 'YÊU CẦU')}</th>
+                                ) : (
+                                  exportBlocks.map((block, idx) => (
+                                    <th key={idx} className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{block.blockName}</th>
+                                  ))
+                                )}
                                 <th className="border border-slate-800 bg-white px-1 sm:px-2 py-1 font-medium text-slate-900 min-w-[50px] sm:min-w-[80px] leading-tight sm:leading-normal">{isAttendance ? 'ĐIỂM DANH' : (isExport ? 'NGÀY' : 'NHẬN')}</th>
                               </Fragment>
                             ))}
@@ -1194,26 +1251,47 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                     
                                     return (
                                       <Fragment key={`${row.id}-${item.id}-sub-${idx}`}>
-                                        <td className="border border-slate-800 p-0 bg-slate-50">
+                                        {!isExport || exportBlocks.length <= 1 ? (
+                                          <td className={`p-0 bg-slate-50 ${hasQuantity ? 'border-[3px] border-red-500 z-10 relative' : 'border border-slate-800'}`}>
+                                            <div
+                                              onClick={() => {
+                                                setSelectedRow(row);
+                                                setSelectedItem(item);
+                                                setIsExportModalOpen(true);
+                                              }}
+                                              className={`w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] min-h-[36px] flex items-center justify-center transition-colors ${hasQuantity ? 'font-bold text-red-700' : 'font-medium text-slate-900'}`}
+                                            >
+                                              {entry.quantity || ''}
+                                            </div>
+                                          </td>
+                                        ) : (
+                                          exportBlocks.map((block, bIdx) => {
+                                            const qty = entry.quantities?.[block.blockName] ?? (bIdx === 0 && entry.quantity ? entry.quantity : '');
+                                            const hasQty = qty && qty.toString().trim() !== '';
+                                            return (
+                                              <td key={bIdx} className={`p-0 bg-slate-50 ${hasQty ? 'border-[3px] border-red-500 z-10 relative' : 'border border-slate-800'}`}>
+                                                <div
+                                                  onClick={() => {
+                                                    setSelectedRow(row);
+                                                    setSelectedItem(item);
+                                                    setIsExportModalOpen(true);
+                                                  }}
+                                                  className={`w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] min-h-[36px] flex items-center justify-center transition-colors ${hasQty ? 'font-bold text-red-700' : 'font-medium text-slate-900'}`}
+                                                >
+                                                  {qty || ''}
+                                                </div>
+                                              </td>
+                                            );
+                                          })
+                                        )}
+                                        <td className="p-0 bg-slate-50 border border-slate-800">
                                           <div
                                             onClick={() => {
                                               setSelectedRow(row);
                                               setSelectedItem(item);
                                               setIsExportModalOpen(true);
                                             }}
-                                            className="w-full h-full p-2 text-center cursor-pointer hover:bg-[#ffe0b2] text-slate-900 min-h-[36px] flex items-center justify-center font-medium transition-colors"
-                                          >
-                                            {entry.quantity || ''}
-                                          </div>
-                                        </td>
-                                        <td className={`p-0 bg-slate-50 ${hasDate ? 'border-[3px] border-red-500 z-10 relative' : 'border border-slate-800'}`}>
-                                          <div
-                                            onClick={() => {
-                                              setSelectedRow(row);
-                                              setSelectedItem(item);
-                                              setIsExportModalOpen(true);
-                                            }}
-                                            className={`w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] min-h-[36px] flex items-center justify-center transition-colors ${hasDate ? 'font-black text-red-700' : 'text-slate-900'}`}
+                                            className={`w-full h-full p-2 text-center cursor-pointer hover:bg-[#c8e6c9] min-h-[36px] flex items-center justify-center transition-colors ${hasDate ? 'font-bold text-slate-900' : 'text-slate-900'}`}
                                           >
                                             {entry.date || ''}
                                           </div>
@@ -1270,15 +1348,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                             <>
                               <tr className="font-bold">
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Đã nhập</td>
-                                {materialItems.map((item) => (
-                                  <td
-                                    key={`${item.id}-imported`}
-                                    colSpan={2}
-                                    className="border border-slate-800 p-2 bg-[#e8f5e9] text-emerald-900"
-                                  >
-                                    {formatCell(totals[item.id] || 0)}
-                                  </td>
-                                ))}
+                                {materialItems.map((item) => {
+                                  const colSpanAmount = (!isExport || exportBlocks.length <= 1) ? 2 : (exportBlocks.length + 1);
+                                  return (
+                                    <td
+                                      key={`${item.id}-imported`}
+                                      colSpan={colSpanAmount}
+                                      className="border border-slate-800 p-2 bg-[#e8f5e9] text-emerald-900"
+                                    >
+                                      {formatCell(totals[item.id] || 0)}
+                                    </td>
+                                  );
+                                })}
                               </tr>
                               <tr className="font-bold">
                                 <td className="border border-slate-800 p-2 text-slate-900 bg-slate-100 sticky left-0 z-30 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Đã xuất</td>
@@ -1286,11 +1367,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   const imported = parseNumber(totals[item.id] || 0);
                                   const exported = parseNumber(exportTotals[item.id] || 0);
                                   const isWarning = imported > 0 && exported >= imported * 0.9;
+                                  const colSpanAmount = (!isExport || exportBlocks.length <= 1) ? 2 : (exportBlocks.length + 1);
                                   
                                   return (
                                     <td
                                       key={`${item.id}-exported`}
-                                      colSpan={2}
+                                      colSpan={colSpanAmount}
                                       className={`border border-slate-800 p-2 ${isWarning ? 'bg-orange-500 text-white' : 'bg-[#fff3e0] text-amber-900'}`}
                                     >
                                       {formatCell(exported)}
@@ -1304,11 +1386,12 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                                   const imported = parseNumber(totals[item.id] || 0);
                                   const exported = parseNumber(exportTotals[item.id] || 0);
                                   const remaining = imported - exported;
+                                  const colSpanAmount = (!isExport || exportBlocks.length <= 1) ? 2 : (exportBlocks.length + 1);
                                   
                                   return (
                                     <td
                                       key={`${item.id}-remaining`}
-                                      colSpan={2}
+                                      colSpan={colSpanAmount}
                                       className={`border border-slate-800 p-2 ${remaining < 0 ? 'bg-red-500 text-white' : 'bg-blue-50 text-blue-900'}`}
                                     >
                                       {formatCell(remaining)}
@@ -1331,16 +1414,6 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                     selectedIpcFilter={selectedIpcFilter}
                     headerContent={
                       <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                            <Layers3 className="h-4 w-4" />
-                          </div>
-                          <div>
-                            <h1 className="text-base font-extrabold tracking-tight text-slate-900 leading-tight">{activeTab.label}</h1>
-                            <p className="text-xs text-slate-500">{activeTab.hint}</p>
-                          </div>
-                        </div>
-                        <div className="h-6 w-px bg-gray-200"></div>
                         <select
                           value={selectedProject}
                           onChange={(e) => setActiveProject(e.target.value)}
@@ -1492,6 +1565,29 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
           </div>
         </div>
       )}
+
+      <AddExportEntryModal
+        isOpen={isAddExportModalOpen}
+        onClose={() => setIsAddExportModalOpen(false)}
+        project={selectedProject}
+        materialItems={materialItems}
+        blocks={exportBlocks}
+      />
+
+      <ExportReportModal
+        isOpen={isExportReportModalOpen}
+        onClose={() => setIsExportReportModalOpen(false)}
+        exportRows={materialRows}
+        materialItems={materialItems}
+        dinhMucMap={currentSheet.dinhMucMap || {}}
+      />
+      
+      <AttendanceReportModal
+        isOpen={isAttendanceReportModalOpen}
+        onClose={() => setIsAttendanceReportModalOpen(false)}
+        rows={materialRows}
+        materialItems={materialItems}
+      />
     </div>
   );
 }

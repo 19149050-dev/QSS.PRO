@@ -52,12 +52,12 @@ const defaultMatrixBlocksLocal = defaultMatrixBlocks;
 export const useStore = create(
   persist(
     (set, get) => ({
-      users: initialUsers,
-      projects: initialProjects,
-      teams: initialTeams,
-      ipcs: initialIPCs,
-      materials: initialMaterials,
-      equipments: initialEquipments,
+      users: [],
+      projects: [],
+      teams: [],
+      ipcs: [],
+      materials: [],
+      equipments: [],
       materialSheets: {},
       
       bhldSheets: {},
@@ -177,7 +177,101 @@ export const useStore = create(
           console.error('Catch error syncBhldSheet:', err);
         }
       },
-attendanceSheets: {},
+inHouseSheets: {},
+      setInHouseSheet: (projectName, sheetData) => {
+        set((state) => ({
+          inHouseSheets: {
+            ...state.inHouseSheets,
+            [projectName]: sheetData
+          }
+        }));
+        // Mock sync, wait for DB table if needed
+        get().syncInHouseSheetToSupabase && get().syncInHouseSheetToSupabase(projectName);
+      },
+      addInHouseRow: (projectName, workerName = '') => {
+        set((state) => {
+          const current = state.inHouseSheets[projectName] || { rows: [] };
+          const newRow = {
+            id: 'inhouse-' + Date.now(),
+            workerName,
+            unitPrice: 0,
+            days: { 1: '', 2: '', 3: '', 4: '', 5: '', 6: '', 7: '' } // 1-7 for Mon-Sun
+          };
+          return {
+            inHouseSheets: {
+              ...state.inHouseSheets,
+              [projectName]: { ...current, rows: [...(current.rows || []), newRow] }
+            }
+          };
+        });
+        get().syncInHouseSheetToSupabase && get().syncInHouseSheetToSupabase(projectName);
+      },
+      updateInHouseRow: (projectName, rowId, field, value) => {
+        set((state) => {
+          const current = state.inHouseSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            return { ...row, [field]: value };
+          });
+          return {
+            inHouseSheets: {
+              ...state.inHouseSheets,
+              [projectName]: { ...current, rows: nextRows }
+            }
+          };
+        });
+        get().syncInHouseSheetToSupabase && get().syncInHouseSheetToSupabase(projectName);
+      },
+      updateInHouseDay: (projectName, rowId, dayIndex, value) => {
+        set((state) => {
+          const current = state.inHouseSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            return { ...row, days: { ...(row.days || {}), [dayIndex]: value } };
+          });
+          return {
+            inHouseSheets: {
+              ...state.inHouseSheets,
+              [projectName]: { ...current, rows: nextRows }
+            }
+          };
+        });
+        get().syncInHouseSheetToSupabase && get().syncInHouseSheetToSupabase(projectName);
+      },
+      deleteInHouseRow: (projectName, rowId) => {
+        set((state) => {
+          const current = state.inHouseSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).filter(row => row.id !== rowId);
+          return {
+            inHouseSheets: {
+              ...state.inHouseSheets,
+              [projectName]: { ...current, rows: nextRows }
+            }
+          };
+        });
+        get().syncInHouseSheetToSupabase && get().syncInHouseSheetToSupabase(projectName);
+      },
+      syncInHouseSheetToSupabase: async (projectName) => {
+        const state = get();
+        const sheet = state.inHouseSheets[projectName] || { rows: [] };
+        try {
+          const payload = {
+            project_name: projectName,
+            rows: sheet.rows || [],
+            updated_at: new Date().toISOString()
+          };
+          
+          const { data: existing } = await supabase.from('in_house_sheets').select('id').eq('project_name', projectName).maybeSingle();
+          if (existing) {
+            await supabase.from('in_house_sheets').update(payload).eq('project_name', projectName);
+          } else {
+            await supabase.from('in_house_sheets').insert([payload]);
+          }
+        } catch (err) {
+          // Fall back gracefully if table does not exist
+        }
+      },
+      attendanceSheets: {},
       projectNotes: {},
       materialOrders: [],
       paymentMatrix: initialPaymentMatrix,
@@ -803,6 +897,7 @@ attendanceSheets: {},
           project_id: team.projectId,
           project_name: projNameStr,
           team_name: team.teamName,
+          team_type: team.teamType || "Thầu phụ",
           leader_name: team.leaderName,
           phone: team.phone,
           trade_type: team.tradeType,
@@ -830,6 +925,7 @@ attendanceSheets: {},
           teamName: data.team_name,
           leaderName: data.leader_name,
           phone: data.phone,
+          teamType: data.team_type || "Thầu phụ",
           tradeType: data.trade_type,
           workerCount: data.worker_count,
           contractValue: data.contract_value,
@@ -841,6 +937,7 @@ attendanceSheets: {},
         set((state) => ({ teams: [newTeam, ...state.teams] }));
       },
       updateTeam: async (id, updatedData) => {
+        console.log('updateTeam called with:', id, updatedData);
         const oldTeam = get().teams.find(t => t.id === id);
         
         let finalProjects = updatedData.projects;
@@ -870,18 +967,20 @@ attendanceSheets: {},
         if (updatedData.teamName !== undefined) dbData.team_name = updatedData.teamName;
         if (updatedData.leaderName !== undefined) dbData.leader_name = updatedData.leaderName;
         if (updatedData.phone !== undefined) dbData.phone = updatedData.phone;
+        if (updatedData.teamType !== undefined) dbData.team_type = updatedData.teamType;
         if (updatedData.tradeType !== undefined) dbData.trade_type = updatedData.tradeType;
-        if (updatedData.workerCount !== undefined) dbData.worker_count = updatedData.workerCount;
-        if (updatedData.contractValue !== undefined) dbData.contract_value = updatedData.contractValue;
-        if (updatedData.paidAmount !== undefined) dbData.paid_amount = updatedData.paidAmount;
-        if (updatedData.retentionAmount !== undefined) dbData.retention_amount = updatedData.retentionAmount;
-        if (updatedData.remainingAmount !== undefined) dbData.remaining_amount = updatedData.remainingAmount;
+        const ensureNum = (val) => val === "" || val === null || val === undefined || isNaN(Number(val)) ? 0 : Number(val);
+        if (updatedData.workerCount !== undefined) dbData.worker_count = ensureNum(updatedData.workerCount);
+        if (updatedData.contractValue !== undefined) dbData.contract_value = ensureNum(updatedData.contractValue);
+        if (updatedData.paidAmount !== undefined) dbData.paid_amount = ensureNum(updatedData.paidAmount);
+        if (updatedData.retentionAmount !== undefined) dbData.retention_amount = ensureNum(updatedData.retentionAmount);
+        if (updatedData.remainingAmount !== undefined) dbData.remaining_amount = ensureNum(updatedData.remainingAmount);
         if (updatedData.status !== undefined) dbData.status = updatedData.status;
 
         try {
           if (id && !String(id).startsWith('t-')) {
             const { error } = await supabase.from('teams').update(dbData).eq('id', id);
-            if (error) console.error("Failed to update team by id:", error);
+            if (error) { console.error("Failed to update team by id:", error); get().openGlobalAlert("Lỗi lưu Supabase: " + error.message); }
           } else {
             const searchTeamName = oldTeam?.teamName || updatedData.teamName;
             if (searchTeamName) {
@@ -1327,10 +1426,21 @@ attendanceSheets: {},
             if (note !== undefined) {
               newNotes[teamKey] = note;
             }
+            const newUserInfos = { ...(row.userInfos || {}) };
+            const currentUser = get().currentUser;
+            const now = new Date();
+            const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')} ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`;
+            if (value !== undefined || note !== undefined) {
+              newUserInfos[teamKey] = {
+                user: currentUser?.name || currentUser?.username || 'Unknown',
+                time: timeStr
+              };
+            }
             return {
               ...row,
               values: newValues,
-              notes: newNotes
+              notes: newNotes,
+              userInfos: newUserInfos
             };
           });
           const nextSheet = { ...current, rows: nextRows };
@@ -1460,7 +1570,11 @@ attendanceSheets: {},
       },
 
       // Payment Matrix Actions
-      updateMatrixCell: (key, floor, itemKey, value) => { set((state) => {
+      updateMatrixCell: (key, floor, itemKey, valInput) => { set((state) => {
+        let value = valInput;
+        if (typeof value === 'string') {
+           value = value.replace(/(IPC|ĐỢT|DOT)\s*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
+        }
         const projectName = key.includes('_') ? key.split('_')[0] : key;
         const baseMatrix = state.paymentMatrix[projectName] || [];
         const currentMatrix = (state.paymentMatrix[key] && state.paymentMatrix[key].length > 0)
@@ -2309,6 +2423,7 @@ attendanceSheets: {},
                 teamName: t.team_name,
                 leaderName: t.leader_name,
                 phone: t.phone,
+                teamType: t.team_type || "Thầu phụ",
                 tradeType: t.trade_type,
                 workerCount: t.worker_count,
                 contractValue: t.contract_value,
@@ -2395,6 +2510,16 @@ attendanceSheets: {},
             set((state) => ({
               materialSheets: { ...state.materialSheets, ...mats }
             }));
+          }
+
+          // Fetch InHouse Sheets
+          const { data: inHouseData, error: inHouseError } = await supabase.from('in_house_sheets').select('*');
+          if (!inHouseError && inHouseData) {
+            const inHouses = {};
+            inHouseData.forEach(s => {
+              inHouses[s.project_name] = { rows: s.rows || [] };
+            });
+            set((state) => ({ inHouseSheets: { ...state.inHouseSheets, ...inHouses } }));
           }
 
           // Fetch Attendance Sheets

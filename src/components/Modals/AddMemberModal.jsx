@@ -114,8 +114,8 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!member.name || !member.cccd) {
-      setError("Vui lòng điền đủ Họ tên và số CCCD.");
+    if (!member.name) {
+      setError("Vui lòng điền Họ và tên.");
       return;
     }
     setError('');
@@ -188,7 +188,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Số CCCD *</label>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1">Số CCCD</label>
                     <input type="text" value={member.cccd} onChange={e => updateMember('cccd', e.target.value)} className="w-full text-sm px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 font-bold text-gray-700" placeholder="Nhập CCCD" />
                   </div>
                   <div>

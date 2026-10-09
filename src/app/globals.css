@@ -139,6 +139,14 @@ input[type=number] {
     background: transparent !important;
   }
 
+  /* Khắc phục lỗi trang trắng khi in do các thẻ bọc overflow-hidden và h-screen */
+  html, body, .h-screen, .min-h-screen, .overflow-hidden, .overflow-y-auto, .overflow-x-auto, .max-h-\[75vh\] {
+    height: auto !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
   /* Loai bo outer box shadow & border padding cho container tren trang in */
   .bg-white, .rounded-2xl, .rounded-3xl, .shadow-sm, .shadow-md, .border {
     box-shadow: none !important;

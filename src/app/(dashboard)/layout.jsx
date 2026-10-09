@@ -33,7 +33,7 @@ export default function DashboardLayout({ children }) {
   if (!mounted || !currentUser) return null;
 
   return (
-    <div className="flex min-h-screen bg-white text-slate-900 font-sans selection:bg-black selection:text-white">
+    <div className="flex min-h-screen bg-white text-slate-900 font-sans selection:bg-black selection:text-white print:block print:min-h-0 print:overflow-visible">
       <StoreInitializer />
       
       {/* Mobile Overlay */}
@@ -45,11 +45,11 @@ export default function DashboardLayout({ children }) {
       )}
 
       {/* Sidebar Wrapper */}
-      <div className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+      <div className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 md:relative md:translate-x-0 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} print:hidden`}>
         <Sidebar onCloseMobile={() => setIsMobileMenuOpen(false)} />
       </div>
 
-      <div className="flex-1 flex flex-col min-w-0 w-full overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 w-full overflow-hidden print:block print:overflow-visible print:w-full">
         {/* Mobile Header with Hamburger */}
         <div className="md:hidden flex items-center justify-between p-4 bg-[#0a0a0a] text-white border-b border-zinc-800 no-print print:hidden">
           <div className="flex items-center gap-2">

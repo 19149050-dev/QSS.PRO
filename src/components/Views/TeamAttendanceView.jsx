@@ -2,13 +2,13 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
-import { 
-  UserCheck, 
-  Plus, 
-  Trash2, 
-  FileDown, 
-  Printer, 
-  RotateCcw, 
+import {
+  UserCheck,
+  Plus,
+  Trash2,
+  FileDown,
+  Printer,
+  RotateCcw,
   Users,
   Edit2,
   BarChart3,
@@ -23,6 +23,8 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import InHouseAttendanceTable from './InHouseAttendanceTable';
+import AttendanceReportModal from '@/components/Modals/AttendanceReportModal';
 
 const parseNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -32,12 +34,12 @@ const parseNumber = (value) => {
 };
 
 export default function TeamAttendanceView() {
-  const { 
+  const {
     users,
-    teams, 
-    activeProject, 
-    setActiveProject, 
-    attendanceSheets, 
+    teams,
+    activeProject,
+    setActiveProject,
+    attendanceSheets,
     addAttendanceRow,
     updateAttendanceCell,
     updateAttendanceRow,
@@ -58,8 +60,8 @@ export default function TeamAttendanceView() {
   const projects = useAllowedProjects();
 
   // Set selected project
-  const selectedProject = (activeProject && projects.some(p => p.name === activeProject)) 
-    ? activeProject 
+  const selectedProject = (activeProject && projects.some(p => p.name === activeProject))
+    ? activeProject
     : projects[0]?.name || '';
 
   const currentProjectObj = useMemo(() => projects.find(p => p.name === selectedProject) || {}, [projects, selectedProject]);
@@ -82,8 +84,10 @@ export default function TeamAttendanceView() {
   }, [chts, gss]);
 
   // Filter teams assigned to selected project (handles both array and comma-separated string)
+
   const projectTeams = useMemo(() => {
     return teams.filter(t => {
+      if (t.teamType === 'Cơ hữu' || t.team_type === 'Cơ hữu') return false;
       let projs = [];
       if (Array.isArray(t.projects) && t.projects.length > 0) {
         projs = t.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean);
@@ -94,6 +98,24 @@ export default function TeamAttendanceView() {
       return projs.includes(selectedProject);
     });
   }, [teams, selectedProject]);
+    const projectMembers = useMemo(() => {
+    const inHouseTeams = teams.filter(t => {
+      const type = t.teamType || t.team_type || '';
+      if (type.toLowerCase() !== 'cơ hữu') return false;
+      let projs = [];
+      if (Array.isArray(t.projects) && t.projects.length > 0) {
+        projs = t.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean);
+      } else {
+        const nameStr = t.projectName || t.project_name || '';
+        projs = nameStr.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      return projs.includes(selectedProject);
+    });
+    console.log('inHouseTeams for', selectedProject, ':', inHouseTeams);
+    const all = inHouseTeams.flatMap(t => t.members || []).map(m => m.name).filter(Boolean);
+    console.log('all inHouse members:', all);
+    return [...new Set(all)];
+  }, [teams, selectedProject]);
 
   // Current sheet for selected project
   const currentSheet = attendanceSheets[selectedProject] || { rows: [], customTeams: [] };
@@ -103,23 +125,28 @@ export default function TeamAttendanceView() {
   const isTeamInactive = (id, name, rawName) => {
     const list = currentSheet.inactiveTeams || [];
     if (!list || list.length === 0) return false;
-    return list.includes(id) || 
-           (name && list.includes(name)) || 
+    return list.includes(id) ||
+           (name && list.includes(name)) ||
            (rawName && list.includes(rawName)) ||
            (name && list.includes(name.toUpperCase()));
   };
 
   const teamItems = useMemo(() => {
-    let items = projectTeams.map(t => {
+    const seenNames = new Set();
+    let items = [];
+    projectTeams.forEach(t => {
       const id = t.id || `team_${t.teamName || t.team_name}`;
       const name = (t.teamName || t.team_name || 'Tổ Đội').toUpperCase();
       const rawName = t.teamName || t.team_name || '';
-      return {
-        id,
-        name,
-        rawName,
-        isInactive: isTeamInactive(id, name, rawName)
-      };
+      if (!seenNames.has(name)) {
+        seenNames.add(name);
+        items.push({
+          id,
+          name,
+          rawName,
+          isInactive: isTeamInactive(id, name, rawName)
+        });
+      }
     });
 
     // If no teams set for project, provide default fallback team columns
@@ -152,33 +179,7 @@ export default function TeamAttendanceView() {
     });
   }, [projectTeams, currentSheet.customTeams, currentSheet.inactiveTeams]);
 
-  // Default initial rows seed
-  useEffect(() => {
-    if (!attendanceSheets[selectedProject] || !attendanceSheets[selectedProject].rows || attendanceSheets[selectedProject].rows.length === 0) {
-      const defaultRows = [
-        {
-          id: 'att_row_1',
-          date: '26/02/2026',
-          values: { [teamItems[0]?.id || 'team_a']: 5, [teamItems[1]?.id || 'team_b']: 19 }
-        },
-        {
-          id: 'att_row_2',
-          date: '07/04/2026',
-          values: { [teamItems[0]?.id || 'team_a']: 10, [teamItems[1]?.id || 'team_b']: 1 }
-        },
-        {
-          id: 'att_row_3',
-          date: '22/04/2026',
-          values: { [teamItems[0]?.id || 'team_a']: 0, [teamItems[1]?.id || 'team_b']: 0 }
-        }
-      ];
-
-      setAttendanceSheet(selectedProject, {
-        ...currentSheet,
-        rows: defaultRows
-      });
-    }
-  }, [selectedProject]);
+  // Removed dangerous mock data seeding
 
   const rows = currentSheet.rows || [];
   const bhldRows = currentBhldSheet.rows || [];
@@ -190,8 +191,10 @@ export default function TeamAttendanceView() {
   const [toDate, setToDate] = useState(todayFormatted);
   const [showChart, setShowChart] = useState(false);
   const [showBHLD, setShowBHLD] = useState(false);
+  const [showInHouse, setShowInHouse] = useState(false);
+  const [isAttendanceReportModalOpen, setIsAttendanceReportModalOpen] = useState(false);
   const [chartViewMode, setChartViewMode] = useState('month'); // 'day' | 'week' | 'month'
-  
+
   // Right-click Context Menu & Copy/Paste States
   const [contextMenu, setContextMenu] = useState(null);
   const [copiedAttendanceData, setCopiedAttendanceData] = useState(null);
@@ -241,7 +244,9 @@ export default function TeamAttendanceView() {
       teamName: item.name,
       dateStr: row.date,
       count: row.values?.[item.id] ?? '',
-      note: row.notes?.[item.id] || ''
+      note: row.notes?.[item.id] || '',
+      activeField: field,
+      userInfos: row.userInfos?.[item.id] || null
     });
   };
 
@@ -252,7 +257,9 @@ export default function TeamAttendanceView() {
     teamName: '',
     dateStr: '',
     count: '',
-    note: ''
+    note: '',
+    activeField: 'count',
+    userInfos: null
   });
 
   const [bhldModal, setBhldModal] = useState({
@@ -346,10 +353,10 @@ export default function TeamAttendanceView() {
     const result = rows.filter(row => {
       const rowDate = parseDate(row.date);
       if (!rowDate) return true;
-      
+
       let from = null;
       let to = null;
-      
+
       if (fromDate) {
         from = parseDate(fromDate);
         if (from) from.setHours(0,0,0,0);
@@ -358,7 +365,7 @@ export default function TeamAttendanceView() {
         to = parseDate(toDate);
         if (to) to.setHours(23,59,59,999);
       }
-      
+
       if (from && rowDate < from) return false;
       if (to && rowDate > to) return false;
       return true;
@@ -385,9 +392,9 @@ export default function TeamAttendanceView() {
     'bg-[#4f46e5] text-white', // Indigo
     'bg-[#ea580c] text-white'  // Bright Orange
   ];
-  
+
   const baseChartColors = [
-    '#2563eb', '#059669', '#9333ea', '#d97706', 
+    '#2563eb', '#059669', '#9333ea', '#d97706',
     '#e11d48', '#0891b2', '#4f46e5', '#ea580c'
   ];
 
@@ -406,7 +413,7 @@ export default function TeamAttendanceView() {
   // Chart Data grouped dynamically by Day / Week / Month
   const chartData = useMemo(() => {
     const grouped = {};
-    
+
     // Sort chronological ascending for chart display
     const chronologicalRows = [...filteredRows].sort((a, b) => {
       const dateA = parseDate(a.date);
@@ -420,10 +427,10 @@ export default function TeamAttendanceView() {
     chronologicalRows.forEach(row => {
       const d = parseDate(row.date);
       if (!d) return;
-      
+
       let key = '';
       let label = '';
-      
+
       if (chartViewMode === 'day') {
         const timeVal = d.getTime();
         key = String(timeVal);
@@ -435,7 +442,7 @@ export default function TeamAttendanceView() {
         const yearStart = new Date(Date.UTC(tempD.getUTCFullYear(), 0, 1));
         const weekNo = Math.ceil((((tempD - yearStart) / 86400000) + 1) / 7);
         const year = tempD.getUTCFullYear();
-        
+
         key = `${year}-W${String(weekNo).padStart(2, '0')}`;
         label = `Tuần ${weekNo}/${year}`;
       } else {
@@ -454,7 +461,7 @@ export default function TeamAttendanceView() {
           grouped[key][team.id] = 0;
         });
       }
-      
+
       teamItems.forEach(team => {
         grouped[key][team.id] += parseNumber(row.values?.[team.id]);
       });
@@ -467,21 +474,21 @@ export default function TeamAttendanceView() {
   // Actions
   const handleTeamHeaderClick = (item) => {
     const isInactive = item.isInactive;
-    const msg = isInactive 
+    const msg = isInactive
       ? `Đội "${item.name}" đang được đánh dấu nghỉ làm.\nBạn có muốn chuyển lại thành ĐANG LÀM VIỆC?`
       : `Đội "${item.name}" ĐÃ NGHỈ LÀM?\n(Đội sẽ được chuyển xuống cuối và đổi màu xám)`;
 
     openGlobalConfirm(msg, () => {
       const currentInactive = currentSheet.inactiveTeams || [];
       const identifiers = [item.id, item.name, item.rawName].filter(Boolean);
-      
+
       let nextInactive;
       if (isInactive) {
         nextInactive = currentInactive.filter(id => !identifiers.includes(id) && !identifiers.includes(String(id).toUpperCase()));
       } else {
         nextInactive = Array.from(new Set([...currentInactive, ...identifiers]));
       }
-        
+
       setAttendanceSheet(selectedProject, {
         ...currentSheet,
         inactiveTeams: nextInactive
@@ -492,10 +499,10 @@ export default function TeamAttendanceView() {
   const handleAddRow = () => {
     const today = new Date();
     const isoToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    
+
     openGlobalPrompt('Chọn ngày điểm danh để thêm:', (newDate) => {
       if (!newDate) return;
-      
+
       let formattedDate = newDate;
       if (newDate.includes('-')) {
         const parts = newDate.split('-');
@@ -503,7 +510,9 @@ export default function TeamAttendanceView() {
           formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
       }
-      
+
+      if (showInHouse) return; // Not exporting in-house table yet
+      if (showInHouse) return; // Not exporting in-house table yet
       if (showBHLD) {
         if (bhldRows.some(r => r.date === formattedDate)) {
           openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng BHLĐ!`);
@@ -515,7 +524,7 @@ export default function TeamAttendanceView() {
           return;
         }
       }
-      
+
       if (showBHLD) {
           addBhldRow(selectedProject, formattedDate);
         } else {
@@ -584,12 +593,12 @@ export default function TeamAttendanceView() {
              const d = parts[2];
              formattedDate = `${d}/${m}/${y}`;
           }
-          
+
           if (formattedDate !== row.date && rows.some(r => r.date === formattedDate)) {
              openGlobalAlert(`Ngày ${formattedDate} đã tồn tại trong bảng điểm danh!`);
              return;
           }
-          
+
           updateAttendanceRow(selectedProject, row.id, 'date', formattedDate);
         } else {
           updateAttendanceRow(selectedProject, row.id, 'date', '');
@@ -805,10 +814,18 @@ export default function TeamAttendanceView() {
                 <BarChart3 className="h-4 w-4" />
                 {showChart && !showBHLD ? 'Ẩn biểu đồ' : 'Xem biểu đồ'}
               </button>
+              <button
+                type="button"
+                onClick={() => setIsAttendanceReportModalOpen(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-700 transition shadow-xs shrink-0 whitespace-nowrap"
+              >
+                <FileDown className="h-4 w-4" />
+                Báo cáo
+              </button>
 
               <button
                 type="button"
-                onClick={() => { setShowChart(false); setShowBHLD(!showBHLD); }}
+                onClick={() => { setShowChart(false); setShowBHLD(!showBHLD); setShowInHouse(false); }}
                 className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition shadow-xs shrink-0 whitespace-nowrap ${
                   showBHLD ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
@@ -816,12 +833,44 @@ export default function TeamAttendanceView() {
                 <HardHat className="h-4 w-4" />
                 Bảo hộ lao động
               </button>
+              <button
+                type="button"
+                onClick={() => { setShowChart(false); setShowBHLD(false); setShowInHouse(!showInHouse); }}
+                className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-semibold transition shadow-xs shrink-0 whitespace-nowrap ${
+                  showInHouse ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+                Điểm danh cơ hữu
+              </button>
+              {showInHouse && (
+                <div className="relative inline-block shrink-0">
+                  <select
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    value=""
+                    onChange={(e) => {
+                      if(e.target.value) {
+                        addInHouseRow(selectedProject, e.target.value);
+                      }
+                    }}
+                  >
+                    <option value="" disabled>Chọn công nhân...</option>
+                    {projectMembers.map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <button className="inline-flex items-center gap-2 rounded-xl border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition shadow-xs pointer-events-none hover:bg-indigo-700">
+                    <Plus className="h-4 w-4" />
+                    Thêm CN
+                  </button>
+                </div>
+              )}
 
               <div className="flex-1"></div>
 
               <div className="flex items-center gap-2 mr-2 shrink-0 whitespace-nowrap">
                 <span className="text-sm font-semibold text-slate-700">Từ:</span>
-                <input 
+                <input
                   type="date"
                   value={toISO(fromDate)}
                   onChange={(e) => setFromDate(formatToDDMMYYYY(e.target.value))}
@@ -829,7 +878,7 @@ export default function TeamAttendanceView() {
                 />
                 <span className="text-sm text-slate-500">-</span>
                 <span className="text-sm font-semibold text-slate-700">Đến:</span>
-                <input 
+                <input
                   type="date"
                   value={toISO(toDate)}
                   onChange={(e) => setToDate(formatToDDMMYYYY(e.target.value))}
@@ -875,8 +924,8 @@ export default function TeamAttendanceView() {
                       type="button"
                       onClick={() => setChartViewMode('day')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                        chartViewMode === 'day' 
-                          ? 'bg-indigo-600 text-white shadow-xs' 
+                        chartViewMode === 'day'
+                          ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
@@ -886,8 +935,8 @@ export default function TeamAttendanceView() {
                       type="button"
                       onClick={() => setChartViewMode('week')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                        chartViewMode === 'week' 
-                          ? 'bg-indigo-600 text-white shadow-xs' 
+                        chartViewMode === 'week'
+                          ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
@@ -897,8 +946,8 @@ export default function TeamAttendanceView() {
                       type="button"
                       onClick={() => setChartViewMode('month')}
                       className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
-                        chartViewMode === 'month' 
-                          ? 'bg-indigo-600 text-white shadow-xs' 
+                        chartViewMode === 'month'
+                          ? 'bg-indigo-600 text-white shadow-xs'
                           : 'text-slate-600 hover:bg-slate-100'
                       }`}
                     >
@@ -911,19 +960,19 @@ export default function TeamAttendanceView() {
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={chartData} margin={{ top: 10, right: 30, left: -20, bottom: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                      <XAxis 
-                        dataKey="name" 
+                      <XAxis
+                        dataKey="name"
                         axisLine={false}
                         tickLine={false}
                         tick={{ fontSize: 12, fill: '#64748b', fontWeight: 600 }}
                         dy={10}
                       />
-                      <YAxis 
+                      <YAxis
                         axisLine={false}
                         tickLine={false}
                         tick={{ fontSize: 12, fill: '#64748b', fontWeight: 500 }}
                       />
-                      <Tooltip 
+                      <Tooltip
                         cursor={{ fill: '#f8fafc' }}
                         contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', fontWeight: 500 }}
                       />
@@ -931,14 +980,14 @@ export default function TeamAttendanceView() {
                       {teamItems.map((team, index) => {
                         const color = team.isInactive ? '#94a3b8' : baseChartColors[index % baseChartColors.length];
                         return (
-                          <Bar 
-                            key={team.id} 
-                            dataKey={team.id} 
-                            name={team.name} 
-                            fill={color} 
-                            radius={[4, 4, 0, 0]} 
-                            maxBarSize={40} 
-                            animationDuration={1000} 
+                          <Bar
+                            key={team.id}
+                            dataKey={team.id}
+                            name={team.name}
+                            fill={color}
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={40}
+                            animationDuration={1000}
                           />
                         );
                       })}
@@ -949,8 +998,8 @@ export default function TeamAttendanceView() {
             )}
 
             {/* Attendance Table with 2 sub-columns per team: Số CN | Vị trí thi công */}
-            {!showBHLD && (
-            <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
+            {!showBHLD && !showInHouse && (
+          <div id="print-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
               <div className="overflow-x-auto">
                 <table id="attendance-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
                   <thead>
@@ -963,20 +1012,20 @@ export default function TeamAttendanceView() {
 
                       {teamItems.map((item, index) => {
                         const isInactive = item.isInactive;
-                        const colorClass = isInactive 
-                          ? 'bg-slate-500 text-white' 
+                        const colorClass = isInactive
+                          ? 'bg-slate-500 text-white'
                           : headerColors[index % headerColors.length];
-                          
+
                         return (
                           <th key={item.id} colSpan={2} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
-                            <div 
+                            <div
                               onClick={() => handleTeamHeaderClick(item)}
                               className={`w-full h-full min-w-[180px] p-2 text-center font-bold uppercase text-xs tracking-wide min-h-[38px] flex flex-col items-center justify-center relative group ${colorClass.split(' ')[1]} cursor-pointer hover:brightness-95`}
                               title="Click để đổi trạng thái nghỉ làm / đang làm"
                             >
                               <span>{item.name}</span>
                               {isInactive && <span className="text-[10px] font-normal opacity-90 mt-0.5">(Đã nghỉ)</span>}
-                              
+
                               {item.id.startsWith('custom_team_') && (
                                 <>
                                   <button
@@ -1039,7 +1088,7 @@ export default function TeamAttendanceView() {
                         return (
                           <tr key={row.id || rIdx} className="hover:bg-slate-50 transition">
                             {/* Left Column: Date */}
-                            <td 
+                            <td
                               onClick={() => handleEditDate(row)}
                               className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs cursor-pointer hover:bg-indigo-50/50 transition select-none"
                               title="Click để chọn/sửa ngày"
@@ -1064,12 +1113,12 @@ export default function TeamAttendanceView() {
                               return (
                                 <React.Fragment key={`cell-${item.id}`}>
                                   {/* Cell 1: Worker Count (120px) */}
-                                  <td 
+                                  <td
                                     onContextMenu={(e) => handleCellContextMenu(e, row, item, 'count')}
                                     onClick={() => handleCellClick(row, item, 'count')}
                                     className={`border border-slate-800 p-1.5 text-center transition w-[120px] min-w-[120px] max-w-[120px] ${
-                                      isInactive 
-                                        ? 'bg-slate-200 cursor-not-allowed opacity-90' 
+                                      isInactive
+                                        ? 'bg-slate-200 cursor-not-allowed opacity-90'
                                         : (copiedAttendanceData !== null ? 'bg-indigo-50/50 hover:ring-2 hover:ring-indigo-500 cursor-crosshair' : 'bg-white cursor-pointer hover:bg-amber-50')
                                     }`}
                                     title={isInactive ? 'Đội đã nghỉ làm' : (copiedAttendanceData !== null ? 'Click để dán Số CN' : 'Click để sửa / Chuột phải để Copy Số CN')}
@@ -1082,12 +1131,12 @@ export default function TeamAttendanceView() {
                                   </td>
 
                                   {/* Cell 2: Work Location Note (120px) */}
-                                  <td 
+                                  <td
                                     onContextMenu={(e) => handleCellContextMenu(e, row, item, 'note')}
                                     onClick={() => handleCellClick(row, item, 'note')}
                                     className={`border border-slate-800 p-1.5 text-center transition w-[120px] min-w-[120px] max-w-[120px] ${
-                                      isInactive 
-                                        ? 'bg-slate-200 cursor-not-allowed opacity-90' 
+                                      isInactive
+                                        ? 'bg-slate-200 cursor-not-allowed opacity-90'
                                         : (copiedAttendanceData !== null ? 'bg-indigo-50/50 hover:ring-2 hover:ring-indigo-500 cursor-crosshair' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50')
                                     }`}
                                     title={isInactive ? 'Đội đã nghỉ làm' : (copiedAttendanceData !== null ? 'Click để dán Vị trí' : (note ? `Vị trí: ${note}` : 'Click để nhập vị trí / Chuột phải để Copy Vị trí'))}
@@ -1129,7 +1178,7 @@ export default function TeamAttendanceView() {
               </div>
             </div>
 )}
-{showBHLD && (
+{showBHLD && !showInHouse && (
   <div id="print-bhld-section" className="overflow-hidden rounded-lg border border-slate-800 bg-white shadow-xs">
     <div className="overflow-x-auto">
       <table id="bhld-table" className="w-full border-collapse border border-slate-800 text-center text-sm">
@@ -1157,7 +1206,7 @@ export default function TeamAttendanceView() {
                 <div className={`text-[10px] whitespace-pre-wrap break-words ${person.textColor}`}>{person.name}</div>
               </th>
             ))}
-          
+
             <th rowSpan={2} className="border border-slate-800 bg-white px-2 py-2 font-bold text-slate-900 w-[60px] min-w-[60px] text-center">
               Xóa
             </th>
@@ -1188,7 +1237,7 @@ export default function TeamAttendanceView() {
           ) : (
             bhldFilteredRows.map((row) => (
               <tr key={row.id} className="hover:bg-slate-50 transition">
-                <td 
+                <td
                   onClick={() => handleEditBhldDate(row)}
                   className="border border-slate-800 bg-white px-2 py-2 text-center font-bold text-xs cursor-pointer hover:bg-amber-50/50 transition select-none w-[110px]"
                   title="Click để chọn/sửa ngày"
@@ -1235,7 +1284,7 @@ export default function TeamAttendanceView() {
                   const isInactive = item.isInactive;
                   return (
                     <React.Fragment key={`bhld-cell-${item.id}`}>
-                      <td 
+                      <td
                         onClick={() => {
                           if (isInactive) return;
                           setBhldModal({
@@ -1253,7 +1302,7 @@ export default function TeamAttendanceView() {
                       >
                         <div className={`font-bold text-sm ${bhld.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{bhld.aoGS || '-'}</div>
                       </td>
-                      <td 
+                      <td
                         onClick={() => {
                           if (isInactive) return;
                           setBhldModal({
@@ -1271,7 +1320,7 @@ export default function TeamAttendanceView() {
                       >
                         <div className={`font-bold text-sm ${bhld.aoCN ? 'text-indigo-900' : 'text-indigo-900'}`}>{bhld.aoCN || '-'}</div>
                       </td>
-                      <td 
+                      <td
                         onClick={() => {
                           if (isInactive) return;
                           setBhldModal({
@@ -1385,6 +1434,12 @@ export default function TeamAttendanceView() {
 
           </div>
         </div>
+
+        {showInHouse && (
+          <div className="mt-6">
+            <InHouseAttendanceTable projectName={selectedProject} />
+          </div>
+        )}
       </div>
 
       {/* Modal Nhập Quân Số & Vị Trí Thi Công */}
@@ -1404,6 +1459,7 @@ export default function TeamAttendanceView() {
             </div>
 
             <div className="space-y-4">
+              {(!attendanceModal.activeField || attendanceModal.activeField === 'count') && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
                   Quân số (Số người) <span className="text-red-500">*</span>
@@ -1415,10 +1471,12 @@ export default function TeamAttendanceView() {
                   onChange={(e) => setAttendanceModal(prev => ({ ...prev, count: e.target.value }))}
                   placeholder="Nhập số lượng công nhân (VD: 8)..."
                   className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-slate-50 focus:bg-white transition"
-                  autoFocus
+                  autoFocus={!attendanceModal.activeField || attendanceModal.activeField === 'count'}
                 />
               </div>
+              )}
 
+              {(!attendanceModal.activeField || attendanceModal.activeField === 'note') && (
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
                   Vị trí thi công / Ghi chú
@@ -1432,8 +1490,17 @@ export default function TeamAttendanceView() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleSaveAttendanceModal();
                   }}
+                  autoFocus={attendanceModal.activeField === 'note'}
                 />
               </div>
+              )}
+
+              {attendanceModal.userInfos && (
+                <div className="mt-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                  <span className="font-semibold">Cập nhật lần cuối bởi:</span> {attendanceModal.userInfos.user} <br/>
+                  <span className="font-semibold">Vào lúc:</span> {attendanceModal.userInfos.time}
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 mt-6 pt-3 border-t border-slate-100">
@@ -1511,7 +1578,7 @@ export default function TeamAttendanceView() {
                       className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
                     />
                   </div>
-                  
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
                       Khác
@@ -1565,11 +1632,11 @@ export default function TeamAttendanceView() {
 
       {/* Context Menu Popup on Right-Click */}
       {contextMenu && (
-        <div 
+        <div
           className="fixed z-50 bg-white border border-slate-200 shadow-2xl rounded-2xl py-1.5 w-60 text-xs overflow-hidden animate-in fade-in zoom-in duration-100"
-          style={{ 
-            top: Math.min(contextMenu.y, window.innerHeight - 200), 
-            left: Math.min(contextMenu.x, window.innerWidth - 250) 
+          style={{
+            top: Math.min(contextMenu.y, window.innerHeight - 200),
+            left: Math.min(contextMenu.x, window.innerWidth - 250)
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -1580,7 +1647,7 @@ export default function TeamAttendanceView() {
             </span>
           </div>
 
-          <button 
+          <button
             type="button"
             className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-indigo-700 font-bold flex items-center gap-2 transition"
             onClick={() => {
@@ -1593,7 +1660,7 @@ export default function TeamAttendanceView() {
           </button>
 
           {copiedAttendanceData && (
-            <button 
+            <button
               type="button"
               className="w-full text-left px-3.5 py-2 hover:bg-emerald-50 text-emerald-700 font-bold flex items-center gap-2 border-t border-slate-100 transition"
               onClick={() => {
@@ -1608,7 +1675,7 @@ export default function TeamAttendanceView() {
             </button>
           )}
 
-          <button 
+          <button
             type="button"
             className="w-full text-left px-3.5 py-2 hover:bg-indigo-50 text-indigo-700 font-semibold flex items-center gap-2 border-t border-slate-100 transition"
             onClick={() => {
@@ -1627,7 +1694,7 @@ export default function TeamAttendanceView() {
             <span>Sao chép xuống tất cả dòng dưới</span>
           </button>
 
-          <button 
+          <button
             type="button"
             className="w-full text-left px-3.5 py-2 hover:bg-red-50 text-red-600 font-medium flex items-center gap-2 border-t border-slate-100 transition"
             onClick={() => {
@@ -1650,14 +1717,14 @@ export default function TeamAttendanceView() {
             <Sparkles className="w-4 h-4 text-amber-400" />
             <span>Đang bật dán nhanh:</span>
             <span className="bg-slate-800 text-indigo-300 px-2.5 py-0.5 rounded border border-slate-700 font-extrabold">
-              {copiedAttendanceData.field === 'count' 
-                ? `${copiedAttendanceData.val || 0} CN (Số CN)` 
+              {copiedAttendanceData.field === 'count'
+                ? `${copiedAttendanceData.val || 0} CN (Số CN)`
                 : `📍 ${copiedAttendanceData.val || 'Trống'} (Vị trí)`
               }
             </span>
           </div>
           <span className="text-xs text-slate-400 font-medium">&bull; Click ô tương ứng để dán</span>
-          <button 
+          <button
             onClick={() => setCopiedAttendanceData(null)}
             className="ml-2 bg-slate-800 hover:bg-slate-700 text-slate-300 p-1 rounded-full transition"
             title="Tắt chế độ dán nhanh"
@@ -1666,6 +1733,7 @@ export default function TeamAttendanceView() {
           </button>
         </div>
       )}
+      <AttendanceReportModal isOpen={isAttendanceReportModalOpen} onClose={() => setIsAttendanceReportModalOpen(false)} rows={filteredRows} materialItems={teamItems} />
     </div>
   );
 }

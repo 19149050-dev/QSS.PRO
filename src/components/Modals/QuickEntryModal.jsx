@@ -191,8 +191,54 @@ export default function QuickEntryModal({ isOpen, onClose, projectName, matrixKe
         } else {
           const isAptItem = groupName.toUpperCase().includes('CĂN HỘ');
           let finalUnits = (batchUnitsObj[blockName] || '').trim();
+          
           if (!finalUnits && isAptItem) {
-            finalUnits = floorApts;
+            const isIpcMode = matrixKey?.endsWith('_ipc');
+            if (isIpcMode) {
+                const teamMatrixKey = `${projectName}_team`;
+                const teamMatrix = store.paymentMatrix[teamMatrixKey] || [];
+                const teamFloorData = teamMatrix.find(f => f.floor === floor);
+                const teamRawVal = teamFloorData?.items?.[matrixItemKey] || '';
+                
+                let percent = 0;
+                let units = 0;
+                if (teamRawVal) {
+                    teamRawVal.split(' + ').forEach(p => {
+                        const b = p.trim();
+                        if (b.includes('Xong 100%')) {
+                            percent += 100;
+                            return;
+                        }
+                        const m = b.match(/\(([^)]+)\)/);
+                        if (m) {
+                            if (m[1].includes('%')) {
+                                percent += parseFloat(m[1]) || 0;
+                            } else {
+                                const uMatch = m[1].match(/(\d+(\.\d+)?)/);
+                                if (uMatch) units += parseFloat(uMatch[1]);
+                            }
+                        } else {
+                            if (b.includes('%')) {
+                                const pMatch = b.match(/(\d+(\.\d+)?)%/);
+                                if (pMatch) percent += parseFloat(pMatch[1]);
+                            } else {
+                                const uMatch = b.match(/^(\d+(\.\d+)?)/) || b.match(/(\d+(\.\d+)?)\s*căn/i);
+                                if (uMatch) units += parseFloat(uMatch[1]);
+                            }
+                        }
+                    });
+                }
+                
+                if (percent > 0) {
+                   finalUnits = `${Math.min(100, percent)}%`;
+                } else if (units > 0) {
+                   finalUnits = `${units} căn`;
+                } else {
+                   finalUnits = floorApts;
+                }
+            } else {
+               finalUnits = floorApts;
+            }
           }
           
           let newBatch = batchName.trim();

@@ -2,11 +2,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore, sortFloors } from '@/store/useStore';
-import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap, Upload } from 'lucide-react';
+import { Edit2, Sparkles, Trash2, X, Eye, EyeOff, CheckSquare, Square, FileSpreadsheet, Printer, Search, ChevronDown, Zap, Upload, PieChart } from 'lucide-react';
 import { exportToExcel, exportMatrixToExcel } from '@/utils/exportUtils';
 import { parseExcelFile } from '@/utils/importUtils';
 import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import QuickEntryModal from '@/components/Modals/QuickEntryModal';
+import IpcReportModal from '@/components/Modals/IpcReportModal';
 
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', selectedIpcFilter = 'ALL', period = '', headerContent, filterContent }) {
   const store = useStore();
@@ -56,7 +57,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
          
          const hasIpcMatch = Object.entries(ipcRow.items).some(([key, val]) => {
            if (key.endsWith('_numApts') || !val) return false;
-           return val.split(' + ').some(p => p.includes(selectedIpcFilter));
+           let checkVal = val;
+           if (type === 'ipc') checkVal = checkVal.replace(/ĐỢT/gi, 'IPC').replace(/DOT/gi, 'IPC');
+           return checkVal.split(' + ').some(p => p.includes(selectedIpcFilter));
          });
          return hasIpcMatch;
       }
@@ -127,8 +130,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
             const match = str.match(/^([^(:\-]+)/);
             if (match) {
-              const bName = match[1].trim();
+              let bName = match[1].trim();
               if (bName && bName.length > 0 && bName.length <= 30) {
+                bName = bName.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
                 batches.add(bName);
               }
             }
@@ -137,7 +141,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       });
     });
 
-    return Array.from(batches).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    let finalArr = Array.from(batches).map(b => {
+      let cleaned = b.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC05') return 'IPC 05';
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC04') return 'IPC 04';
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC06') return 'IPC 06';
+      return cleaned;
+    });
+    finalArr = [...new Set(finalArr)];
+    return finalArr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [paymentMatrix, store.paymentMatrix, projectName, store.teams]);
 
   const matrixBlocks = React.useMemo(() => {
@@ -217,6 +229,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
   const [addFloorData, setAddFloorData] = useState({ mode: 'single', customName: '', numFloors: 1, blockApts: {}, startNumber: 1 });
   const [isDeleteFloorsModalOpen, setIsDeleteFloorsModalOpen] = useState(false);
   const [selectedFloorsToDelete, setSelectedFloorsToDelete] = useState([]);
+  const [isIpcReportModalOpen, setIsIpcReportModalOpen] = useState(false);
   
   const [copiedValue, setCopiedValue] = useState(null);
   const [hideIpcQuantities, setHideIpcQuantities] = useState(false);
@@ -367,6 +380,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             }
             
             let valForColor = rawVal;
+            if (type === 'ipc') {
+               if (ipcRawVal) ipcRawVal = ipcRawVal.replace(/ĐỢT/gi, 'IPC').replace(/DOT/gi, 'IPC');
+            }
             if (type === 'ipc' && selectedIpcFilter !== 'ALL') {
                let filteredIpcVal = ipcRawVal;
                if (filteredIpcVal) {
@@ -627,6 +643,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       if (upperPart.includes('ĐỢT') || upperPart.includes('DOT')) {
         const match = upperPart.match(/(ĐỢT|DOT)\s*\d+/);
         textToHash = match ? match[0].replace(/\s+/g, ' ') : 'ĐỢT';
+      } else if (upperPart.includes('IPC')) {
+        const match = upperPart.match(/IPC\s*\d+/);
+        textToHash = match ? match[0].replace(/\s+/g, ' ') : 'IPC';
       } else if (upperPart.includes('(PO')) {
         const match = upperPart.match(/\(PO[^)]*\)/);
         textToHash = match ? match[0] : 'PO';
@@ -679,7 +698,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             }
           }
         } else {
-          const match = p.match(/(\d+(\.\d+)?)/);
+          const match = p.match(/^(\d+(\.\d+)?)/) || p.match(/(\d+(\.\d+)?)\s*căn/i);
           if (match) {
             if (p.includes('%')) {
               total += (parseFloat(match[1]) / 100) * (parseFloat(totalApts) || 0);
@@ -711,7 +730,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     // Filter by batch
     if (batch && batch !== 'ALL') {
       const selectedBatches = batch.split(',').filter(Boolean);
-      const batchParts = display.split(' + ').filter(p => selectedBatches.some(b => p.includes(b)));
+      const batchParts = display.split(' + ').filter(p => {
+        const standardP = p.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
+        return selectedBatches.some(b => standardP.includes(b));
+      });
       if (batchParts.length > 0) {
         display = batchParts.join(' + ');
       } else {
@@ -722,6 +744,15 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     if (type === 'ipc' || type === 'ipc_select') {
       const parts = display.split(' + ').map(p => p.trim());
       display = parts.join(' + ');
+    }
+
+    if (displayMode === 'only_number_ipc') {
+      const parts = display.split(' + ');
+      const mapped = parts.map(p => {
+        const match = p.match(/(?:ĐỢT|DOT|IPC)\s*(\d+)/i);
+        return match ? match[1] : p.replace(/\s*\([^)]*\)/g, '').trim();
+      });
+      return mapped.join(' + ');
     }
 
     if (displayMode === 'no_name') {
@@ -741,6 +772,10 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
     const totalAptsNum = parseFloat(numApts) || 0;
     const completedUnits = parseTotalUnitsForCell(display, totalAptsNum);
+
+    if (displayMode === 'check') {
+      return completedUnits > 0 ? '✅' : '❌';
+    }
 
     if (displayMode === 'percent') {
       if (totalAptsNum > 0) {
@@ -1002,12 +1037,6 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             </div>
           )}
         </div>
-        <button 
-          onClick={() => setIsBOQModalOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-bold rounded-lg border border-indigo-200 shadow-sm transition-colors"
-        >
-          <span className="text-lg leading-none pb-0.5">+</span> Tạo BOQ Nhanh
-        </button>
         {type === 'team' && (
           <>
             <div className="relative" ref={quickAptsMenuRef}>
@@ -1103,8 +1132,18 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
             <option value="name">👁️ Hiện tên tổ đội</option>
             <option value="percent">📊 Hiện % hoàn thành</option>
             <option value="ratio">🏠 Căn làm / Căn tổng (VD: 16/18 căn)</option>
+            <option value="check">✅ Chỉ hiện tích xanh / ❌</option>
+            <option value="only_number_ipc">🔢 Chỉ hiện số IPC</option>
           </select>
         </div>
+        {type === 'ipc' && (
+          <button
+            onClick={() => setIsIpcReportModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white font-bold rounded-lg shadow-sm shadow-indigo-600/30 transition-colors hover:bg-indigo-700 ml-1"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> Báo cáo
+          </button>
+        )}
         </div>
         {filterContent && (
           <div className="flex-shrink-0 flex items-center">
@@ -1114,7 +1153,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       </div>
 
       {/* Grid Container */}
-      <div className="overflow-x-auto overflow-y-auto max-h-[75vh] w-full rounded-xl border border-gray-300 shadow-inner relative"
+      <div className="overflow-x-auto overflow-y-auto max-h-[75vh] print:overflow-visible print:max-h-none print:h-auto w-full rounded-xl border border-gray-300 shadow-inner relative"
            onClick={() => setContextMenu(null)}
            onScroll={() => setContextMenu(null)}
       >
@@ -1331,12 +1370,19 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       const itemKey = `${block.blockName}_${group.groupName}_${cat}`;
                       if (!isColumnVisible(itemKey)) return null;
                       let rawVal = row.items[itemKey];
+                      if (rawVal) {
+                        rawVal = rawVal.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `ĐỢT ${p2.padStart(2, '0')}`);
+                      }
                       const displayVal = displayCellValue(rawVal, selectedTeamFilter, filterBatch, blockNumApts || row.numApts);
                       let ipcRawVal = '';
                       if (type === 'ipc' || type === 'ipc_select') {
                         const ipcMatrix = store.paymentMatrix[`${projectName}_ipc`] || [];
                         const ipcRow = ipcMatrix.find(r => String(r.floor).trim() === String(row.floor).trim());
                         ipcRawVal = ipcRow?.items?.[itemKey] || '';
+
+                        if (ipcRawVal) {
+                          ipcRawVal = ipcRawVal.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `IPC ${p2.padStart(2, '0')}`);
+                        }
 
                         if (type === 'ipc' && selectedIpcFilter !== 'ALL') {
                           if (ipcRawVal) {
@@ -1401,6 +1447,28 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                           onClick={() => {
                             if (copiedValue !== null) {
                               if (type === 'ipc') {
+                                const teamUnits = parseTotalUnitsForCell(rawVal, blockNumApts || row.numApts);
+                                const newUnits = parseTotalUnitsForCell(copiedValue, blockNumApts || row.numApts);
+                                
+                                if (Math.abs(newUnits - teamUnits) > 0.01 && teamUnits > 0) {
+                                  store.openGlobalConfirm(`⚠️ DÁN KHÔNG KHỚP: Khối lượng dán vào (${newUnits.toFixed(1).replace(/\.0$/, '')}) khác với số lượng Tổ Đội đã làm (${teamUnits.toFixed(1).replace(/\.0$/, '')}). Bạn có muốn tự động điều chỉnh bằng đúng khối lượng Tổ Đội đã làm không?`, () => {
+                                      const batchNameMatch = copiedValue.match(/^(.*?)\s*\(/) || [null, copiedValue];
+                                      const batchName = batchNameMatch[1] ? batchNameMatch[1].trim() : copiedValue.trim(); 
+                                      const maxApts = parseFloat(blockNumApts || row.numApts) || 0;
+                                      let adjustedValue = batchName;
+                                      if (teamUnits > 0) {
+                                          if (maxApts > 0) {
+                                              adjustedValue += ` (${Math.round((teamUnits / maxApts) * 100)}%)`;
+                                          } else {
+                                              adjustedValue += ` (${teamUnits} căn)`;
+                                          }
+                                      }
+                                      const mergedVal = mergeCellValue(ipcRawVal, adjustedValue, 'ALL');
+                                      updateMatrixCell(row.floor, itemKey, mergedVal);
+                                  }, 'Tự động điều chỉnh');
+                                  return;
+                                }
+                                
                                 const mergedVal = mergeCellValue(ipcRawVal, copiedValue, 'ALL');
                                 updateMatrixCell(row.floor, itemKey, mergedVal);
                                 return;
@@ -1466,14 +1534,31 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                               <>
                                 {!ipcRawVal && (
                                   <span className={`text-[10px] opacity-70 leading-tight whitespace-normal break-words px-1 max-w-[120px] ${!rawVal ? 'text-gray-500' : ''}`}>
-                                    {hideIpcQuantities && displayVal 
-                                      ? (displayVal.match(/\([^)]+\)/g)?.map(m => m.replace(/[()]/g, '')).join(' + ') || displayVal)
-                                      : (displayVal || '')}
+                                    {displayMode === 'check' 
+                                      ? (displayVal ? '❌' : '')
+                                      : (hideIpcQuantities && displayVal 
+                                          ? (displayVal.match(/\([^)]+\)/g)?.map(m => m.replace(/[()]/g, '')).join(' + ') || displayVal)
+                                          : (displayVal || ''))}
                                   </span>
                                 )}
                                 {ipcRawVal && (
                                   <span className="font-bold text-[10px] leading-tight whitespace-normal break-words px-1 max-w-[120px] text-slate-900">
-                                    {hideIpcQuantities ? ipcRawVal.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim() : ipcRawVal}
+                                    {(() => {
+                                      let finalIpcVal = ipcRawVal;
+                                      if (displayMode === 'check') {
+                                        const totalAptsNum = parseFloat(blockNumApts || row.numApts) || 0;
+                                        const completed = parseTotalUnitsForCell(finalIpcVal, totalAptsNum);
+                                        finalIpcVal = completed > 0 ? '✅' : '❌';
+                                      } else if (displayMode === 'only_number_ipc') {
+                                        finalIpcVal = finalIpcVal.split(' + ').map(p => {
+                                          const m = p.match(/(?:ĐỢT|DOT|IPC)\s*(\d+)/i);
+                                          return m ? m[1] : p.replace(/\s*\([^)]*\)/g, '').trim();
+                                        }).join(' + ');
+                                      } else if (hideIpcQuantities) {
+                                        finalIpcVal = finalIpcVal.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').trim();
+                                      }
+                                      return finalIpcVal;
+                                    })()}
                                   </span>
                                 )}
                               </>
@@ -1695,7 +1780,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       value={newBatchName}
                       onChange={(e) => setNewBatchName(e.target.value)}
                       className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
-                      placeholder="VD: Đợt 01, IPC 01"
+                      placeholder="VD: 01, 02..."
                       autoFocus
                     />
                   </div>
@@ -1915,9 +2000,20 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
 
                       let finalVal = batchList.join(' + ');
                       if (newBatchName.trim()) {
+                        let standardizedName = newBatchName.trim();
+                        if (/^\d+$/.test(standardizedName)) {
+                          const prefix = type === 'ipc' || type === 'ipc_select' ? 'IPC' : 'ĐỢT';
+                          standardizedName = `${prefix} ${standardizedName.padStart(2, '0')}`;
+                        } else {
+                          standardizedName = standardizedName.replace(/(?:IPC|ĐỢT|DOT)\s*(\d+)/gi, (m, p1) => {
+                            const prefix = type === 'ipc' || type === 'ipc_select' ? 'IPC' : 'ĐỢT';
+                            return `${prefix} ${p1.padStart(2, '0')}`;
+                          });
+                        }
+
                         let formatted = newBatchUnits.trim() 
-                          ? `${newBatchName.trim()} (${newBatchUnits.trim()})` 
-                          : newBatchName.trim();
+                          ? `${standardizedName} (${newBatchUnits.trim()})` 
+                          : standardizedName;
                         if (type === 'team' && activeTeam) {
                           formatted = `${formatted} (${activeTeam})`;
                         }
@@ -2332,6 +2428,13 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
           </div>
         </div>
       )}
+      {isIpcReportModalOpen && (
+        <IpcReportModal
+          isOpen={isIpcReportModalOpen}
+          onClose={() => setIsIpcReportModalOpen(false)}
+          projectName={projectName}
+        />
+      )}
     </div>
   );
 }
@@ -2375,8 +2478,13 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
 
             const match = str.match(/^([^(:\-]+)/);
             if (match) {
-              const bName = match[1].trim();
+              let bName = match[1].trim();
               if (bName && bName.length > 0 && bName.length <= 30) {
+                const oldName = bName;
+                bName = bName.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
+                if (bName === "IPC05") {
+                   console.log("FOUND IPC05! oldName:", oldName, "charCodes:", Array.from(oldName).map(c=>c.charCodeAt(0)));
+                }
                 batches.add(bName);
               }
             }
@@ -2385,7 +2493,15 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
       });
     });
 
-    return Array.from(batches).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    let finalArr = Array.from(batches).map(b => {
+      let cleaned = b.replace(/(IPC|ĐỢT|DOT)[^\d]*(\d+)/gi, (m, p1, p2) => `${p1.toUpperCase()} ${p2.padStart(2, '0')}`);
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC05') return 'IPC 05';
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC04') return 'IPC 04';
+      if (cleaned.replace(/\s/g, '').toUpperCase() === 'IPC06') return 'IPC 06';
+      return cleaned;
+    });
+    finalArr = [...new Set(finalArr)];
+    return finalArr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [store.paymentMatrix, projectName, store.teams]);
 
   const uniqueBlocks = React.useMemo(() => rawBlocks.map(b => b.blockName), [rawBlocks]);
@@ -2579,6 +2695,7 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
         matrixKey={matrixKey}
         rawBlocks={rawBlocks}
       />
+
     </div>
   );
 }

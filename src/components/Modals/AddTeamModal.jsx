@@ -11,7 +11,9 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
     teamName: '',
     leaderName: '',
     phone: '',
+        teamType: 'Thầu phụ',
     tradeType: 'Bả & Sơn Nước Nội/Ngoại thất',
+    teamType: 'Thầu phụ',
     projects: projects.map(p => p.name),
     workerCount: 10,
     contractValue: ''
@@ -34,6 +36,7 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
         teamName: teamToEdit.teamName || teamToEdit.team_name || '',
         leaderName: teamToEdit.leaderName || teamToEdit.leader_name || '',
         phone: teamToEdit.phone || '',
+        teamType: teamToEdit.teamType || teamToEdit.team_type || 'Thầu phụ',
         tradeType: teamToEdit.tradeType || teamToEdit.trade_type || 'Bả & Sơn Nước Nội/Ngoại thất',
         projects: initialProjs,
         workerCount: teamToEdit.workerCount || teamToEdit.worker_count || 10,
@@ -52,24 +55,26 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
     }
   }, [teamToEdit, isOpen, projects]);
 
-  if (!isOpen) return null;
+  const [isSaving, setIsSaving] = useState(false);
 
-  const handleSubmit = (e) => {
+  if (!isOpen) return null;
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.teamName || !formData.leaderName) return;
+    setIsSaving(true);
 
     const selectedProjs = (formData.projects && formData.projects.length > 0) 
       ? Array.from(new Set(formData.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p).map(s => s.trim()).filter(Boolean)))
       : [projects[0]?.name || 'SUNHOME'];
 
     if (teamToEdit) {
-      updateTeam(teamToEdit.id, {
+      await updateTeam(teamToEdit.id, {
         ...formData,
         projects: selectedProjs,
         projectName: selectedProjs.join(', ')
       });
     } else {
-      addTeam({
+      await addTeam({
         ...formData,
         projects: selectedProjs,
         projectName: selectedProjs.join(', '),
@@ -79,6 +84,7 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
         status: 'Đang thi công'
       });
     }
+    setIsSaving(false);
     onClose();
   };
 
@@ -88,7 +94,7 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
         <div className="p-5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             {teamToEdit ? <Edit2 className="w-5 h-5" /> : <Users className="w-5 h-5" />}
-            <h3 className="font-bold text-base">{teamToEdit ? 'Chỉnh Sửa Thông Tin Tổ Đội' : 'Thêm Tổ Đội / Thầu Phụ Mới'}</h3>
+            <h3 className="font-bold text-base">{teamToEdit ? 'Chỉnh Sửa Thông Tin Tổ Đội' : (isSaving ? 'Đang thêm...' : 'Thêm Tổ Đội / Thầu Phụ Mới')}</h3>
           </div>
           <button onClick={onClose} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
             <X className="w-5 h-5" />
@@ -109,6 +115,17 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1">Loại Đội</label>
+              <select
+                value={formData.teamType || 'Thầu phụ'}
+                onChange={(e) => setFormData({ ...formData, teamType: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 font-semibold text-gray-800"
+              >
+                <option value="Thầu phụ">Thầu phụ</option>
+                <option value="Cơ hữu">Cơ hữu</option>
+              </select>
+            </div>
             <div>
               <label className="block font-semibold text-gray-700 mb-1">Đội trưởng / Đại diện <span className="text-red-500">*</span></label>
               <input
@@ -173,7 +190,7 @@ export default function AddTeamModal({ isOpen, onClose, teamToEdit = null }) {
               type="submit"
               className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold shadow-md shadow-indigo-500/20"
             >
-              {teamToEdit ? 'Lưu Thay Đổi' : 'Tạo Tổ Đội'}
+              {teamToEdit ? '{isSaving ? "Đang lưu..." : "Lưu Thay Đổi"}' : 'Tạo Tổ Đội'}
             </button>
           </div>
         </form>

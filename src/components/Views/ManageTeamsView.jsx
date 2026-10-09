@@ -261,6 +261,7 @@ export default function ManageTeamsPage() {
               <thead>
                 <tr>
                   <th className="py-3 px-4 text-xs font-extrabold uppercase">TỔ ĐỘI & ĐỘI TRƯỞNG</th>
+                  <th className="py-3 px-4 text-xs font-extrabold uppercase">PHÂN LOẠI</th>
                   <th className="py-3 px-4 text-xs font-extrabold uppercase">DỰ ÁN ÁP DỤNG</th>
                   <th className="py-3 px-4 text-xs font-extrabold uppercase text-right">THAO TÁC</th>
                 </tr>
@@ -280,6 +281,13 @@ export default function ManageTeamsPage() {
                             <Phone className="w-3.5 h-3.5 text-indigo-400" /> {team.leaderName} ({team.phone || 'N/A'})
                           </div>
                         </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {team.teamType && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${team.teamType === 'Cơ hữu' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
+                            {team.teamType}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="flex flex-wrap gap-1.5">
