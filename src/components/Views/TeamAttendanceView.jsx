@@ -19,12 +19,14 @@ import {
   Eraser,
   MapPin,
   X,
-  HardHat
+  HardHat,
+  SlidersHorizontal
 } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import InHouseAttendanceTable from './InHouseAttendanceTable';
 import AttendanceReportModal from '@/components/Modals/AttendanceReportModal';
+import BhldConfigModal from '@/components/Modals/BhldConfigModal';
 
 const parseNumber = (value) => {
   if (value === '' || value === null || value === undefined) return 0;
@@ -32,6 +34,12 @@ const parseNumber = (value) => {
   const num = parseFloat(normalized);
   return Number.isFinite(num) ? num : 0;
 };
+
+const DEFAULT_BHLD_COLUMNS = [
+  { id: 'aoGS', name: 'Áo GS' },
+  { id: 'aoCN', name: 'Áo CN' },
+  { id: 'khac', name: 'Khác' }
+];
 
 export default function TeamAttendanceView() {
   const {
@@ -54,6 +62,8 @@ export default function TeamAttendanceView() {
     updateBhldRowField,
     deleteBhldRow,
     updateBhldCellNew,
+    updateBhldRowTeamValues,
+    setBhldColumns,
     setBhldSheet
   } = useStore();
 
@@ -184,6 +194,16 @@ export default function TeamAttendanceView() {
   const rows = currentSheet.rows || [];
   const bhldRows = currentBhldSheet.rows || [];
 
+  const bhldColumns = useMemo(() => {
+    const cols = currentBhldSheet.columns || currentBhldSheet.customTeams;
+    if (Array.isArray(cols) && cols.length > 0) {
+      return cols;
+    }
+    return DEFAULT_BHLD_COLUMNS;
+  }, [currentBhldSheet.columns, currentBhldSheet.customTeams]);
+
+  const [isBhldConfigModalOpen, setIsBhldConfigModalOpen] = useState(false);
+
   const today = new Date();
   const todayFormatted = `${String(today.getDate()).padStart(2, '0')}/${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
@@ -268,9 +288,7 @@ export default function TeamAttendanceView() {
     teamId: null,
     teamName: '',
     dateStr: '',
-    aoGS: '',
-    aoCN: '',
-    khac: ''
+    values: {}
   });
 
   const handleSaveAttendanceModal = () => {
@@ -611,57 +629,69 @@ export default function TeamAttendanceView() {
     });
   };
 
-  const validateBhld = (aoGS, aoCN, khac) => {
-    let globalImport_aoGS = 0;
-    let globalImport_aoCN = 0;
-    let globalImport_khac = 0;
+  const validateBhld = (currentValues) => {
+    for (const col of bhldColumns) {
+      let globalImport = 0;
+      let globalExport = 0;
 
-    let globalExport_aoGS = 0;
-    let globalExport_aoCN = 0;
-    let globalExport_khac = 0;
+      bhldRows.forEach((r) => {
+        const isCurrentRow = r.id === bhldModal.rowId;
+        const isNhap = bhldModal.teamId === 'nhap_tong_thau';
 
-    bhldRows.forEach(r => {
-      // Import
-      if (r.id === bhldModal.rowId && bhldModal.teamId === 'nhap_tong_thau') {
-        globalImport_aoGS += parseNumber(aoGS);
-        globalImport_aoCN += parseNumber(aoCN);
-        globalImport_khac += parseNumber(khac);
-      } else {
-        const nhap = r.bhld?.['nhap_tong_thau'] || {};
-        globalImport_aoGS += parseNumber(nhap.aoGS);
-        globalImport_aoCN += parseNumber(nhap.aoCN);
-        globalImport_khac += parseNumber(nhap.khac);
-      }
-
-      // Export
-      [...individualChtsGss.map(p => p.id), ...teamItems.map(t => t.id)].forEach(teamId => {
-        if (r.id === bhldModal.rowId && teamId === bhldModal.teamId) {
-          globalExport_aoGS += parseNumber(aoGS);
-          globalExport_aoCN += parseNumber(aoCN);
-          globalExport_khac += parseNumber(khac);
+        // Import
+        if (isCurrentRow && isNhap) {
+          globalImport += parseNumber(currentValues?.[col.id]);
         } else {
-          const teamBhld = r.bhld?.[teamId] || {};
-          globalExport_aoGS += parseNumber(teamBhld.aoGS);
-          globalExport_aoCN += parseNumber(teamBhld.aoCN);
-          globalExport_khac += parseNumber(teamBhld.khac);
+          const nhap = r.bhld?.['nhap_tong_thau'] || {};
+          globalImport += parseNumber(nhap[col.id]);
         }
+
+        // Export
+        [...individualChtsGss.map((p) => p.id), ...teamItems.map((t) => t.id)].forEach((teamId) => {
+          if (isCurrentRow && teamId === bhldModal.teamId) {
+            globalExport += parseNumber(currentValues?.[col.id]);
+          } else {
+            const teamBhld = r.bhld?.[teamId] || {};
+            globalExport += parseNumber(teamBhld[col.id]);
+          }
+        });
       });
-    });
 
-    if (globalImport_aoGS < globalExport_aoGS) {
-      openGlobalAlert(`Tổng xuất Áo GS toàn dự án (${globalExport_aoGS}) không được vượt quá tổng lượng nhập (${globalImport_aoGS})!`);
-      return false;
+      if (globalImport < globalExport) {
+        openGlobalAlert(
+          `Tổng xuất ${col.name} toàn dự án (${globalExport}) không được vượt quá tổng lượng nhập (${globalImport})!`
+        );
+        return false;
+      }
     }
-    if (globalImport_aoCN < globalExport_aoCN) {
-      openGlobalAlert(`Tổng xuất Áo CN toàn dự án (${globalExport_aoCN}) không được vượt quá tổng lượng nhập (${globalImport_aoCN})!`);
-      return false;
-    }
-    if (globalImport_khac < globalExport_khac) {
-      openGlobalAlert(`Tổng xuất Khác toàn dự án (${globalExport_khac}) không được vượt quá tổng lượng nhập (${globalImport_khac})!`);
-      return false;
-    }
-
     return true;
+  };
+
+  const handleAddBhldColumn = () => {
+    openGlobalPrompt('Nhập tên loại BHLĐ cần thêm (VD: Giày BH, Nón BH, Dây an toàn...):', (colName) => {
+      if (!colName || !colName.trim()) return;
+      const trimmed = colName.trim();
+      if (bhldColumns.some(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
+        openGlobalAlert(`Loại BHLĐ "${trimmed}" đã tồn tại!`);
+        return;
+      }
+      const newCol = {
+        id: `bhld_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+        name: trimmed
+      };
+      let next = [...bhldColumns];
+      const khacIdx = next.findIndex(c => c.id === 'khac');
+      if (khacIdx !== -1) {
+        next.splice(khacIdx, 0, newCol);
+      } else {
+        next.push(newCol);
+      }
+      setBhldColumns(selectedProject, next);
+    }, '', 'Thêm Loại Bảo Hộ Lao Động');
+  };
+
+  const handleSaveBhldColumns = (updatedCols) => {
+    setBhldColumns(selectedProject, updatedCols);
   };
 
   const handleEditBhldDate = (row) => {
@@ -687,9 +717,94 @@ export default function TeamAttendanceView() {
     }, 'Cảnh báo xóa dữ liệu');
   };
 
-  // Export to Excel (2 columns per team: Số CN | Vị trí thi công)
+  // Export to Excel
   const handleExportExcel = () => {
     try {
+      if (showBHLD) {
+        // Export BHLĐ table
+        const headerRow1 = ['NGÀY', 'NHẬP TỪ TỔNG THẦU'];
+        for (let i = 1; i < bhldColumns.length; i++) headerRow1.push('');
+
+        teamItems.forEach(item => {
+          headerRow1.push(item.name);
+          for (let i = 1; i < bhldColumns.length; i++) headerRow1.push('');
+        });
+
+        individualChtsGss.forEach(person => {
+          headerRow1.push(person.name.replace('\n', ' '));
+        });
+
+        const headerRow2 = [''];
+        bhldColumns.forEach(c => headerRow2.push(c.name));
+        teamItems.forEach(() => {
+          bhldColumns.forEach(c => headerRow2.push(c.name));
+        });
+        individualChtsGss.forEach(() => {
+          headerRow2.push('Áo GS');
+        });
+
+        const merges = [
+          { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+          { s: { r: 0, c: 1 }, e: { r: 0, c: bhldColumns.length } }
+        ];
+
+        let currC = 1 + bhldColumns.length;
+        teamItems.forEach(() => {
+          merges.push({ s: { r: 0, c: currC }, e: { r: 0, c: currC + bhldColumns.length - 1 } });
+          currC += bhldColumns.length;
+        });
+
+        const dataRows = [headerRow1, headerRow2];
+
+        bhldFilteredRows.forEach(r => {
+          const rowArr = [r.date || ''];
+          const nhap = r.bhld?.['nhap_tong_thau'] || {};
+          bhldColumns.forEach(c => rowArr.push(nhap[c.id] || ''));
+
+          teamItems.forEach(item => {
+            const teamBhld = r.bhld?.[item.id] || {};
+            bhldColumns.forEach(c => rowArr.push(teamBhld[c.id] || ''));
+          });
+
+          individualChtsGss.forEach(person => {
+            const pData = r.bhld?.[person.id] || {};
+            rowArr.push(pData.aoGS || '');
+          });
+
+          dataRows.push(rowArr);
+        });
+
+        // Footer CÒN LẠI
+        const remainArr = ['CÒN LẠI'];
+        bhldColumns.forEach(c => {
+          let totalNhap = 0, totalXuat = 0;
+          bhldRows.forEach(row => {
+            const nhap = row.bhld?.['nhap_tong_thau'] || {};
+            totalNhap += parseNumber(nhap[c.id]);
+            [...individualChtsGss.map(p => p.id), ...teamItems.map(t => t.id)].forEach(teamId => {
+              const teamBhld = row.bhld?.[teamId] || {};
+              totalXuat += parseNumber(teamBhld[c.id]);
+            });
+          });
+          remainArr.push(totalNhap - totalXuat);
+        });
+
+        teamItems.forEach(() => {
+          bhldColumns.forEach(() => remainArr.push('-'));
+        });
+        individualChtsGss.forEach(() => remainArr.push('-'));
+
+        dataRows.push(remainArr);
+
+        const worksheet = XLSX.utils.aoa_to_sheet(dataRows);
+        worksheet['!merges'] = merges;
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Bảo Hộ Lao Động');
+        XLSX.writeFile(workbook, `Bao_Ho_Lao_Dong_${selectedProject}.xlsx`);
+        return;
+      }
+
+      // Regular attendance export
       const headerRow1 = ['NGÀY'];
       const headerRow2 = [''];
       const merges = [{ s: { r: 0, c: 0 }, e: { r: 1, c: 0 } }]; // Merge NGÀY vertically
@@ -804,6 +919,29 @@ export default function TeamAttendanceView() {
                 <Plus className="h-4 w-4" />
                 Thêm dòng
               </button>
+
+              {showBHLD && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleAddBhldColumn}
+                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition active:scale-95 shadow-xs shrink-0 whitespace-nowrap"
+                    title="Thêm cột loại bảo hộ lao động mới"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Thêm cột
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsBhldConfigModalOpen(true)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100 transition shadow-xs shrink-0 whitespace-nowrap"
+                    title="Cấu hình danh sách các loại bảo hộ lao động"
+                  >
+                    <SlidersHorizontal className="h-4 w-4 text-amber-700" />
+                    Cấu hình BHLĐ
+                  </button>
+                </>
+              )}
 
 
               <button
@@ -1188,15 +1326,15 @@ export default function TeamAttendanceView() {
               NGÀY<br/>
               <span className="text-[10px] opacity-80 font-medium">(DD/MM/YYYY)</span>
             </th>
-            <th colSpan={3} className="border border-slate-800 bg-slate-200 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
+            <th colSpan={bhldColumns.length} className="border border-slate-800 bg-slate-200 px-2 py-2 font-bold text-slate-900 text-center leading-tight">
               NHẬP TỪ TỔNG THẦU
             </th>
             {teamItems.map((item, index) => {
               const colorClass = item.isInactive ? 'bg-slate-500 text-white' : headerColors[index % headerColors.length];
               return (
-                <th key={item.id} colSpan={3} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
-                  <div className={`w-full h-full min-w-[240px] p-2 text-center font-bold uppercase text-xs tracking-wide min-h-[38px] flex flex-col items-center justify-center ${colorClass.split(' ')[1]}`}>
-                    <span>{item.name}</span>
+                <th key={item.id} colSpan={bhldColumns.length} className={`border border-slate-800 p-0 ${colorClass.split(' ')[0]}`}>
+                  <div className="w-full h-full p-2 text-center font-bold uppercase text-xs tracking-wide min-h-[38px] flex flex-col items-center justify-center" style={{ minWidth: `${Math.max(bhldColumns.length * 80, 200)}px` }}>
+                    <span className={colorClass.split(' ')[1]}>{item.name}</span>
                   </div>
                 </th>
               );
@@ -1212,25 +1350,37 @@ export default function TeamAttendanceView() {
             </th>
           </tr>
           <tr className="bg-slate-100 text-slate-800 text-[11px] font-bold uppercase tracking-wider">
-            <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo GS</th>
-            <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Áo CN</th>
-            <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">Khác</th>
+            {bhldColumns.map(col => (
+              <th key={`head-nhap-${col.id}`} className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-200 text-slate-800 text-center">
+                {col.name}
+              </th>
+            ))}
             {teamItems.map((item) => (
               <React.Fragment key={`bhld-sub-${item.id}`}>
-                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-slate-100 text-slate-800 text-center">Áo GS</th>
-                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-indigo-50 text-indigo-900 text-center">Áo CN</th>
-                <th className="border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] bg-amber-50 text-amber-900 text-center">Khác</th>
+                {bhldColumns.map((col, idx) => {
+                  let subBg = 'bg-slate-100 text-slate-800';
+                  if (col.id === 'aoCN') subBg = 'bg-indigo-50 text-indigo-900';
+                  else if (col.id === 'khac') subBg = 'bg-amber-50 text-amber-900';
+                  else if (idx % 2 === 1) subBg = 'bg-emerald-50 text-emerald-900';
+                  return (
+                    <th key={`bhld-sub-${item.id}-${col.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${subBg} text-center`}>
+                      {col.name}
+                    </th>
+                  );
+                })}
               </React.Fragment>
             ))}
             {individualChtsGss.map((person) => (
-              <th key={`sub-${person.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${person.bgColor.replace('50', '100')} text-slate-800 text-center`}>Áo GS</th>
+              <th key={`sub-${person.id}`} className={`border border-slate-800 py-1.5 px-2 w-[80px] min-w-[80px] ${person.bgColor.replace('50', '100')} text-slate-800 text-center`}>
+                Áo GS
+              </th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-800">
           {bhldFilteredRows.length === 0 ? (
             <tr>
-              <td colSpan={teamItems.length * 3 + individualChtsGss.length + 5} className="py-12 text-slate-400 font-semibold text-xs text-center">
+              <td colSpan={teamItems.length * bhldColumns.length + individualChtsGss.length + bhldColumns.length + 2} className="py-12 text-slate-400 font-semibold text-xs text-center">
                 Chưa có dữ liệu BHLĐ. Bấm <strong className="text-emerald-600">"+ Thêm dòng"</strong> để bắt đầu.
               </td>
             </tr>
@@ -1251,7 +1401,7 @@ export default function TeamAttendanceView() {
                   )}
                 </td>
                 {(() => {
-                  const nhap = row.bhld?.['nhap_tong_thau'] || { aoGS: '', aoCN: '', khac: '' };
+                  const nhap = row.bhld?.['nhap_tong_thau'] || {};
                   const handleEditNhap = () => {
                     setBhldModal({
                       isOpen: true,
@@ -1259,95 +1409,79 @@ export default function TeamAttendanceView() {
                       teamId: 'nhap_tong_thau',
                       teamName: 'NHẬP TỪ TỔNG THẦU',
                       dateStr: row.date,
-                      aoGS: nhap.aoGS || '',
-                      aoCN: nhap.aoCN || '',
-                      khac: nhap.khac || ''
+                      values: { ...nhap }
                     });
                   };
                   return (
                     <React.Fragment>
-                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.aoGS ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
-                        <div className={`font-bold text-sm ${nhap.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.aoGS || '-'}</div>
-                      </td>
-                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.aoCN ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
-                        <div className={`font-bold text-sm ${nhap.aoCN ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.aoCN || '-'}</div>
-                      </td>
-                      <td onClick={handleEditNhap} className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${nhap.khac ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}>
-                        <div className={`font-bold text-xs break-words ${nhap.khac ? 'text-indigo-900' : 'text-slate-900'}`}>{nhap.khac || '-'}</div>
-                      </td>
+                      {bhldColumns.map(col => {
+                        const val = nhap[col.id] || '';
+                        return (
+                          <td
+                            key={`nhap-${col.id}`}
+                            onClick={handleEditNhap}
+                            className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] cursor-pointer ${val ? 'bg-indigo-100 hover:bg-indigo-200' : 'bg-slate-100 hover:bg-slate-200'}`}
+                          >
+                            <div className={`font-bold text-sm ${val ? 'text-indigo-900' : 'text-slate-900'}`}>{val || '-'}</div>
+                          </td>
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })()}
 
                 {teamItems.map((item) => {
-                  const bhld = row.bhld?.[item.id] || { aoGS: '', aoCN: '', khac: '' };
+                  const bhld = row.bhld?.[item.id] || {};
                   const isInactive = item.isInactive;
                   return (
                     <React.Fragment key={`bhld-cell-${item.id}`}>
-                      <td
-                        onClick={() => {
-                          if (isInactive) return;
-                          setBhldModal({
-                            isOpen: true,
-                            rowId: row.id,
-                            teamId: item.id,
-                            teamName: item.name,
-                            dateStr: row.date,
-                            aoGS: bhld.aoGS || '',
-                            aoCN: bhld.aoCN || '',
-                            khac: bhld.khac || ''
-                          });
-                        }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.aoGS ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-white cursor-pointer hover:bg-amber-50')}`}
-                      >
-                        <div className={`font-bold text-sm ${bhld.aoGS ? 'text-indigo-900' : 'text-slate-900'}`}>{bhld.aoGS || '-'}</div>
-                      </td>
-                      <td
-                        onClick={() => {
-                          if (isInactive) return;
-                          setBhldModal({
-                            isOpen: true,
-                            rowId: row.id,
-                            teamId: item.id,
-                            teamName: item.name,
-                            dateStr: row.date,
-                            aoGS: bhld.aoGS || '',
-                            aoCN: bhld.aoCN || '',
-                            khac: bhld.khac || ''
-                          });
-                        }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.aoCN ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50')}`}
-                      >
-                        <div className={`font-bold text-sm ${bhld.aoCN ? 'text-indigo-900' : 'text-indigo-900'}`}>{bhld.aoCN || '-'}</div>
-                      </td>
-                      <td
-                        onClick={() => {
-                          if (isInactive) return;
-                          setBhldModal({
-                            isOpen: true,
-                            rowId: row.id,
-                            teamId: item.id,
-                            teamName: item.name,
-                            dateStr: row.date,
-                            aoGS: bhld.aoGS || '',
-                            aoCN: bhld.aoCN || '',
-                            khac: bhld.khac || ''
-                          });
-                        }}
-                        className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${isInactive ? 'bg-slate-200 opacity-90' : (bhld.khac ? 'bg-indigo-100 cursor-pointer hover:bg-indigo-200' : 'bg-amber-50/20 cursor-pointer hover:bg-amber-50')}`}
-                      >
-                        <div className={`font-bold text-xs break-words ${bhld.khac ? 'text-indigo-900' : 'text-amber-900'}`}>{bhld.khac || '-'}</div>
-                      </td>
+                      {bhldColumns.map((col) => {
+                        const val = bhld[col.id] || '';
+                        let cellBg = 'bg-white cursor-pointer hover:bg-amber-50';
+                        if (isInactive) {
+                          cellBg = 'bg-slate-200 opacity-90';
+                        } else if (val) {
+                          cellBg = 'bg-indigo-100 cursor-pointer hover:bg-indigo-200';
+                        } else if (col.id === 'aoCN') {
+                          cellBg = 'bg-indigo-50/20 cursor-pointer hover:bg-amber-50';
+                        } else if (col.id === 'khac') {
+                          cellBg = 'bg-amber-50/20 cursor-pointer hover:bg-amber-50';
+                        }
+
+                        return (
+                          <td
+                            key={`cell-${item.id}-${col.id}`}
+                            onClick={() => {
+                              if (isInactive) return;
+                              setBhldModal({
+                                isOpen: true,
+                                rowId: row.id,
+                                teamId: item.id,
+                                teamName: item.name,
+                                dateStr: row.date,
+                                values: { ...bhld }
+                              });
+                            }}
+                            className={`border border-slate-800 p-1.5 text-center transition w-[80px] min-w-[80px] ${cellBg}`}
+                          >
+                            <div className={`font-bold text-sm ${val ? 'text-indigo-900' : 'text-slate-900'}`}>{val || '-'}</div>
+                          </td>
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })}
 
                 {individualChtsGss.map((person) => {
-                  const pData = row.bhld?.[person.id] || { aoGS: '' };
+                  const pData = row.bhld?.[person.id] || {};
                   const handleEditPerson = () => {
                     setBhldModal({
-                      isOpen: true, rowId: row.id, teamId: person.id, teamName: person.name.replace('\n', ' - '), dateStr: row.date,
-                      aoGS: pData.aoGS || '', aoCN: '', khac: ''
+                      isOpen: true,
+                      rowId: row.id,
+                      teamId: person.id,
+                      teamName: person.name.replace('\n', ' - '),
+                      dateStr: row.date,
+                      values: { ...pData }
                     });
                   };
                   return (
@@ -1377,47 +1511,33 @@ export default function TeamAttendanceView() {
               <td className="border border-slate-800 p-2.5 font-extrabold text-xs text-amber-900 text-center uppercase tracking-wider">
                 CÒN LẠI
               </td>
-              {(() => {
-                let totalNhapGS = 0, totalNhapCN = 0, totalNhapKhac = 0;
-                let totalXuatGS = 0, totalXuatCN = 0, totalXuatKhac = 0;
+              {bhldColumns.map((col) => {
+                let totalNhap = 0;
+                let totalXuat = 0;
 
                 bhldRows.forEach(row => {
                   const nhap = row.bhld?.['nhap_tong_thau'] || {};
-                  totalNhapGS += parseNumber(nhap.aoGS);
-                  totalNhapCN += parseNumber(nhap.aoCN);
-                  totalNhapKhac += parseNumber(nhap.khac);
+                  totalNhap += parseNumber(nhap[col.id]);
 
                   [...individualChtsGss.map(p => p.id), ...teamItems.map(t => t.id)].forEach(teamId => {
                     const teamBhld = row.bhld?.[teamId] || {};
-                    totalXuatGS += parseNumber(teamBhld.aoGS);
-                    totalXuatCN += parseNumber(teamBhld.aoCN);
-                    totalXuatKhac += parseNumber(teamBhld.khac);
+                    totalXuat += parseNumber(teamBhld[col.id]);
                   });
                 });
 
-                const remainGS = totalNhapGS - totalXuatGS;
-                const remainCN = totalNhapCN - totalXuatCN;
-                const remainKhac = totalNhapKhac - totalXuatKhac;
+                const remain = totalNhap - totalXuat;
 
                 return (
-                  <React.Fragment>
-                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
-                      {remainGS}
-                    </td>
-                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
-                      {remainCN}
-                    </td>
-                    <td className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
-                      {remainKhac}
-                    </td>
-                  </React.Fragment>
+                  <td key={`rem-${col.id}`} className="border border-slate-800 p-2 text-center text-indigo-700 font-black text-sm">
+                    {remain}
+                  </td>
                 );
-              })()}
+              })}
               {teamItems.map((item) => (
                 <React.Fragment key={`tot-bhld-${item.id}`}>
-                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
-                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
-                  <td className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+                  {bhldColumns.map((col) => (
+                    <td key={`tot-bhld-${item.id}-${col.id}`} className="border border-slate-800 bg-slate-50 p-2 text-center text-slate-400 font-bold text-xs">-</td>
+                  ))}
                 </React.Fragment>
               ))}
               {individualChtsGss.map((person) => (
@@ -1525,8 +1645,8 @@ export default function TeamAttendanceView() {
             {/* Modal BHLĐ */}
       {bhldModal.isOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 w-full max-w-md animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl border border-gray-100 w-full max-w-md animate-in fade-in zoom-in duration-150 max-h-[90vh] flex flex-col">
+            <div className="flex items-center gap-3 mb-4 border-b border-gray-100 pb-3 shrink-0">
               <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
                 <HardHat className="w-5 h-5" />
               </div>
@@ -1538,73 +1658,47 @@ export default function TeamAttendanceView() {
               </div>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                  Áo Giám Sát (Áo GS)
-                </label>
-                <input
-                  type="text"
-                  value={bhldModal.aoGS}
-                  onChange={(e) => setBhldModal(prev => ({ ...prev, aoGS: e.target.value }))}
-                  placeholder="Nhập SL hoặc ghi chú..."
-                  className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      if (bhldModal.teamId?.startsWith('cht_') || bhldModal.teamId?.startsWith('gsht_')) {
-                        if (!validateBhld(bhldModal.aoGS, bhldModal.aoCN, bhldModal.khac)) return;
-                        updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
-                        updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
-                        updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'khac', bhldModal.khac);
-                        setBhldModal(prev => ({ ...prev, isOpen: false }));
-                      }
-                    }
-                  }}
-                  autoFocus
-                />
-              </div>
+            <div className="space-y-3.5 overflow-y-auto pr-1 flex-1">
+              {bhldColumns.map((col, idx) => {
+                const isIndividual = bhldModal.teamId?.startsWith('cht_') || bhldModal.teamId?.startsWith('gsht_');
+                if (isIndividual && col.id !== 'aoGS') return null;
 
-              {(!bhldModal.teamId?.startsWith('cht_') && !bhldModal.teamId?.startsWith('gsht_')) && (
-                <>
-                  <div>
+                return (
+                  <div key={col.id}>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                      Áo Công Nhân (Áo CN)
+                      {col.name}
                     </label>
                     <input
                       type="text"
-                      value={bhldModal.aoCN}
-                      onChange={(e) => setBhldModal(prev => ({ ...prev, aoCN: e.target.value }))}
-                      placeholder="Nhập SL hoặc ghi chú..."
-                      className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wide">
-                      Khác
-                    </label>
-                    <input
-                      type="text"
-                      value={bhldModal.khac}
-                      onChange={(e) => setBhldModal(prev => ({ ...prev, khac: e.target.value }))}
-                      placeholder="Mũ nón, giày, dây đai..."
-                      className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
+                      value={bhldModal.values?.[col.id] || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBhldModal(prev => ({
+                          ...prev,
+                          values: {
+                            ...(prev.values || {}),
+                            [col.id]: val
+                          }
+                        }));
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                          if (!validateBhld(bhldModal.aoGS, bhldModal.aoCN, bhldModal.khac)) return;
-                          updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
-                          updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
-                          updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'khac', bhldModal.khac);
+                          const curValues = bhldModal.values || {};
+                          if (!validateBhld(curValues)) return;
+                          updateBhldRowTeamValues(selectedProject, bhldModal.rowId, bhldModal.teamId, curValues);
                           setBhldModal(prev => ({ ...prev, isOpen: false }));
                         }
                       }}
+                      placeholder={`Nhập SL ${col.name}...`}
+                      className="w-full px-4 py-2.5 rounded-2xl border border-slate-300 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-50 focus:bg-white transition"
+                      autoFocus={idx === 0}
                     />
                   </div>
-                </>
-              )}
+                );
+              })}
             </div>
 
-            <div className="flex items-center justify-end gap-3 mt-6 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-end gap-3 mt-6 pt-3 border-t border-slate-100 shrink-0">
               <button
                 type="button"
                 onClick={() => setBhldModal(prev => ({ ...prev, isOpen: false }))}
@@ -1615,10 +1709,9 @@ export default function TeamAttendanceView() {
               <button
                 type="button"
                 onClick={() => {
-                  if (!validateBhld(bhldModal.aoGS, bhldModal.aoCN, bhldModal.khac)) return;
-                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoGS', bhldModal.aoGS);
-                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'aoCN', bhldModal.aoCN);
-                  updateBhldCellNew(selectedProject, bhldModal.rowId, bhldModal.teamId, 'khac', bhldModal.khac);
+                  const curValues = bhldModal.values || {};
+                  if (!validateBhld(curValues)) return;
+                  updateBhldRowTeamValues(selectedProject, bhldModal.rowId, bhldModal.teamId, curValues);
                   setBhldModal(prev => ({ ...prev, isOpen: false }));
                 }}
                 className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-500/20 transition active:scale-95"
@@ -1734,6 +1827,13 @@ export default function TeamAttendanceView() {
         </div>
       )}
       <AttendanceReportModal isOpen={isAttendanceReportModalOpen} onClose={() => setIsAttendanceReportModalOpen(false)} rows={filteredRows} materialItems={teamItems} />
+      <BhldConfigModal
+        isOpen={isBhldConfigModalOpen}
+        onClose={() => setIsBhldConfigModalOpen(false)}
+        projectName={selectedProject}
+        columns={bhldColumns}
+        onSave={handleSaveBhldColumns}
+      />
     </div>
   );
 }

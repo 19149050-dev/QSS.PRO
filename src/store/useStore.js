@@ -142,6 +142,44 @@ export const useStore = create(
         });
         get().syncBhldSheetToSupabase(projectName);
       },
+      setBhldColumns: (projectName, columns) => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const nextSheet = {
+            ...current,
+            columns,
+            customTeams: columns
+          };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
+      updateBhldRowTeamValues: (projectName, rowId, teamKey, valuesObj) => {
+        set((state) => {
+          const current = state.bhldSheets[projectName] || { rows: [] };
+          const nextRows = (current.rows || []).map(row => {
+            if (row.id !== rowId) return row;
+            const newBhld = { ...(row.bhld || {}) };
+            const teamBhld = { ...(newBhld[teamKey] || {}) };
+            Object.assign(teamBhld, valuesObj);
+            newBhld[teamKey] = teamBhld;
+            return { ...row, bhld: newBhld };
+          });
+          const nextSheet = { ...current, rows: nextRows };
+          return {
+            bhldSheets: {
+              ...state.bhldSheets,
+              [projectName]: nextSheet
+            }
+          };
+        });
+        get().syncBhldSheetToSupabase(projectName);
+      },
       syncBhldSheetToSupabase: async (projectName) => {
         const { bhldSheets } = get();
         if (!supabase) return;
@@ -158,10 +196,11 @@ export const useStore = create(
             console.error('Error fetching bhld_sheet:', error);
             return;
           }
+          const customTeamsData = sheet.columns || sheet.customTeams || [];
           if (data) {
             await supabase.from('bhld_sheets').update({
               rows: sheet.rows || [],
-              custom_teams: sheet.customTeams || [],
+              custom_teams: customTeamsData,
               inactive_teams: sheet.inactiveTeams || [],
               updated_at: new Date().toISOString()
             }).eq('project_name', projectName);
@@ -169,7 +208,7 @@ export const useStore = create(
             await supabase.from('bhld_sheets').insert({
               project_name: projectName,
               rows: sheet.rows || [],
-              custom_teams: sheet.customTeams || [],
+              custom_teams: customTeamsData,
               inactive_teams: sheet.inactiveTeams || []
             });
           }
@@ -458,7 +497,7 @@ inHouseSheets: {},
         if (!order) return state;
 
         const projectName = order.projectName;
-        const currentSheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
+        const currentSheet = state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, priceMap: {}, ipcMap: {} };
         const materialItems = currentSheet.items || [];
         
         let newDate = '';
@@ -1174,7 +1213,7 @@ inHouseSheets: {},
       },
       getMaterialSheet: (projectName) => {
         const state = get();
-        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, ipcMap: {} };
+        return state.materialSheets[projectName] || { items: [], rows: [], exportRows: [], dinhMucMap: {}, unitMap: {}, priceMap: {}, ipcMap: {} };
       },
       setMaterialSheet: (projectName, sheetData, immediate = false) => {
         set((state) => ({
@@ -2489,10 +2528,13 @@ inHouseSheets: {},
               const rawDinhMuc = s.dinh_muc_map || {};
               const extractedDinhMuc = {};
               const extractedUnit = {};
+              const extractedPrice = {};
               
               Object.keys(rawDinhMuc).forEach(k => {
                 if (k.endsWith('__unit')) {
                   extractedUnit[k.replace('__unit', '')] = rawDinhMuc[k];
+                } else if (k.endsWith('__price')) {
+                  extractedPrice[k.replace('__price', '')] = rawDinhMuc[k];
                 } else {
                   extractedDinhMuc[k] = rawDinhMuc[k];
                 }
@@ -2504,6 +2546,7 @@ inHouseSheets: {},
                 exportRows: s.export_rows || [],
                 dinhMucMap: { ...(localSheet.dinhMucMap || {}), ...extractedDinhMuc },
                 unitMap: { ...(localSheet.unitMap || {}), ...(s.unit_map || {}), ...extractedUnit },
+                priceMap: { ...(localSheet.priceMap || {}), ...extractedPrice },
                 ipcMap: { ...(localSheet.ipcMap || {}), ...(s.ipc_map || {}) }
               };
             });
@@ -2546,9 +2589,11 @@ inHouseSheets: {},
           if (!bhldError && bhldData) {
             const bhlds = {};
             bhldData.forEach(s => {
+              const cols = Array.isArray(s.custom_teams) ? s.custom_teams : [];
               bhlds[s.project_name] = {
                 rows: s.rows || [],
-                customTeams: s.custom_teams || [],
+                columns: cols,
+                customTeams: cols,
                 inactiveTeams: s.inactive_teams || []
               };
             });
@@ -2756,6 +2801,11 @@ inHouseSheets: {},
           try {
             // Merge unitMap into dinh_muc_map to avoid schema changes
             const mergedDinhMucMap = { ...(sheet.dinhMucMap || {}) };
+            if (sheet.priceMap) {
+              Object.keys(sheet.priceMap).forEach(key => {
+                mergedDinhMucMap[`${key}__price`] = sheet.priceMap[key];
+              });
+            }
             if (sheet.unitMap) {
               Object.keys(sheet.unitMap).forEach(key => {
                 mergedDinhMucMap[`${key}__unit`] = sheet.unitMap[key];

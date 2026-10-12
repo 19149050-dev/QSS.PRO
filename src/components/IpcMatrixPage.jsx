@@ -1,7 +1,7 @@
 'use client';
 
-import { Fragment, useMemo, useState, useRef } from 'react';
-import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck, FileBarChart } from 'lucide-react';
+import { Fragment, useMemo, useState, useRef, useEffect } from 'react';
+import { ClipboardList, FileClock, Layers3, Boxes, Plus, RotateCcw, Trash2, FileDown, Printer, X, SlidersHorizontal, UserCheck, FileBarChart, ChevronDown, AlertTriangle, PackageCheck } from 'lucide-react';
 import { useStore, useAllowedProjects } from '@/store/useStore';
 import * as XLSX from 'xlsx-js-style';
 import PaymentMatrix, { PaymentMatrixFilters } from '@/components/PaymentMatrix';
@@ -11,6 +11,7 @@ import ExportReportModal from '@/components/Modals/ExportReportModal';
 import EnterPOModal from '@/components/Modals/EnterPOModal';
 import OrderMaterialModal from '@/components/Modals/OrderMaterialModal';
 import AttendanceReportModal from '@/components/Modals/AttendanceReportModal';
+import MaterialReportModal from '@/components/Modals/MaterialReportModal';
 
 const TAB_ITEMS = {
   planned: { label: 'IPC Dự kiến', icon: FileClock, type: 'team', hint: 'Kế hoạch thanh toán thầu phụ' },
@@ -55,8 +56,11 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [isDinhMucModalOpen, setIsDinhMucModalOpen] = useState(false);
   const [isAttendanceReportModalOpen, setIsAttendanceReportModalOpen] = useState(false);
+  const [isMaterialReportModalOpen, setIsMaterialReportModalOpen] = useState(false);
+
   const [dinhMucDraft, setDinhMucDraft] = useState({});
   const [unitDraft, setUnitDraft] = useState({});
+  const [priceDraft, setPriceDraft] = useState({});
   const [selectedRow, setSelectedRow] = useState(null);
   const [selectedItem, setSelectedItem] = useState(null);
   const [selectedIpcFilter, setSelectedIpcFilter] = useState('ALL');
@@ -579,222 +583,9 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
 
   const remainingByMaterial = (itemId) => parseNumber(orderTotals[itemId]) - parseNumber(totals[itemId]);
 
-  const handleReportPO = () => {
-    const shortages = {};
-    const NO_PO_KEY = 'CHƯA GẮN MÃ PO';
-    
-    uniquePOs.forEach(po => shortages[po] = []);
-    shortages[NO_PO_KEY] = [];
-    
-    materialItems.forEach(item => {
-      let totalOrdered = 0;
-      let totalReceived = 0;
-      const poOrders = {};
-      const poReceived = {};
-      
-      (currentSheet.rows || []).forEach(r => {
-         const val = r.values?.[item.id];
-         if (val) {
-           const strOrder = String(val.order || '');
-           const strReceived = String(val.received || '');
-           
-           const ordNum = parseNumber(strOrder);
-           if (ordNum > 0) {
-             const matchOrder = strOrder.match(/\((PO.*?)\)/i);
-             if (matchOrder) {
-               const po = matchOrder[1].toUpperCase();
-               poOrders[po] = (poOrders[po] || 0) + ordNum;
-             }
-             totalOrdered += ordNum;
-           }
-           
-           const recNum = parseNumber(strReceived);
-           if (recNum > 0) {
-             const matchReceived = strReceived.match(/\((PO.*?)\)/i);
-             if (matchReceived) {
-               const po = matchReceived[1].toUpperCase();
-               poReceived[po] = (poReceived[po] || 0) + recNum;
-             }
-             totalReceived += recNum;
-           }
-         }
-      });
-      
-      let sumPoShortages = 0;
-      const materialPoShorts = [];
-      uniquePOs.forEach(po => {
-        const ord = poOrders[po] || 0;
-        const rec = poReceived[po] || 0;
-        const short = ord - rec;
-        if (short > 0) {
-          materialPoShorts.push({ po, ord, rec, short, isOffset: false });
-          sumPoShortages += short;
-        }
-      });
-      
-      const totalShort = totalOrdered - totalReceived;
-      
-      if (totalShort < sumPoShortages) {
-         let surplus = sumPoShortages - Math.max(0, totalShort);
-         for (let i = 0; i < materialPoShorts.length; i++) {
-            if (surplus <= 0) break;
-            const s = materialPoShorts[i];
-            if (s.short <= surplus) {
-               surplus -= s.short;
-               s.short = 0;
-               s.isOffset = true;
-            } else {
-               s.short -= surplus;
-               surplus = 0;
-               s.isOffset = true;
-            }
-         }
-         
-         // Recalculate sumPoShortages after distribution
-         sumPoShortages = materialPoShorts.reduce((sum, s) => sum + s.short, 0);
-      }
-      
-      materialPoShorts.forEach(s => {
-         if (s.short > 0) {
-            shortages[s.po].push({
-               materialName: item.name || 'Chưa đặt tên',
-               ordered: s.ord,
-               received: s.ord - s.short, // Adjusted received amount
-               shortage: s.short,
-               isOffset: s.isOffset
-            });
-         }
-      });
-      
-      if (totalShort > sumPoShortages) {
-         shortages[NO_PO_KEY].push({
-            materialName: item.name || 'Chưa đặt tên',
-            ordered: totalOrdered,
-            received: totalReceived, 
-            shortage: totalShort - sumPoShortages
-         });
-      }
-    });
-    
-    let reportNode;
-    // Get POs that actually have shortages, NO_PO_KEY goes to the bottom
-    const poKeys = Object.keys(shortages).filter(k => shortages[k].length > 0).sort((a, b) => {
-      if (a === NO_PO_KEY) return 1;
-      if (b === NO_PO_KEY) return -1;
-      return a.localeCompare(b);
-    });
-    
-    const handlePrintReport = () => {
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Báo cáo PO chưa về đủ</title>
-            <style>
-              @page { size: A4; margin: 20mm; }
-              body { font-family: 'Segoe UI', Arial, sans-serif; padding: 0; color: #111; font-size: 16px; }
-              table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-              th, td { border: 1px solid #94a3b8; padding: 12px 16px; text-align: left; }
-              th { background-color: #f1f5f9; color: #334155; text-transform: uppercase; font-size: 14px; font-weight: bold; }
-              .text-right { text-align: right; }
-              .text-red { color: #dc2626; font-weight: bold; }
-              .text-green { color: #16a34a; }
-              .align-middle { vertical-align: middle; }
-              .bg-gray { background-color: #f8fafc; font-weight: bold; }
-              .bg-amber { background-color: #fef3c7 !important; }
-              h2 { color: #0f172a; margin-bottom: 8px; font-size: 24px; text-align: center; text-transform: uppercase; }
-              .subtitle { color: #475569; font-size: 14px; margin-bottom: 30px; text-align: center; font-style: italic; }
-            </style>
-          </head>
-          <body>
-            <h2>BÁO CÁO PO CHƯA VỀ ĐỦ VẬT TƯ</h2>
-            <div class="subtitle">Ngày xuất: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}</div>
-            <table>
-              <thead>
-                <tr>
-                  <th style="width: 15%">Mã PO</th>
-                  <th style="width: 40%">Tên vật tư</th>
-                  <th class="text-right" style="width: 15%">Yêu cầu</th>
-                  <th class="text-right" style="width: 15%">Đã nhận</th>
-                  <th class="text-right" style="width: 15%">Thiếu</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${poKeys.filter(po => shortages[po].length > 0).map(po => {
-                  return shortages[po].map((s, idx) => `
-                    <tr class="${s.isOffset ? 'bg-amber' : ''}">
-                      ${idx === 0 ? `<td rowspan="${shortages[po].length}" class="align-middle bg-gray text-center">${po}</td>` : ''}
-                      <td>${s.materialName}</td>
-                      <td class="text-right">${s.ordered.toLocaleString('vi-VN')}</td>
-                      <td class="text-right text-green">${s.received.toLocaleString('vi-VN')}</td>
-                      <td class="text-right text-red">${s.shortage.toLocaleString('vi-VN')}</td>
-                    </tr>
-                  `).join('')
-                }).join('')}
-              </tbody>
-            </table>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 300);
-    };
-
-    if (poKeys.some(po => shortages[po].length > 0)) {
-      reportNode = (
-        <div className="w-full">
-          <div className="flex justify-end mb-3 pb-2">
-            <button 
-              onClick={handlePrintReport}
-              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-              In báo cáo
-            </button>
-          </div>
-          <div className="max-h-[60vh] overflow-y-auto w-full custom-scrollbar border border-slate-200 rounded-xl">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-100 border-b border-slate-200 text-slate-600 text-[11px] font-bold uppercase tracking-wider sticky top-0 z-10 shadow-sm">
-                <tr>
-                  <th className="px-4 py-2.5 border-r border-slate-200">Mã PO</th>
-                  <th className="px-4 py-2.5 border-r border-slate-200">Tên vật tư</th>
-                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Yêu cầu</th>
-                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Đã nhận</th>
-                  <th className="px-4 py-2.5 text-right text-red-600">Thiếu</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {poKeys.filter(po => shortages[po].length > 0).map(po => {
-                  return shortages[po].map((s, idx) => (
-                    <tr key={`${po}-${idx}`} className={`transition-colors ${s.isOffset ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-slate-50/50'}`}>
-                      {idx === 0 && (
-                        <td rowSpan={shortages[po].length} className="px-4 py-3 font-bold text-indigo-800 bg-indigo-50/30 border-r border-slate-200 align-middle text-center">
-                          {po}
-                        </td>
-                      )}
-                      <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{s.materialName}</td>
-                      <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{s.ordered.toLocaleString('vi-VN')}</td>
-                      <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{s.received.toLocaleString('vi-VN')}</td>
-                      <td className="px-4 py-3 text-right font-bold text-red-600 bg-red-50/30">{s.shortage.toLocaleString('vi-VN')}</td>
-                    </tr>
-                  ));
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      );
-    }
-    
-    if (poKeys.length === 0) {
-      openGlobalAlert('Tuyệt vời! Tất cả các vật tư đều đã được nhận đủ.', 'Báo cáo vật tư');
-    } else {
-      openGlobalAlert(reportNode, 'Danh sách vật tư chưa về đủ', { maxWidth: 'sm:max-w-4xl' });
-    }
+  const handleReportPO = (tab = 'shortage') => {
+    setMaterialReportTab(tab);
+    setIsMaterialReportModalOpen(true);
   };
 
   const handleExportExcel = () => {
@@ -885,6 +676,30 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
     window.print();
   };
 
+  const handleOpenDinhMucModal = () => {
+    const initialDraft = { ...(currentSheet.dinhMucMap || {}) };
+    const initialUnitDraft = { ...(currentSheet.unitMap || {}) };
+    const initialPriceDraft = { ...(currentSheet.priceMap || {}) };
+    materialItems.forEach(item => {
+      if (initialDraft[item.id] === undefined || initialDraft[item.id] === '') {
+        const defaultVal = getDefaultDinhMuc(item.name);
+        if (defaultVal) {
+          initialDraft[item.id] = defaultVal;
+        }
+      }
+      if (initialUnitDraft[item.id] === undefined) {
+        initialUnitDraft[item.id] = '';
+      }
+      if (initialPriceDraft[item.id] === undefined) {
+        initialPriceDraft[item.id] = '';
+      }
+    });
+    setDinhMucDraft(initialDraft);
+    setUnitDraft(initialUnitDraft);
+    setPriceDraft(initialPriceDraft);
+    setIsDinhMucModalOpen(true);
+  };
+
   return (
     <div className="pb-12">
       {activeTab.type === 'materials' && (
@@ -953,6 +768,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                           <FileBarChart className="h-3 w-3 sm:h-4 sm:w-4" />
                           Báo cáo
                         </button>
+                        {isAdminOrQS && (
+                          <button
+                            type="button"
+                            onClick={handleOpenDinhMucModal}
+                            className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-bold text-indigo-700 hover:bg-indigo-100 shadow-sm transition whitespace-nowrap"
+                          >
+                            <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
+                            CẤU HÌNH VẬT TƯ
+                          </button>
+                        )}
                       </>
                     ) : (
                       <button
@@ -1019,7 +844,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                         {!isGiamSat && (
                           <button
                             type="button"
-                            onClick={handleReportPO}
+                            onClick={() => setIsMaterialReportModalOpen(true)}
                             className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-purple-500 bg-white px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-semibold text-purple-600 hover:bg-purple-50 shadow-sm whitespace-nowrap"
                           >
                             BÁO CÁO
@@ -1028,24 +853,7 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
                         {isAdminOrQS && (
                           <button
                             type="button"
-                            onClick={() => {
-                              const initialDraft = { ...(currentSheet.dinhMucMap || {}) };
-                              const initialUnitDraft = { ...(currentSheet.unitMap || {}) };
-                              materialItems.forEach(item => {
-                                if (initialDraft[item.id] === undefined || initialDraft[item.id] === '') {
-                                  const defaultVal = getDefaultDinhMuc(item.name);
-                                  if (defaultVal) {
-                                    initialDraft[item.id] = defaultVal;
-                                  }
-                                }
-                                if (initialUnitDraft[item.id] === undefined) {
-                                  initialUnitDraft[item.id] = '';
-                                }
-                              });
-                              setDinhMucDraft(initialDraft);
-                              setUnitDraft(initialUnitDraft);
-                              setIsDinhMucModalOpen(true);
-                            }}
+                            onClick={handleOpenDinhMucModal}
                             className="inline-flex items-center gap-1 sm:gap-2 rounded-md sm:rounded-xl border border-indigo-300 bg-indigo-50 px-2.5 py-1 sm:px-4 sm:py-2 text-[11px] sm:text-sm font-bold text-indigo-700 hover:bg-indigo-100 shadow-sm transition whitespace-nowrap"
                           >
                             <SlidersHorizontal className="h-3 w-3 sm:h-4 sm:w-4" />
@@ -1482,82 +1290,120 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       {/* Modal Cấu Hình Định Mức Vật Tư Theo Tên */}
       {isDinhMucModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-5xl shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200">
-            <div className="p-5 rounded-t-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between">
+          <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center justify-between shrink-0">
               <div>
-                <h3 className="font-bold text-base">Cấu Hình Thuộc Tính Vật Tư</h3>
-                <p className="text-xs text-indigo-100 mt-0.5">Dự án: <span className="font-bold">{selectedProject}</span></p>
+                <h3 className="font-bold text-base sm:text-lg">Cấu Hình Thuộc Tính Vật Tư</h3>
+                <p className="text-xs text-indigo-100 mt-0.5">Dự án: <span className="font-bold">{selectedProject}</span> • Tổng số: <span className="font-bold">{materialItems.length}</span> vật tư</p>
               </div>
-              <button onClick={() => setIsDinhMucModalOpen(false)} className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+              <button onClick={() => setIsDinhMucModalOpen(false)} className="text-white/80 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[75vh] overflow-y-auto">
-              {materialItems.map((item, idx) => {
-                const name = item.name || `Cột ${idx + 1}`;
-                const defaultVal = getDefaultDinhMuc(name);
-                const currentVal = dinhMucDraft[item.id] ?? defaultVal;
-                const currentUnit = unitDraft[item.id] ?? '';
-                return (
-                  <div key={item.id} className="flex flex-col gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 hover:border-indigo-300 transition shadow-sm">
-                    <span className="font-bold text-slate-800 text-sm truncate w-full">{name}</span>
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs text-slate-500 font-semibold">Định mức:</span>
-                        <input
-                          type="number"
-                          step="any"
-                          placeholder={defaultVal || "0"}
-                          value={currentVal}
-                          onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
-                          className="w-24 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-xs text-slate-500 font-semibold">Đơn vị:</span>
-                        <select
-                          value={currentUnit}
-                          onChange={(e) => setUnitDraft({ ...unitDraft, [item.id]: e.target.value })}
-                          className="w-24 px-1 py-1.5 bg-white border border-slate-300 rounded-lg text-indigo-900 font-bold focus:ring-2 focus:ring-indigo-500 text-center outline-none text-xs"
-                        >
-                          <option value="">Trống</option>
-                          <option value="Bao/40kg">Bao/40kg</option>
-                          <option value="Thùng/18l">Thùng/18l</option>
-                          <option value="Thùng/25kg">Thùng/25kg</option>
-                          <option value="Bao/20kg">Bao/20kg</option>
-                          <option value="Thùng/5l">Thùng/5l</option>
-                          <option value="Thùng/5kg">Thùng/5kg</option>
-                          <option value="kg">kg</option>
-                          <option value="lít">lít</option>
-                          <option value="cái">cái</option>
-                          <option value="cuộn">cuộn</option>
-                          <option value="m2">m2</option>
-                          <option value="bộ">bộ</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="p-4 sm:p-6 overflow-auto flex-1 bg-slate-50">
+              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                <div className="overflow-x-auto max-h-[60vh] custom-scrollbar">
+                  <table className="w-full text-sm text-left border-collapse">
+                    <thead className="bg-slate-100 text-slate-700 text-xs uppercase font-bold sticky top-0 z-10 shadow-xs border-b border-slate-200">
+                      <tr>
+                        <th className="px-3 py-3 text-center w-14 border-r border-slate-200 bg-slate-100">STT</th>
+                        <th className="px-4 py-3 border-r border-slate-200 bg-slate-100 min-w-[200px]">Tên vật tư</th>
+                        <th className="px-3 py-3 text-center border-r border-slate-200 bg-slate-100 w-36">Đơn vị</th>
+                        <th className="px-3 py-3 text-center border-r border-slate-200 bg-slate-100 w-28">Định mức</th>
+                        <th className="px-4 py-3 text-right bg-slate-100 w-44">Đơn giá (VNĐ)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 bg-white">
+                      {materialItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-slate-500 font-medium">
+                            Chưa có vật tư nào trong công trình này.
+                          </td>
+                        </tr>
+                      ) : (
+                        materialItems.map((item, idx) => {
+                          const name = item.name || `Cột ${idx + 1}`;
+                          const defaultVal = getDefaultDinhMuc(name);
+                          const currentVal = dinhMucDraft[item.id] ?? defaultVal;
+                          const currentUnit = unitDraft[item.id] ?? '';
+                          return (
+                            <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors">
+                              <td className="px-3 py-2.5 text-center font-bold text-slate-500 border-r border-slate-200 bg-slate-50/50">
+                                {idx + 1}
+                              </td>
+                              <td className="px-4 py-2.5 font-bold text-slate-800 border-r border-slate-200">
+                                {name}
+                              </td>
+                              <td className="px-3 py-2 border-r border-slate-200 text-center">
+                                <select
+                                  value={currentUnit}
+                                  onChange={(e) => setUnitDraft({ ...unitDraft, [item.id]: e.target.value })}
+                                  className="w-full px-2 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-indigo-500 rounded-lg text-indigo-900 font-semibold focus:ring-1 focus:ring-indigo-500 text-center outline-none text-xs transition"
+                                >
+                                  <option value="">Trống</option>
+                                  <option value="Bao/40kg">Bao/40kg</option>
+                                  <option value="Thùng/18l">Thùng/18l</option>
+                                  <option value="Thùng/25kg">Thùng/25kg</option>
+                                  <option value="Bao/20kg">Bao/20kg</option>
+                                  <option value="Thùng/5l">Thùng/5l</option>
+                                  <option value="Thùng/5kg">Thùng/5kg</option>
+                                  <option value="kg">kg</option>
+                                  <option value="lít">lít</option>
+                                  <option value="cái">cái</option>
+                                  <option value="cuộn">cuộn</option>
+                                  <option value="m2">m2</option>
+                                  <option value="bộ">bộ</option>
+                                </select>
+                              </td>
+                              <td className="px-3 py-2 border-r border-slate-200 text-center">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder={defaultVal || "0"}
+                                  value={currentVal}
+                                  onChange={(e) => setDinhMucDraft({ ...dinhMucDraft, [item.id]: e.target.value })}
+                                  className="w-full px-2 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-indigo-500 rounded-lg text-indigo-900 font-bold focus:ring-1 focus:ring-indigo-500 text-center outline-none text-xs transition"
+                                />
+                              </td>
+                              <td className="px-3 py-2 text-right">
+                                <input
+                                  type="text"
+                                  placeholder="0"
+                                  value={priceDraft[item.id] !== undefined && priceDraft[item.id] !== '' ? Number(String(priceDraft[item.id]).replace(/,/g, '')).toLocaleString('vi-VN') : ''}
+                                  onChange={(e) => {
+                                    const raw = e.target.value.replace(/[^0-9]/g, '');
+                                    setPriceDraft({ ...priceDraft, [item.id]: raw });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 bg-slate-50 hover:bg-white focus:bg-white border border-slate-300 focus:border-emerald-500 rounded-lg text-emerald-700 font-bold focus:ring-1 focus:ring-emerald-500 text-right outline-none text-xs transition"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
 
-            <div className="p-4 bg-slate-50 rounded-b-2xl border-t border-slate-200 flex justify-end gap-3">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => setIsDinhMucModalOpen(false)}
-                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition text-xs"
+                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-bold rounded-xl hover:bg-slate-100 transition text-xs shadow-xs"
               >
                 Hủy
               </button>
               <button
                 type="button"
                 onClick={() => {
-                  setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft, unitMap: unitDraft }, true);
+                  setMaterialSheet(selectedProject, { ...currentSheet, dinhMucMap: dinhMucDraft, unitMap: unitDraft, priceMap: priceDraft }, true);
                   setIsDinhMucModalOpen(false);
                   openGlobalAlert('Đã lưu cấu hình vật tư thành công!', 'Thành công');
                 }}
-                className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition text-xs shadow-md"
+                className="px-5 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition text-xs shadow-md"
               >
                 Lưu Cấu Hình
               </button>
@@ -1577,9 +1423,18 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
       <ExportReportModal
         isOpen={isExportReportModalOpen}
         onClose={() => setIsExportReportModalOpen(false)}
-        exportRows={materialRows}
+        exportRows={currentSheet.exportRows || []}
         materialItems={materialItems}
         dinhMucMap={currentSheet.dinhMucMap || {}}
+        priceMap={currentSheet.priceMap || {}}
+        unitMap={currentSheet.unitMap || {}}
+        projectName={selectedProject}
+        onSavePrices={(updatedPrices) => {
+          setMaterialSheet(selectedProject, {
+            ...currentSheet,
+            priceMap: { ...(currentSheet.priceMap || {}), ...updatedPrices }
+          }, true);
+        }}
       />
       
       <AttendanceReportModal
@@ -1587,6 +1442,16 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         onClose={() => setIsAttendanceReportModalOpen(false)}
         rows={materialRows}
         materialItems={materialItems}
+      />
+
+      <MaterialReportModal
+        isOpen={isMaterialReportModalOpen}
+        onClose={() => setIsMaterialReportModalOpen(false)}
+        materialItems={materialItems}
+        materialRows={materialRows}
+        uniquePOs={uniquePOs}
+        projectName={selectedProject}
+        priceMap={currentSheet.priceMap || {}}
       />
     </div>
   );

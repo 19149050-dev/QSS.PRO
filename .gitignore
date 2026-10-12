@@ -34,3 +34,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch / temp scripts
+patch*.js
+fix*.js
+test*.js
+update*.js
+Đơn*
