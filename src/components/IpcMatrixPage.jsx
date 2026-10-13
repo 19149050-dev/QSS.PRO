@@ -1452,6 +1452,8 @@ export default function IpcMatrixPage({ mode = 'planned' }) {
         uniquePOs={uniquePOs}
         projectName={selectedProject}
         priceMap={currentSheet.priceMap || {}}
+        dinhMucMap={currentSheet.dinhMucMap || {}}
+        unitMap={currentSheet.unitMap || {}}
       />
     </div>
   );

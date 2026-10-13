@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { AlertTriangle, Printer } from 'lucide-react';
+import { AlertTriangle, Printer, FileSpreadsheet } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 
 const NO_PO_KEY = 'CHƯA GẮN MÃ PO';
@@ -20,12 +20,16 @@ export default function MaterialReportModal({
   materialRows = [],
   uniquePOs = [],
   projectName = '',
-  priceMap = {}
+  priceMap = {},
+  dinhMucMap = {},
+  unitMap = {}
 }) {
   const { activeProject, materialSheets } = useStore();
   const currentProject = (projectName || activeProject || '').trim();
   const finalPriceMap = { ...(materialSheets?.[currentProject]?.priceMap || {}), ...(priceMap || {}) };
-  const [activeTab, setActiveTab] = useState('shortage'); // 'shortage' | 'total'
+  const finalDinhMucMap = { ...(materialSheets?.[currentProject]?.dinhMucMap || {}), ...(dinhMucMap || {}) };
+  const finalUnitMap = { ...(materialSheets?.[currentProject]?.unitMap || {}), ...(unitMap || {}) };
+  const [activeTab, setActiveTab] = useState('shortage'); // 'shortage' | 'total' | 'dm'
 
   // 1. Data for "Vật tư chưa về đủ" (PO shortages - giữ nguyên logic và mẫu cũ)
   const { shortages, poKeys } = useMemo(() => {
@@ -183,16 +187,65 @@ export default function MaterialReportModal({
     };
   }, [materialItems, materialRows, finalPriceMap]);
 
+  // 3. Data for "Tổng và ĐM" – giống totalList nhưng thêm Định mức và KL
+  const { dmList, dmGrandTotals } = useMemo(() => {
+    const allList = [];
+    let sumOrdered = 0, sumReceived = 0, sumShortage = 0, sumKL = 0;
+
+    materialItems.forEach(item => {
+      let ordered = 0;
+      let received = 0;
+
+      (materialRows || []).forEach(r => {
+        const val = r.values?.[item.id];
+        if (val) {
+          ordered += parseNumber(val.order);
+          received += parseNumber(val.received);
+        }
+      });
+
+      if (ordered > 0 || received > 0) {
+        const shortage = Math.max(0, ordered - received);
+        const dm = parseNumber(finalDinhMucMap[item.id] || 0);
+        const kl = dm * ordered;
+
+        sumOrdered += ordered;
+        sumReceived += received;
+        sumShortage += shortage;
+        sumKL += kl;
+
+        allList.push({
+          id: item.id,
+          materialName: item.name || 'Chưa đặt tên',
+          unit: finalUnitMap[item.id] || '',
+          ordered,
+          received,
+          shortage,
+          dm,
+          kl
+        });
+      }
+    });
+
+    return {
+      dmList: allList,
+      dmGrandTotals: { ordered: sumOrdered, received: sumReceived, shortage: sumShortage, kl: sumKL }
+    };
+  }, [materialItems, materialRows, finalDinhMucMap, finalUnitMap]);
+
   if (!isOpen) return null;
 
   const titles = {
     shortage: `Danh sách vật tư chưa về đủ${currentProject ? ` - ${currentProject}` : ''}`,
-    total: `Danh sách vật tư${currentProject ? ` - ${currentProject}` : ''}`
+    total: `Danh sách vật tư${currentProject ? ` - ${currentProject}` : ''}`,
+    dm: `Tổng và ĐM${currentProject ? ` - ${currentProject}` : ''}`
   };
 
   const printTitle = activeTab === 'shortage'
     ? `DANH SÁCH VẬT TƯ CHƯA VỀ ĐỦ${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`
-    : `DANH SÁCH VẬT TƯ${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`;
+    : activeTab === 'dm'
+      ? `TỔNG VÀ ĐỊNH MỨC${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`
+      : `DANH SÁCH VẬT TƯ${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`;
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
@@ -226,7 +279,7 @@ export default function MaterialReportModal({
           </tbody>
         </table>
       `;
-    } else {
+    } else if (activeTab === 'total') {
       tableHtml = `
         <table>
           <thead>
@@ -261,6 +314,36 @@ export default function MaterialReportModal({
               <td class="text-right text-blue" style="font-size: 15px;"><strong>${grandTotals.amount.toLocaleString('vi-VN')} đ</strong></td>
             </tr>
           </tfoot>
+        </table>
+      `;
+    } else {
+      // dm tab
+      tableHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 26%">Tên vật tư</th>
+              <th style="width: 10%">DV</th>
+              <th class="text-right" style="width: 10%">Yêu cầu</th>
+              <th class="text-right" style="width: 10%">Đã nhận</th>
+              <th class="text-right" style="width: 10%">Thiếu</th>
+              <th class="text-right" style="width: 12%">Định mức</th>
+              <th class="text-right" style="width: 12%">KL</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dmList.map(item => `
+              <tr>
+                <td><strong>${item.materialName}</strong></td>
+                <td class="text-center">${item.unit || '-'}</td>
+                <td class="text-right">${item.ordered.toLocaleString('vi-VN')}</td>
+                <td class="text-right text-green">${item.received.toLocaleString('vi-VN')}</td>
+                <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
+                <td class="text-right text-blue">${item.dm > 0 ? item.dm.toLocaleString('vi-VN') : '-'}</td>
+                <td class="text-right text-blue"><strong>${item.kl > 0 ? item.kl.toLocaleString('vi-VN') : '-'}</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
         </table>
       `;
     }
@@ -302,6 +385,251 @@ export default function MaterialReportModal({
     }, 300);
   };
 
+  // ── Excel export ──────────────────────────────────────────────────────────
+  const handleExcelExport = async () => {
+    const XLSXStyle = (await import('xlsx-js-style')).default;
+
+    // ── Style helpers ──
+    const headerStyle = {
+      font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+      fill: { fgColor: { rgb: '4338CA' } }, // indigo-700
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: {
+        top: { style: 'thin', color: { rgb: 'C7D2FE' } },
+        bottom: { style: 'thin', color: { rgb: 'C7D2FE' } },
+        left: { style: 'thin', color: { rgb: 'C7D2FE' } },
+        right: { style: 'thin', color: { rgb: 'C7D2FE' } }
+      }
+    };
+
+    const cellBorder = {
+      top: { style: 'thin', color: { rgb: 'E2E8F0' } },
+      bottom: { style: 'thin', color: { rgb: 'E2E8F0' } },
+      left: { style: 'thin', color: { rgb: 'E2E8F0' } },
+      right: { style: 'thin', color: { rgb: 'E2E8F0' } }
+    };
+
+    const baseCell = (v, extra = {}) => ({
+      v,
+      t: typeof v === 'number' ? 'n' : 's',
+      s: { border: cellBorder, alignment: { vertical: 'center' }, ...extra }
+    });
+
+    const numCell = (v, extra = {}) => ({
+      v,
+      t: 'n',
+      s: { border: cellBorder, alignment: { horizontal: 'right', vertical: 'center' }, ...extra }
+    });
+
+    const poStyle = {
+      font: { bold: true, color: { rgb: '3730A3' } },
+      fill: { fgColor: { rgb: 'EEF2FF' } },
+      alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      border: cellBorder
+    };
+
+    const redStyle = { font: { bold: true, color: { rgb: 'DC2626' } } };
+    const greenStyle = { font: { color: { rgb: '16A34A' } } };
+    const amberFill = { fill: { fgColor: { rgb: 'FEF3C7' } } };
+    const footerStyle = {
+      font: { bold: true, color: { rgb: '1E1B4B' } },
+      fill: { fgColor: { rgb: 'E0E7FF' } },
+      alignment: { horizontal: 'right', vertical: 'center' },
+      border: {
+        top: { style: 'medium', color: { rgb: '6366F1' } },
+        bottom: { style: 'thin', color: { rgb: 'C7D2FE' } },
+        left: { style: 'thin', color: { rgb: 'C7D2FE' } },
+        right: { style: 'thin', color: { rgb: 'C7D2FE' } }
+      }
+    };
+
+    const wb = XLSXStyle.utils.book_new();
+    const merges = [];
+    const aoa = []; // array of arrays
+
+    const titleText = activeTab === 'shortage'
+      ? `DANH SÁCH VẬT TƯ CHƯA VỀ ĐỦ${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`
+      : activeTab === 'dm'
+        ? `TỔNG VÀ ĐỊNH MỨC${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`
+        : `DANH SÁCH VẬT TƯ${currentProject ? ` - ${currentProject.toUpperCase()}` : ''}`;
+
+    const subtitleText = `Ngày xuất: ${new Date().toLocaleDateString('vi-VN')} ${new Date().toLocaleTimeString('vi-VN')}`;
+
+    if (activeTab === 'shortage') {
+      // ── Title (merged A1:E1) ──
+      aoa.push([
+        { v: titleText, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: '0F172A' } }, alignment: { horizontal: 'center', vertical: 'center' } } },
+        { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }
+      ]);
+      merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } });
+
+      // ── Subtitle (merged A2:E2) ──
+      aoa.push([
+        { v: subtitleText, t: 's', s: { font: { italic: true, color: { rgb: '64748B' } }, alignment: { horizontal: 'center' } } },
+        { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }, { v: '', t: 's', s: {} }
+      ]);
+      merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: 4 } });
+
+      // ── Header row ──
+      aoa.push([
+        { v: 'MÃ PO', t: 's', s: headerStyle },
+        { v: 'TÊN VẬT TƯ', t: 's', s: headerStyle },
+        { v: 'YÊU CẦU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'ĐÃ NHẬN', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'THIẾU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } }
+      ]);
+
+      // ── Data rows ──
+      let rowIdx = 3; // 0-based (row 4 in sheet)
+      poKeys.forEach(po => {
+        const items = shortages[po];
+        items.forEach((s, idx) => {
+          const rowAmber = s.isOffset ? amberFill : {};
+          const row = [];
+          if (idx === 0) {
+            row.push({ v: po, t: 's', s: poStyle });
+            if (items.length > 1) {
+              merges.push({ s: { r: rowIdx, c: 0 }, e: { r: rowIdx + items.length - 1, c: 0 } });
+            }
+          } else {
+            row.push({ v: '', t: 's', s: { border: cellBorder } });
+          }
+          row.push(baseCell(s.materialName, { font: { bold: false }, ...rowAmber }));
+          row.push(numCell(s.ordered, { ...rowAmber }));
+          row.push(numCell(s.received, { font: { color: { rgb: '16A34A' } }, ...rowAmber }));
+          row.push(numCell(s.shortage, { ...redStyle, ...rowAmber, border: cellBorder }));
+          aoa.push(row);
+          rowIdx++;
+        });
+      });
+
+    } else if (activeTab === 'total') {
+      // ── "Danh sách tổng" tab ──
+      const COLS = 6;
+      // Title
+      aoa.push([
+        { v: titleText, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: '0F172A' } }, alignment: { horizontal: 'center', vertical: 'center' } } },
+        ...Array(COLS - 1).fill({ v: '', t: 's', s: {} })
+      ]);
+      merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: COLS - 1 } });
+
+      // Subtitle
+      aoa.push([
+        { v: subtitleText, t: 's', s: { font: { italic: true, color: { rgb: '64748B' } }, alignment: { horizontal: 'center' } } },
+        ...Array(COLS - 1).fill({ v: '', t: 's', s: {} })
+      ]);
+      merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: COLS - 1 } });
+
+      // Header
+      aoa.push([
+        { v: 'TÊN VẬT TƯ', t: 's', s: headerStyle },
+        { v: 'YÊU CẦU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'ĐÃ NHẬN', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'THIẾU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'ĐƠN GIÁ (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'THÀNH TIỀN (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } }
+      ]);
+
+      // Data rows
+      totalList.forEach(item => {
+        aoa.push([
+          baseCell(item.materialName, { font: { bold: true } }),
+          numCell(item.ordered),
+          numCell(item.received, { ...greenStyle }),
+          numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder } : {}),
+          numCell(item.price > 0 ? item.price : 0, { ...greenStyle }),
+          numCell(item.amount > 0 ? item.amount : 0, { font: { bold: true, color: { rgb: '4338CA' } } })
+        ]);
+      });
+
+      // Footer / totals
+      aoa.push([
+        { v: 'TỔNG CỘNG', t: 's', s: { ...footerStyle, alignment: { horizontal: 'left', vertical: 'center' }, font: { bold: true, color: { rgb: '1E1B4B' } } } },
+        { v: grandTotals.ordered, t: 'n', s: footerStyle },
+        { v: grandTotals.received, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: '16A34A' } } } },
+        { v: grandTotals.shortage, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: 'DC2626' } } } },
+        { v: '', t: 's', s: footerStyle },
+        { v: grandTotals.amount, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: '4338CA' } } } }
+      ]);
+
+    } else {
+      // ── "Tổng và ĐM" tab ──
+      const COLS = 6;
+      // Title
+      aoa.push([
+        { v: titleText, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: '0F172A' } }, alignment: { horizontal: 'center', vertical: 'center' } } },
+        ...Array(COLS - 1).fill({ v: '', t: 's', s: {} })
+      ]);
+      merges.push({ s: { r: 0, c: 0 }, e: { r: 0, c: COLS - 1 } });
+
+      // Subtitle
+      aoa.push([
+        { v: subtitleText, t: 's', s: { font: { italic: true, color: { rgb: '64748B' } }, alignment: { horizontal: 'center' } } },
+        ...Array(COLS - 1).fill({ v: '', t: 's', s: {} })
+      ]);
+      merges.push({ s: { r: 1, c: 0 }, e: { r: 1, c: COLS - 1 } });
+
+      // Header
+      aoa.push([
+        { v: 'TÊN VẬT TƯ', t: 's', s: headerStyle },
+        { v: 'DV', t: 's', s: { ...headerStyle, alignment: { horizontal: 'center', vertical: 'center' } } },
+        { v: 'YÊU CẦU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'ĐÃ NHẬN', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'THIẾU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'ĐỊNH MỨC', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'KL', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } }
+      ]);
+
+      // Data rows
+      dmList.forEach(item => {
+        aoa.push([
+          baseCell(item.materialName, { font: { bold: true } }),
+          baseCell(item.unit || '', { alignment: { horizontal: 'center', vertical: 'center' } }),
+          numCell(item.ordered),
+          numCell(item.received, { ...greenStyle }),
+          numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder } : {}),
+          numCell(item.dm > 0 ? item.dm : 0, { font: { color: { rgb: '4338CA' } } }),
+          numCell(item.kl > 0 ? item.kl : 0, { font: { bold: true, color: { rgb: '4338CA' } } })
+        ]);
+      });
+
+      // No footer row per user request
+    }
+
+    // Build sheet from aoa
+    const ws = XLSXStyle.utils.aoa_to_sheet(aoa);
+    ws['!merges'] = merges;
+
+    // Column widths
+    if (activeTab === 'shortage') {
+      ws['!cols'] = [{ wch: 18 }, { wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    } else if (activeTab === 'dm') {
+      ws['!cols'] = [{ wch: 34 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+    } else {
+      ws['!cols'] = [{ wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 20 }];
+    }
+
+    // Row heights
+    ws['!rows'] = [{ hpt: 28 }, { hpt: 20 }, { hpt: 26 }]; // title, subtitle, header
+
+    // Number format for numeric cells
+    const range = XLSXStyle.utils.decode_range(ws['!ref'] || 'A1');
+    for (let R = range.s.r; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const addr = XLSXStyle.utils.encode_cell({ r: R, c: C });
+        if (ws[addr] && ws[addr].t === 'n') {
+          ws[addr].z = '#,##0';
+        }
+      }
+    }
+
+    const sheetName = activeTab === 'shortage' ? 'Vật tư chưa về đủ' : activeTab === 'dm' ? 'Tổng và ĐM' : 'Danh sách tổng';
+    XLSXStyle.utils.book_append_sheet(wb, ws, sheetName);
+
+    const fileName = `${titleText.replace(/[^a-zA-Z0-9À-ỹ \-]/g, '')}_${new Date().toLocaleDateString('vi-VN').replace(/\//g, '-')}.xlsx`;
+    XLSXStyle.writeFile(wb, fileName);
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -324,13 +652,22 @@ export default function MaterialReportModal({
             </h3>
           </div>
 
-          <button 
-            onClick={handlePrint}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
-          >
-            <Printer className="w-4 h-4" />
-            In báo cáo
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExcelExport}
+              className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            >
+              <FileSpreadsheet className="w-4 h-4" />
+              Xuất Excel
+            </button>
+            <button 
+              onClick={handlePrint}
+              className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+            >
+              <Printer className="w-4 h-4" />
+              In báo cáo
+            </button>
+          </div>
         </div>
 
         {/* 3 Mục Lựa Chọn (Tabs) */}
@@ -358,6 +695,18 @@ export default function MaterialReportModal({
           >
             Danh sách tổng
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('dm')}
+            className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-bold transition ${
+              activeTab === 'dm'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Tổng và ĐM
+          </button>
         </div>
 
         {/* Table Area (Mẫu chuẩn nguyên bản) */}
@@ -372,7 +721,7 @@ export default function MaterialReportModal({
                   <th className="px-4 py-2.5 text-right border-r border-slate-200">Đã nhận</th>
                   <th className="px-4 py-2.5 text-right text-red-600">Thiếu</th>
                 </tr>
-              ) : (
+              ) : activeTab === 'total' ? (
                 <tr>
                   <th className="px-4 py-2.5 border-r border-slate-200">Tên vật tư</th>
                   <th className="px-4 py-2.5 text-right border-r border-slate-200">Yêu cầu</th>
@@ -380,6 +729,16 @@ export default function MaterialReportModal({
                   <th className="px-4 py-2.5 text-right border-r border-slate-200 text-red-600">Thiếu</th>
                   <th className="px-4 py-2.5 text-right border-r border-slate-200">Đơn giá</th>
                   <th className="px-4 py-2.5 text-right text-indigo-700">Thành tiền</th>
+                </tr>
+              ) : (
+                <tr>
+                  <th className="px-4 py-2.5 border-r border-slate-200">Tên vật tư</th>
+                  <th className="px-4 py-2.5 border-r border-slate-200">DV</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Yêu cầu</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200">Đã nhận</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200 text-red-600">Thiếu</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200 text-indigo-600">Định mức</th>
+                  <th className="px-4 py-2.5 text-right text-indigo-700">KL</th>
                 </tr>
               )}
             </thead>
@@ -414,7 +773,7 @@ export default function MaterialReportModal({
                     ));
                   })
                 )
-              ) : (
+              ) : activeTab === 'total' ? (
                 totalList.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
@@ -435,6 +794,33 @@ export default function MaterialReportModal({
                       </td>
                       <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20">
                         {item.amount > 0 ? `${item.amount.toLocaleString('vi-VN')} đ` : '-'}
+                      </td>
+                    </tr>
+                  ))
+                )
+              ) : (
+                /* dm tab */
+                dmList.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                      Chưa có dữ liệu vật tư nào.
+                    </td>
+                  </tr>
+                ) : (
+                  dmList.map((item, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{item.materialName}</td>
+                      <td className="px-4 py-3 text-center text-xs font-semibold text-slate-500 border-r border-slate-100">{item.unit || <span className="text-slate-300">-</span>}</td>
+                      <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{item.ordered.toLocaleString('vi-VN')}</td>
+                      <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{item.received.toLocaleString('vi-VN')}</td>
+                      <td className={`px-4 py-3 text-right font-bold border-r border-slate-100 ${item.shortage > 0 ? 'text-red-600 bg-red-50/30' : 'text-slate-400'}`}>
+                        {item.shortage.toLocaleString('vi-VN')}
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-indigo-600 border-r border-slate-100">
+                        {item.dm > 0 ? item.dm.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20">
+                        {item.kl > 0 ? item.kl.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
                       </td>
                     </tr>
                   ))
