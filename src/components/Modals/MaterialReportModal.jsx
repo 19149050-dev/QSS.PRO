@@ -141,6 +141,7 @@ export default function MaterialReportModal({
     let sumReceived = 0;
     let sumShortage = 0;
     let sumAmount = 0;
+    let sumRemainingAmount = 0;
 
     materialItems.forEach(item => {
       let ordered = 0;
@@ -158,11 +159,13 @@ export default function MaterialReportModal({
         const shortage = Math.max(0, ordered - received);
         const price = parseNumber(finalPriceMap[item.id] || 0);
         const amount = ordered * price;
+        const remainingAmount = shortage * price;
 
         sumOrdered += ordered;
         sumReceived += received;
         sumShortage += shortage;
         sumAmount += amount;
+        sumRemainingAmount += remainingAmount;
 
         allList.push({
           id: item.id,
@@ -171,7 +174,8 @@ export default function MaterialReportModal({
           received,
           shortage,
           price,
-          amount
+          amount,
+          remainingAmount
         });
       }
     });
@@ -182,7 +186,8 @@ export default function MaterialReportModal({
         ordered: sumOrdered,
         received: sumReceived,
         shortage: sumShortage,
-        amount: sumAmount
+        amount: sumAmount,
+        remainingAmount: sumRemainingAmount
       }
     };
   }, [materialItems, materialRows, finalPriceMap]);
@@ -284,12 +289,13 @@ export default function MaterialReportModal({
         <table>
           <thead>
             <tr>
-              <th style="width: 30%">Tên vật tư</th>
-              <th class="text-right" style="width: 12%">Yêu cầu</th>
-              <th class="text-right" style="width: 12%">Đã nhận</th>
-              <th class="text-right" style="width: 12%">Thiếu</th>
-              <th class="text-right" style="width: 16%">Đơn giá</th>
-              <th class="text-right" style="width: 18%">Thành tiền</th>
+              <th style="width: 25%">Tên vật tư</th>
+              <th class="text-right" style="width: 10%">Yêu cầu</th>
+              <th class="text-right" style="width: 10%">Đã nhận</th>
+              <th class="text-right" style="width: 10%">Thiếu</th>
+              <th class="text-right" style="width: 15%">Đơn giá</th>
+              <th class="text-right" style="width: 15%">Thành tiền</th>
+              <th class="text-right" style="width: 15%">Tiền còn lại</th>
             </tr>
           </thead>
           <tbody>
@@ -301,6 +307,7 @@ export default function MaterialReportModal({
                 <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
                 <td class="text-right text-green">${item.price > 0 ? item.price.toLocaleString('vi-VN') + ' đ' : '-'}</td>
                 <td class="text-right text-blue"><strong>${item.amount > 0 ? item.amount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
+                <td class="text-right text-red"><strong>${item.remainingAmount > 0 ? item.remainingAmount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
               </tr>
             `).join('')}
           </tbody>
@@ -312,6 +319,7 @@ export default function MaterialReportModal({
               <td class="text-right text-red">${grandTotals.shortage.toLocaleString('vi-VN')}</td>
               <td></td>
               <td class="text-right text-blue" style="font-size: 15px;"><strong>${grandTotals.amount.toLocaleString('vi-VN')} đ</strong></td>
+              <td class="text-right text-red" style="font-size: 15px;"><strong>${grandTotals.remainingAmount.toLocaleString('vi-VN')} đ</strong></td>
             </tr>
           </tfoot>
         </table>
@@ -505,7 +513,7 @@ export default function MaterialReportModal({
 
     } else if (activeTab === 'total') {
       // ── "Danh sách tổng" tab ──
-      const COLS = 6;
+      const COLS = 7;
       // Title
       aoa.push([
         { v: titleText, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: '0F172A' } }, alignment: { horizontal: 'center', vertical: 'center' } } },
@@ -527,7 +535,8 @@ export default function MaterialReportModal({
         { v: 'ĐÃ NHẬN', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
         { v: 'THIẾU', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
         { v: 'ĐƠN GIÁ (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
-        { v: 'THÀNH TIỀN (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } }
+        { v: 'THÀNH TIỀN (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } },
+        { v: 'TIỀN CÒN LẠI (đ)', t: 's', s: { ...headerStyle, alignment: { horizontal: 'right', vertical: 'center' } } }
       ]);
 
       // Data rows
@@ -538,7 +547,8 @@ export default function MaterialReportModal({
           numCell(item.received, { ...greenStyle }),
           numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder } : {}),
           numCell(item.price > 0 ? item.price : 0, { ...greenStyle }),
-          numCell(item.amount > 0 ? item.amount : 0, { font: { bold: true, color: { rgb: '4338CA' } } })
+          numCell(item.amount > 0 ? item.amount : 0, { font: { bold: true, color: { rgb: '4338CA' } } }),
+          numCell(item.remainingAmount > 0 ? item.remainingAmount : 0, { font: { bold: true, color: { rgb: 'DC2626' } } })
         ]);
       });
 
@@ -549,7 +559,8 @@ export default function MaterialReportModal({
         { v: grandTotals.received, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: '16A34A' } } } },
         { v: grandTotals.shortage, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: 'DC2626' } } } },
         { v: '', t: 's', s: footerStyle },
-        { v: grandTotals.amount, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: '4338CA' } } } }
+        { v: grandTotals.amount, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: '4338CA' } } } },
+        { v: grandTotals.remainingAmount, t: 'n', s: { ...footerStyle, font: { bold: true, color: { rgb: 'DC2626' } } } }
       ]);
 
     } else {
@@ -606,7 +617,7 @@ export default function MaterialReportModal({
     } else if (activeTab === 'dm') {
       ws['!cols'] = [{ wch: 34 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
     } else {
-      ws['!cols'] = [{ wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 20 }];
+      ws['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
     }
 
     // Row heights
@@ -639,7 +650,7 @@ export default function MaterialReportModal({
       />
 
       {/* Dialog Box */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-[94%] sm:max-w-5xl mx-auto overflow-hidden animate-in fade-in zoom-in duration-200 p-6">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-[94%] sm:max-w-6xl mx-auto overflow-hidden animate-in fade-in zoom-in duration-200 p-6">
         
         {/* Top Header */}
         <div className="flex items-center justify-between pb-3">
@@ -728,7 +739,8 @@ export default function MaterialReportModal({
                   <th className="px-4 py-2.5 text-right border-r border-slate-200">Đã nhận</th>
                   <th className="px-4 py-2.5 text-right border-r border-slate-200 text-red-600">Thiếu</th>
                   <th className="px-4 py-2.5 text-right border-r border-slate-200">Đơn giá</th>
-                  <th className="px-4 py-2.5 text-right text-indigo-700">Thành tiền</th>
+                  <th className="px-4 py-2.5 text-right border-r border-slate-200 text-indigo-700">Thành tiền</th>
+                  <th className="px-4 py-2.5 text-right text-rose-700">Thành tiền còn lại</th>
                 </tr>
               ) : (
                 <tr>
@@ -776,7 +788,7 @@ export default function MaterialReportModal({
               ) : activeTab === 'total' ? (
                 totalList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                       Chưa có dữ liệu vật tư nào.
                     </td>
                   </tr>
@@ -792,8 +804,11 @@ export default function MaterialReportModal({
                       <td className="px-4 py-3 text-right font-medium text-emerald-700 border-r border-slate-100">
                         {item.price > 0 ? `${item.price.toLocaleString('vi-VN')} đ` : '-'}
                       </td>
-                      <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20">
+                      <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20 border-r border-slate-100">
                         {item.amount > 0 ? `${item.amount.toLocaleString('vi-VN')} đ` : '-'}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-bold ${item.remainingAmount > 0 ? 'text-rose-600 bg-rose-50/30' : 'text-slate-400'}`}>
+                        {item.remainingAmount > 0 ? `${item.remainingAmount.toLocaleString('vi-VN')} đ` : '-'}
                       </td>
                     </tr>
                   ))
@@ -843,8 +858,11 @@ export default function MaterialReportModal({
                     {grandTotals.shortage.toLocaleString('vi-VN')}
                   </td>
                   <td className="px-4 py-3 border-r border-slate-200"></td>
-                  <td className="px-4 py-3 text-right font-black text-indigo-700 bg-indigo-100/60">
+                  <td className="px-4 py-3 text-right font-black text-indigo-700 bg-indigo-100/60 border-r border-slate-200">
                     {grandTotals.amount.toLocaleString('vi-VN')} đ
+                  </td>
+                  <td className="px-4 py-3 text-right font-black text-rose-600 bg-rose-100/60">
+                    {grandTotals.remainingAmount.toLocaleString('vi-VN')} đ
                   </td>
                 </tr>
               </tfoot>
