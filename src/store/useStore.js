@@ -1077,6 +1077,25 @@ inHouseSheets: {},
           supabase.from('teams').update({ members: targetTeam.members }).eq('id', teamId).then();
         }
       },
+      addTeamMembersBatch: (teamId, membersArray) => {
+        if (!membersArray || membersArray.length === 0) return;
+        const newMembersWithIds = membersArray.map((m, idx) => ({
+          ...m,
+          id: m.id || `m-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`
+        }));
+        set((state) => ({
+          teams: state.teams.map(t => {
+            if (t.id === teamId) {
+              return { ...t, members: [...(t.members || []), ...newMembersWithIds] };
+            }
+            return t;
+          })
+        }));
+        const targetTeam = get().teams.find(t => t.id === teamId);
+        if (targetTeam && !String(teamId).startsWith('t-')) {
+          supabase.from('teams').update({ members: targetTeam.members }).eq('id', teamId).then();
+        }
+      },
       updateTeamMember: (teamId, memberId, updatedData) => {
         set((state) => ({
           teams: state.teams.map(t => {
@@ -2951,5 +2970,52 @@ export const useAllowedProjects = () => {
     return projects;
   }
   
-  return projects.filter(p => p.cht && p.cht.includes(currentUser.name));
+  const uName = (currentUser.name || '').trim().toLowerCase();
+  return projects.filter(p => {
+    const chtList = (Array.isArray(p.cht) ? p.cht : (p.cht ? [p.cht] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    const gsList = (Array.isArray(p.gs) ? p.gs : (p.gs ? [p.gs] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    const gshtList = (Array.isArray(p.gsht) ? p.gsht : (p.gsht ? [p.gsht] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    return chtList.includes(uName) || gsList.includes(uName) || gshtList.includes(uName);
+  });
 };
+
+/**
+ * Checks if current user is allowed to manage (create, edit, delete) members of a specific team.
+ * Rule: GSHT is ONLY allowed to create/manage members for teams working on projects assigned to that GSHT.
+ * Other roles (ADMIN, GIÁM ĐỐC, QS, CHT, etc.) retain their full management capabilities.
+ */
+export const canUserManageTeamMembers = (currentUser, team, allProjects) => {
+  if (!currentUser) return false;
+  const role = (currentUser.role || '').toUpperCase();
+  if (role !== 'GSHT') {
+    return true;
+  }
+  if (!team) return false;
+
+  const uName = (currentUser.name || '').trim().toLowerCase();
+  
+  // Find projects assigned to this GSHT
+  const assignedProjects = (allProjects || []).filter(p => {
+    const chtList = (Array.isArray(p.cht) ? p.cht : (p.cht ? [p.cht] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    const gsList = (Array.isArray(p.gs) ? p.gs : (p.gs ? [p.gs] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    const gshtList = (Array.isArray(p.gsht) ? p.gsht : (p.gsht ? [p.gsht] : [])).map(s => (s || '').toString().trim().toLowerCase());
+    return chtList.includes(uName) || gsList.includes(uName) || gshtList.includes(uName);
+  });
+
+  const assignedProjectNames = assignedProjects.map(p => (p.name || '').trim().toLowerCase());
+  if (assignedProjectNames.length === 0) return false;
+
+  // Extract projects assigned to this team
+  let teamProjs = [];
+  if (Array.isArray(team.projects) && team.projects.length > 0) {
+    teamProjs = team.projects.flatMap(p => typeof p === 'string' ? p.split(',') : p);
+  } else if (team.projectName || team.project_name) {
+    teamProjs = (team.projectName || team.project_name).split(',');
+  }
+
+  const normalizedTeamProjs = teamProjs.map(s => (s || '').trim().toLowerCase()).filter(Boolean);
+  
+  // Check if team has at least one project that matches the GSHT's assigned projects
+  return normalizedTeamProjs.some(tp => assignedProjectNames.includes(tp));
+};
+

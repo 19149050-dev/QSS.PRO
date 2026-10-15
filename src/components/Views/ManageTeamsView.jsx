@@ -1,51 +1,345 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useStore, useAllowedProjects } from '@/store/useStore';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useStore, useAllowedProjects, canUserManageTeamMembers } from '@/store/useStore';
 import AddTeamModal from '@/components/Modals/AddTeamModal';
 import AddMemberModal from '@/components/Modals/AddMemberModal';
+import toast from 'react-hot-toast';
 import { 
   Users, 
+  UserCheck,
   Plus, 
   Search, 
   Phone, 
-  Trash2,
-  Edit2,
-  ChevronDown,
-  ChevronUp,
-  FileText,
-  User,
-  Printer,
-  FileSpreadsheet
+  Trash2, 
+  Edit2, 
+  ChevronRight, 
+  User, 
+  Printer, 
+  FileSpreadsheet,
+  HardHat,
+  ShieldAlert,
+  CheckCircle2,
+  Lock
 } from 'lucide-react';
 import { exportToExcel } from '@/utils/exportUtils';
 
 export default function ManageTeamsPage() {
-  const { teams, deleteTeam, activeProject, addTeamMember } = useStore();
+  const { teams, deleteTeam, activeProject, deleteTeamMember } = useStore();
+  const currentUser = useStore(state => state.currentUser);
+  const allProjects = useStore(state => state.projects);
   const projects = useAllowedProjects();
   const selectedProject = activeProject || projects[0]?.name || 'SUNHOME';
-  const [searchTerm, setSearchTerm] = useState('');
+  const isGsht = currentUser?.role?.toUpperCase() === 'GSHT';
+
+  // Navigation tab: 'teams' (Quản lý tổ đội) | 'team-workers' (Công nhân các đội) | 'all-workers' (Toàn thể công nhân)
+  const [activeTab, setActiveTab] = useState('teams');
+
+  // Tab 1 (Quản lý tổ đội) states
+  const [teamSearchTerm, setTeamSearchTerm] = useState('');
+  const [teamTypeFilter, setTeamTypeFilter] = useState('ALL');
+  const [teamProjectFilter, setTeamProjectFilter] = useState('ALL');
+
+  // Tab 2 (Công nhân các đội) states
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
+  const [teamWorkerSearchTerm, setTeamWorkerSearchTerm] = useState('');
+
+  // Tab 3 (Toàn thể công nhân) states
+  const [allWorkerSearchTerm, setAllWorkerSearchTerm] = useState('');
+  const [allWorkerProjectFilter, setAllWorkerProjectFilter] = useState('ALL');
+  const [allWorkerTeamFilter, setAllWorkerTeamFilter] = useState('ALL');
+  const [allWorkerExpiryFilter, setAllWorkerExpiryFilter] = useState('ALL');
+
+  // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [teamToEdit, setTeamToEdit] = useState(null);
-  const [expandedTeamId, setExpandedTeamId] = useState(null);
-  
-  // Member Modal State
   const [isAddMemberModalOpen, setIsAddMemberModalOpen] = useState(false);
   const [activeTeamIdForMember, setActiveTeamIdForMember] = useState(null);
   const [memberToEdit, setMemberToEdit] = useState(null);
 
+  // For GSHT, restrict visible teams strictly to those assigned to the GSHT's projects.
+  // Other roles (Admin, Giám đốc, QS, CHT) see all teams.
+  const visibleTeams = useMemo(() => {
+    if (!isGsht) return teams;
+    return teams.filter(t => canUserManageTeamMembers(currentUser, t, allProjects));
+  }, [teams, isGsht, currentUser, allProjects]);
+
+  // Set default selectedTeamId
+  useEffect(() => {
+    if (visibleTeams.length > 0) {
+      if (!selectedTeamId || !visibleTeams.some(t => t.id === selectedTeamId)) {
+        // Prefer a team with members, else the first team
+        const teamWithMembers = visibleTeams.find(t => t.members && t.members.length > 0);
+        setSelectedTeamId(teamWithMembers ? teamWithMembers.id : visibleTeams[0].id);
+      }
+    } else {
+      setSelectedTeamId(null);
+    }
+  }, [visibleTeams, selectedTeamId]);
+
+  // Expiry date checker
+  const getExpiryStatus = (dateStr) => {
+    if (!dateStr || dateStr.toLowerCase() === 'chưa có' || dateStr === '-') return 'safe';
+    let parts = [];
+    if (dateStr.includes('-')) parts = dateStr.split('-');
+    else if (dateStr.includes('/')) parts = dateStr.split('/');
+    
+    if (parts.length === 3) {
+      let year, month, day;
+      if (parts[0].length === 4) [year, month, day] = parts;
+      else [day, month, year] = parts;
+      const expiry = new Date(year, month - 1, day);
+      const today = new Date();
+      const diffTime = expiry - today;
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 7) return 'danger';
+      return 'safe';
+    }
+    return 'safe'; 
+  };
+
+  const checkMemberHasWarning = (m) => {
+    return (
+      getExpiryStatus(m.insuranceExpiry) === 'danger' ||
+      getExpiryStatus(m.safetyCardExpiry) === 'danger' ||
+      getExpiryStatus(m.healthCertificate) === 'danger' ||
+      getExpiryStatus(m.contract) === 'danger'
+    );
+  };
+
+  // Filtered teams for Tab 1 (Quản lý tổ đội)
+  const filteredTeams = useMemo(() => {
+    return visibleTeams.filter(t => {
+      const matchSearch = 
+        !teamSearchTerm ||
+        (t.teamName && t.teamName.toLowerCase().includes(teamSearchTerm.toLowerCase())) ||
+        (t.leaderName && t.leaderName.toLowerCase().includes(teamSearchTerm.toLowerCase())) ||
+        (t.phone && t.phone.includes(teamSearchTerm)) ||
+        (t.projects && t.projects.some(p => p.toLowerCase().includes(teamSearchTerm.toLowerCase()))) ||
+        (t.projectName && t.projectName.toLowerCase().includes(teamSearchTerm.toLowerCase()));
+
+      const matchType = 
+        teamTypeFilter === 'ALL' || 
+        (t.teamType && t.teamType.toLowerCase() === teamTypeFilter.toLowerCase());
+
+      const teamProjs = Array.isArray(t.projects) && t.projects.length > 0 
+        ? t.projects 
+        : (t.projectName ? t.projectName.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+      const matchProject = 
+        teamProjectFilter === 'ALL' ||
+        teamProjs.some(p => p.toLowerCase() === teamProjectFilter.toLowerCase());
+
+      return matchSearch && matchType && matchProject;
+    });
+  }, [visibleTeams, teamSearchTerm, teamTypeFilter, teamProjectFilter]);
+
+  // Selected team for Tab 2
+  const selectedTeam = useMemo(() => {
+    return visibleTeams.find(t => t.id === selectedTeamId) || visibleTeams[0] || null;
+  }, [visibleTeams, selectedTeamId]);
+
+  // Filtered members of selected team in Tab 2
+  const filteredSelectedTeamMembers = useMemo(() => {
+    if (!selectedTeam || !selectedTeam.members) return [];
+    if (!teamWorkerSearchTerm.trim()) return selectedTeam.members;
+    const term = teamWorkerSearchTerm.toLowerCase();
+    return selectedTeam.members.filter(m => 
+      (m.name && m.name.toLowerCase().includes(term)) ||
+      (m.cccd && m.cccd.toLowerCase().includes(term)) ||
+      (m.position && m.position.toLowerCase().includes(term)) ||
+      (m.address && m.address.toLowerCase().includes(term)) ||
+      (m.notes && m.notes.toLowerCase().includes(term))
+    );
+  }, [selectedTeam, teamWorkerSearchTerm]);
+
+  // Flattened all workers list for Tab 3 & Stats
+  const allWorkers = useMemo(() => {
+    return visibleTeams.flatMap(t => {
+      const teamProjs = Array.isArray(t.projects) && t.projects.length > 0 
+        ? t.projects 
+        : (t.projectName ? t.projectName.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+      return (t.members || []).map(m => ({
+        ...m,
+        teamId: t.id,
+        teamName: t.teamName || t.name,
+        leaderName: t.leaderName,
+        leaderPhone: t.phone,
+        teamType: t.teamType || 'Thầu phụ',
+        teamProjects: teamProjs
+      }));
+    });
+  }, [visibleTeams]);
+
+  // Filtered workers for Tab 3 (Toàn thể công nhân)
+  const filteredAllWorkers = useMemo(() => {
+    return allWorkers.filter(w => {
+      const term = allWorkerSearchTerm.toLowerCase();
+      const matchSearch = !allWorkerSearchTerm || (
+        (w.name && w.name.toLowerCase().includes(term)) ||
+        (w.cccd && w.cccd.toLowerCase().includes(term)) ||
+        (w.teamName && w.teamName.toLowerCase().includes(term)) ||
+        (w.leaderName && w.leaderName.toLowerCase().includes(term)) ||
+        (w.address && w.address.toLowerCase().includes(term)) ||
+        (w.position && w.position.toLowerCase().includes(term)) ||
+        (w.notes && w.notes.toLowerCase().includes(term))
+      );
+
+      const matchProject = allWorkerProjectFilter === 'ALL' || (
+        w.teamProjects && w.teamProjects.some(p => p.toLowerCase() === allWorkerProjectFilter.toLowerCase())
+      );
+
+      const matchTeam = allWorkerTeamFilter === 'ALL' || w.teamId === allWorkerTeamFilter;
+
+      let matchExpiry = true;
+      if (allWorkerExpiryFilter === 'WARNING') {
+        matchExpiry = checkMemberHasWarning(w);
+      } else if (allWorkerExpiryFilter === 'SAFE') {
+        matchExpiry = !checkMemberHasWarning(w);
+      }
+
+      return matchSearch && matchProject && matchTeam && matchExpiry;
+    });
+  }, [allWorkers, allWorkerSearchTerm, allWorkerProjectFilter, allWorkerTeamFilter, allWorkerExpiryFilter]);
+
+  // Counts
+  const thauPhuCount = useMemo(() => visibleTeams.filter(t => t.teamType !== 'Cơ hữu').length, [visibleTeams]);
+  const coHuuCount = useMemo(() => visibleTeams.filter(t => t.teamType === 'Cơ hữu').length, [visibleTeams]);
+  const totalWarningWorkers = useMemo(() => allWorkers.filter(checkMemberHasWarning).length, [allWorkers]);
+  const selectedTeamWarningCount = useMemo(() => {
+    if (!selectedTeam || !selectedTeam.members) return 0;
+    return selectedTeam.members.filter(checkMemberHasWarning).length;
+  }, [selectedTeam]);
+
+  // Handlers for Add/Edit
+  const handleOpenAdd = () => {
+    setTeamToEdit(null);
+    setIsAddModalOpen(true);
+  };
+
+  const handleOpenEdit = (team) => {
+    setTeamToEdit(team);
+    setIsAddModalOpen(true);
+  };
+
+  const handleDeleteTeam = (team) => {
+    useStore.getState().openGlobalConfirm(
+      `Bạn có chắc chắn muốn xóa tổ đội "${team.teamName}"? Toàn bộ danh sách thành viên của tổ đội này cũng sẽ bị xóa.`,
+      () => {
+        deleteTeam(team.id);
+        if (selectedTeamId === team.id) {
+          const remaining = visibleTeams.filter(t => t.id !== team.id);
+          setSelectedTeamId(remaining[0]?.id || null);
+        }
+      }
+    );
+  };
+
   const handleOpenAddMember = (teamId) => {
+    const targetTeam = teams.find(t => t.id === teamId);
+    if (!canUserManageTeamMembers(currentUser, targetTeam, allProjects)) {
+      toast.error('Bạn là GSHT không phụ trách công trình của tổ đội này nên không có quyền tạo/thêm thành viên.');
+      return;
+    }
     setActiveTeamIdForMember(teamId);
     setMemberToEdit(null);
     setIsAddMemberModalOpen(true);
   };
 
   const handleOpenEditMember = (teamId, member) => {
+    const targetTeam = teams.find(t => t.id === teamId);
+    if (!canUserManageTeamMembers(currentUser, targetTeam, allProjects)) {
+      toast.error('Bạn là GSHT không phụ trách công trình của tổ đội này nên không có quyền sửa thành viên.');
+      return;
+    }
     setActiveTeamIdForMember(teamId);
     setMemberToEdit(member);
     setIsAddMemberModalOpen(true);
   };
 
+  const handleDeleteMember = (teamId, member) => {
+    const targetTeam = teams.find(t => t.id === teamId);
+    if (!canUserManageTeamMembers(currentUser, targetTeam, allProjects)) {
+      toast.error('Bạn là GSHT không phụ trách công trình của tổ đội này nên không có quyền xóa thành viên.');
+      return;
+    }
+    useStore.getState().openGlobalConfirm(
+      `Bạn có chắc chắn muốn xóa thành viên "${member.name}" khỏi tổ đội?`,
+      () => {
+        deleteTeamMember(teamId, member.id);
+      }
+    );
+  };
+
+  // Export & Print for Tab 1 (Danh sách các tổ đội)
+  const handlePrintTeamsTable = () => {
+    const printContent = document.getElementById('print-teams-table');
+    if (!printContent) return;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Danh Sách Tổ Đội Thi Công</title>
+          <style>
+            @media print {
+              @page { size: landscape; margin: 15mm; }
+              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; color: #111; }
+              .sub-title { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
+              table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
+              th, td { padding: 8px 6px; border: 1px solid #ccc; word-wrap: break-word; }
+              th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
+              th:last-child, td:last-child { display: none !important; }
+              .text-center { text-align: center; }
+            }
+          </style>
+        </head>
+        <body>
+          <h2>DANH SÁCH TỔ ĐỘI THI CÔNG</h2>
+          <div class="sub-title">Tổng số: ${filteredTeams.length} tổ đội | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
+          ${printContent.innerHTML}
+        </body>
+      </html>
+    `;
+
+    iframe.contentWindow.document.open();
+    iframe.contentWindow.document.write(htmlContent);
+    iframe.contentWindow.document.close();
+
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      document.body.removeChild(iframe);
+    }, 250);
+  };
+
+  const handleExportTeamsExcel = () => {
+    if (filteredTeams.length === 0) {
+      alert("Không có dữ liệu tổ đội để xuất Excel.");
+      return;
+    }
+
+    const exportData = filteredTeams.map((team, idx) => ({
+      "STT": idx + 1,
+      "Tên Tổ Đội": team.teamName || '',
+      "Đội Trưởng": team.leaderName || '',
+      "Số Điện Thoại": team.phone || '',
+      "Phân Loại": team.teamType || 'Thầu phụ',
+      "Dự Án Áp Dụng": Array.isArray(team.projects) ? team.projects.join(', ') : (team.projectName || ''),
+      "Số Lượng Công Nhân": team.members?.length || 0
+    }));
+
+    exportToExcel(exportData, `DanhSachToDoi_${new Date().toISOString().slice(0, 10)}`, 'Tổ Đội');
+  };
+
+  // Export & Print for Tab 2 (Thành viên tổ đội cụ thể)
   const handleExportTeamExcel = (team) => {
     if (!team || !team.members || team.members.length === 0) {
       alert("Tổ đội này chưa có thành viên để xuất Excel.");
@@ -69,7 +363,7 @@ export default function ManageTeamsPage() {
       "Ghi chú": m.notes || ''
     }));
 
-    exportToExcel(exportData, `DanhSachThanhVien_${team.name || 'ToDoi'}`, `Thành viên`);
+    exportToExcel(exportData, `DanhSachThanhVien_${team.teamName || team.name || 'ToDoi'}`, `Thành viên`);
   };
 
   const handlePrintTeam = (team) => {
@@ -84,12 +378,13 @@ export default function ManageTeamsPage() {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>In danh sách tổ đội ${team.teamName || team.name || ''}</title>
+          <title>In danh sách thành viên tổ đội ${team.teamName || team.name || ''}</title>
           <style>
             @media print {
               @page { size: landscape; margin: 15mm; }
               body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 20px; color: #111; }
+              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 8px; color: #111; }
+              .sub-header { text-align: center; font-size: 12px; margin-bottom: 20px; color: #666; }
               table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
               th, td { padding: 8px 6px; border: 1px solid #ccc; word-wrap: break-word; }
               th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
@@ -100,6 +395,7 @@ export default function ManageTeamsPage() {
         </head>
         <body>
           <h2>DANH SÁCH THÀNH VIÊN TỔ ĐỘI ${team.teamName || team.name || ''}</h2>
+          <div class="sub-header">Đội trưởng: ${team.leaderName || 'N/A'} - SĐT: ${team.phone || 'N/A'} | Tổng số: ${team.members?.length || 0} thành viên</div>
           ${printContent.innerHTML}
         </body>
       </html>
@@ -116,355 +412,829 @@ export default function ManageTeamsPage() {
     }, 250);
   };
 
-
-
-  const getExpiryStatus = (dateStr) => {
-    if (!dateStr || dateStr.toLowerCase() === 'chưa có') return 'danger';
-    let parts = [];
-    if (dateStr.includes('-')) parts = dateStr.split('-');
-    else if (dateStr.includes('/')) parts = dateStr.split('/');
-    
-    if (parts.length === 3) {
-      let year, month, day;
-      if (parts[0].length === 4) [year, month, day] = parts;
-      else [day, month, year] = parts;
-      const expiry = new Date(year, month - 1, day);
-      const today = new Date();
-      const diffTime = expiry - today;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      
-      if (diffDays <= 7) return 'danger';
-      return 'safe';
+  // Export & Print for Tab 3 (Toàn thể công nhân)
+  const handleExportAllWorkersExcel = () => {
+    if (filteredAllWorkers.length === 0) {
+      alert("Không có dữ liệu công nhân để xuất Excel.");
+      return;
     }
-    return 'safe'; 
+
+    const exportData = filteredAllWorkers.map((m, idx) => ({
+      "STT": idx + 1,
+      "Họ và Tên": m.name || '',
+      "Tổ Đội": m.teamName || '',
+      "Đội Trưởng": m.leaderName ? `${m.leaderName} (${m.leaderPhone || ''})` : '',
+      "Phân Loại": m.teamType || 'Thầu phụ',
+      "Dự Án": Array.isArray(m.teamProjects) ? m.teamProjects.join(', ') : (m.teamProjects || ''),
+      "Chức vụ": m.position || '',
+      "Tuổi": m.age || '',
+      "CCCD": m.cccd || '',
+      "Năm sinh": m.birthYear || '',
+      "Ngày cấp": m.issueDate || '',
+      "Địa chỉ": m.address || '',
+      "Bằng cấp nghề": m.vocationalCertificate || '',
+      "Bảo hiểm tai nạn": m.insuranceExpiry || '',
+      "Chứng chỉ AT": m.safetyCardExpiry || '',
+      "Giấy khám SK": m.healthCertificate || '',
+      "HĐLĐ": m.contract || '',
+      "Ghi chú": m.notes || ''
+    }));
+
+    exportToExcel(exportData, `DanhSachToanTheCongNhan_${new Date().toISOString().slice(0, 10)}`, 'Toàn thể công nhân');
   };
 
-  const filteredTeams = teams.filter(t => 
-    (t.teamName && t.teamName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.leaderName && t.leaderName.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (t.projects && t.projects.some(p => p.toLowerCase().includes(searchTerm.toLowerCase()))) ||
-    (t.projectName && t.projectName.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const handlePrintAllWorkers = () => {
+    const printContent = document.getElementById('print-all-workers-table');
+    if (!printContent) return;
 
-  const handleOpenEdit = (team) => {
-    setTeamToEdit(team);
-    setIsAddModalOpen(true);
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Danh Sách Toàn Thể Công Nhân</title>
+          <style>
+            @media print {
+              @page { size: landscape; margin: 12mm; }
+              body { font-family: Arial, sans-serif; padding: 15px; color: #333; }
+              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; color: #111; }
+              .sub-title { text-align: center; font-size: 11px; color: #666; margin-bottom: 16px; }
+              table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; }
+              th, td { padding: 6px 4px; border: 1px solid #ccc; word-wrap: break-word; }
+              th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
+              th:last-child, td:last-child { display: none !important; }
+              .text-center { text-align: center; }
+            }
+          </style>
+        </head>
+        <body>
+          <h2>DANH SÁCH TOÀN THỂ CÔNG NHÂN</h2>
+          <div class="sub-title">Tổng số: ${filteredAllWorkers.length} công nhân | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
+          ${printContent.innerHTML}
+        </body>
+      </html>
+    `;
+
+    iframe.contentWindow.document.open();
+    iframe.contentWindow.document.write(htmlContent);
+    iframe.contentWindow.document.close();
+
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      document.body.removeChild(iframe);
+    }, 250);
   };
 
-  const handleOpenAdd = () => {
-    setTeamToEdit(null);
-    setIsAddModalOpen(true);
+  // Helper render for document expiry badge
+  const renderExpiryBadge = (dateStr, defaultColor = 'emerald') => {
+    if (!dateStr || dateStr === '-' || dateStr.toLowerCase() === 'chưa có') {
+      return <span className="text-gray-400 text-xs">-</span>;
+    }
+    const status = getExpiryStatus(dateStr);
+    const isDanger = status === 'danger';
+
+    let colorClasses = '';
+    if (defaultColor === 'sky') colorClasses = 'bg-sky-50 text-sky-700 border-sky-200';
+    else if (defaultColor === 'emerald') colorClasses = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    else if (defaultColor === 'amber') colorClasses = 'bg-amber-50 text-amber-700 border-amber-200';
+    else if (defaultColor === 'purple') colorClasses = 'bg-purple-50 text-purple-700 border-purple-200';
+
+    return (
+      <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border whitespace-nowrap ${
+        isDanger ? 'bg-red-100 text-red-700 border-red-300 animate-pulse font-black' : colorClasses
+      }`}>
+        {dateStr}
+      </span>
+    );
   };
 
-  const handleExportExcel = () => {
-    const exportData = [];
-    filteredTeams.forEach(team => {
-      exportData.push({
-        'Tên Tổ Đội': team.teamName,
-        'Đội Trưởng': `${team.leaderName} (${team.phone || 'N/A'})`,
-        'Dự Án': Array.isArray(team.projects) ? team.projects.join(', ') : (team.projectName || 'Tất cả'),
-        'STT': '',
-        'Họ và Tên': '',
-        'CCCD': '',
-        'Năm Sinh': '',
-        'Hạn Thẻ AT': ''
-      });
+  // Reusable Member Table Component
+  const renderMemberTable = (members, teamId) => {
+    const targetTeam = teams.find(t => t.id === teamId);
+    const canManageThisTeam = canUserManageTeamMembers(currentUser, targetTeam, allProjects);
 
-      if (team.members && team.members.length > 0) {
-        team.members.forEach((member, idx) => {
-          exportData.push({
-            'Tên Tổ Đội': '',
-            'Đội Trưởng': '',
-            'Dự Án': '',
-            'STT': idx + 1,
-            'Họ và Tên': member.name,
-            'CCCD': member.cccd,
-            'Năm Sinh': member.birthYear,
-            'Hạn Thẻ AT': member.safetyCardExpiry
-          });
-        });
-      } else {
-         exportData.push({
-            'Tên Tổ Đội': '',
-            'Đội Trưởng': '',
-            'Dự Án': '',
-            'STT': '-',
-            'Họ và Tên': 'Chưa có thành viên',
-            'CCCD': '',
-            'Năm Sinh': '',
-            'Hạn Thẻ AT': ''
-          });
-      }
-      exportData.push({});
-    });
-
-    exportToExcel(exportData, 'Danh_Sach_To_Doi', 'QL_To_Doi');
-  };
-
-  const handlePrint = () => {
-    window.print();
+    return (
+      <table className="w-full text-left qss-table">
+        <thead>
+          <tr className="bg-gray-50 border-b border-gray-100">
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase w-10 text-center">STT</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[150px]">Họ và Tên</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Chức vụ</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Tuổi</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">CCCD</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Năm sinh</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Ngày cấp</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[140px]">Địa chỉ</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Bằng cấp nghề</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Bảo hiểm tai nạn</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Chứng chỉ AT</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Giấy khám SK</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">HĐLĐ</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Ghi chú</th>
+            <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center sticky right-0 bg-gray-50 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Thao tác</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(!members || members.length === 0) ? (
+            <tr>
+              <td colSpan={15} className="py-10 text-center text-xs text-gray-400 font-medium italic">
+                <Users className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+                Tổ đội này chưa có dữ liệu thành viên.
+                {canManageThisTeam ? (
+                  <div className="mt-3">
+                    <button
+                      onClick={() => handleOpenAddMember(teamId)}
+                      className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-bold text-xs transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Thêm thành viên ngay
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[11px] text-amber-600 font-semibold flex items-center justify-center gap-1">
+                    <Lock className="w-3 h-3 text-amber-500" />
+                    <span>Bạn là GSHT không phụ trách công trình của tổ đội này nên không thể thêm thành viên.</span>
+                  </div>
+                )}
+              </td>
+            </tr>
+          ) : (
+            members.map((member, idx) => (
+              <tr key={member.id} className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors last:border-0 group">
+                <td className="py-2 px-3 text-xs font-bold text-gray-400 text-center">{idx + 1}</td>
+                <td className="py-2 px-3 text-xs font-bold text-gray-900 flex items-center gap-2 whitespace-nowrap">
+                  <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 overflow-hidden shrink-0">
+                    {member.photo ? (
+                      <img src={member.photo} alt={member.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-3.5 h-3.5" />
+                    )}
+                  </div>
+                  <span>{member.name}</span>
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.position || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{member.age || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.cccd || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{member.birthYear || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center whitespace-nowrap">{member.issueDate || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[180px] truncate" title={member.address}>
+                  {member.address || '-'}
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.vocationalCertificate || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                  {renderExpiryBadge(member.insuranceExpiry, 'sky')}
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                  {renderExpiryBadge(member.safetyCardExpiry, 'emerald')}
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                  {renderExpiryBadge(member.healthCertificate, 'amber')}
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                  {renderExpiryBadge(member.contract, 'purple')}
+                </td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[150px] truncate" title={member.notes}>
+                  {member.notes || '-'}
+                </td>
+                <td className="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-indigo-50/30 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] border-l border-gray-50 z-10">
+                  {canManageThisTeam ? (
+                    <div className="flex items-center justify-center gap-1.5">
+                      <button 
+                        onClick={() => handleOpenEditMember(teamId, member)}
+                        className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors"
+                        title="Sửa thành viên"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteMember(teamId, member)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                        title="Xóa thành viên"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-gray-400 font-semibold italic select-none">Chỉ xem</span>
+                  )}
+                </td>
+              </tr>
+            ))
+          )}
+          {members && members.length > 0 && (
+            <tr>
+              <td colSpan={15} className="py-0">
+                {canManageThisTeam ? (
+                  <button 
+                    onClick={() => handleOpenAddMember(teamId)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-50/40 hover:bg-indigo-100/70 text-indigo-700 transition-colors font-bold text-xs uppercase tracking-wider"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Thêm thành viên mới vào tổ đội này
+                  </button>
+                ) : (
+                  <div className="py-2 bg-gray-50/80 text-center text-[11px] text-gray-400 font-semibold flex items-center justify-center gap-1.5 border-t border-gray-100">
+                    <Lock className="w-3.5 h-3.5 text-gray-400" />
+                    <span>GSHT chỉ được thêm thành viên cho tổ đội làm công trình mình được phân công phụ trách</span>
+                  </div>
+                )}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    );
   };
 
   return (
     <div className="pb-12">
       <div className="p-8 space-y-6 w-full">
-        {/* Action Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-2xl font-bold shadow-sm border border-indigo-100">
-              <Users className="w-5 h-5" />
+        {/* Top Control Bar with 3 Tabs */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print">
+          <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-gray-200 shadow-2xs overflow-x-auto">
+            {/* TAB 1: Quản Lý Tổ Đội */}
+            <button
+              onClick={() => setActiveTab('teams')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'teams'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Users className="w-4 h-4" />
               <span>Quản Lý Tổ Đội</span>
-            </div>
-            <span className="text-gray-500 text-sm font-medium">Tổng số: {teams.length} đội</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
+                activeTab === 'teams' ? 'bg-indigo-700/80 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {visibleTeams.length}
+              </span>
+            </button>
+
+            {/* TAB 2: Công Nhân Các Đội (Thành viên tổ đội) */}
+            <button
+              onClick={() => setActiveTab('team-workers')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'team-workers'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <UserCheck className="w-4 h-4" />
+              <span>Công Nhân Các Đội</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
+                activeTab === 'team-workers' ? 'bg-indigo-700/80 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {allWorkers.length}
+              </span>
+            </button>
+
+            {/* TAB 3: Toàn Thể Công Nhân */}
+            <button
+              onClick={() => setActiveTab('all-workers')}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-200 whitespace-nowrap ${
+                activeTab === 'all-workers'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/25'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <HardHat className="w-4 h-4" />
+              <span>Toàn Thể Công Nhân</span>
+              <span className={`text-[11px] px-2 py-0.5 rounded-full font-black ${
+                activeTab === 'all-workers' ? 'bg-indigo-700/80 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {allWorkers.length}
+              </span>
+            </button>
           </div>
 
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-500/20 transition active:scale-95 self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" /> Thêm Tổ Đội
-          </button>
+          <div className="flex items-center gap-2">
+            {activeTab === 'teams' && (
+              <button
+                onClick={handleOpenAdd}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-xs font-bold shadow-md shadow-indigo-500/20 transition active:scale-95"
+              >
+                <Plus className="w-4 h-4" /> Thêm Tổ Đội
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Content */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden space-y-4 p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 no-print">
-            <div className="relative flex-1 w-full max-w-md">
-              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Tìm kiếm tổ đội, đội trưởng, dự án..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
-              />
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handlePrint}
-                className="flex items-center gap-1.5 px-4 py-2 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-xl border border-gray-200 shadow-sm transition-colors text-xs"
-              >
-                <Printer className="w-4 h-4" /> In Bảng
-              </button>
-              <button 
-                onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-xl border border-emerald-200 shadow-sm transition-colors text-xs"
-              >
-                <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
-              </button>
-            </div>
-          </div>
+        {/* TAB 1: QUẢN LÝ TỔ ĐỘI (BẢNG QUẢN LÝ CÁC TỔ ĐỘI) */}
+        {activeTab === 'teams' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden space-y-4 p-5">
+            {/* Toolbar Tab 1 */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 no-print">
+              <div className="flex flex-wrap items-center gap-2 flex-1">
+                {/* Ô tìm kiếm tổ đội */}
+                <div className="relative flex-1 min-w-[240px] max-w-sm">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo tên tổ đội, đội trưởng, dự án..."
+                    value={teamSearchTerm}
+                    onChange={(e) => setTeamSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                  />
+                </div>
 
-          <div className="overflow-x-auto rounded-xl border border-gray-200">
-            <table className="w-full text-left qss-table">
-              <thead>
-                <tr>
-                  <th className="py-3 px-4 text-xs font-extrabold uppercase">TỔ ĐỘI & ĐỘI TRƯỞNG</th>
-                  <th className="py-3 px-4 text-xs font-extrabold uppercase">PHÂN LOẠI</th>
-                  <th className="py-3 px-4 text-xs font-extrabold uppercase">DỰ ÁN ÁP DỤNG</th>
-                  <th className="py-3 px-4 text-xs font-extrabold uppercase text-right">THAO TÁC</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTeams.map((team) => (
-                  <React.Fragment key={team.id}>
-                    <tr 
-                      className={`transition border-b border-gray-100 cursor-pointer ${expandedTeamId === team.id ? 'bg-indigo-50/50' : 'hover:bg-slate-50'}`}
-                      onClick={() => setExpandedTeamId(expandedTeamId === team.id ? null : team.id)}
-                    >
-                      <td className="py-3.5 px-4 flex items-center gap-3">
-                        {expandedTeamId === team.id ? <ChevronUp className="w-5 h-5 text-indigo-500 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
-                        <div>
-                          <div className="font-extrabold text-gray-900 text-sm">{team.teamName}</div>
-                          <div className="text-xs text-indigo-600 font-semibold flex items-center gap-1 mt-0.5">
-                            <Phone className="w-3.5 h-3.5 text-indigo-400" /> {team.leaderName} ({team.phone || 'N/A'})
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        {team.teamType && (
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${team.teamType === 'Cơ hữu' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'}`}>
-                            {team.teamType}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="flex flex-wrap gap-1.5">
-                          {Array.isArray(team.projects) && team.projects.length > 0 ? (
-                            team.projects.map((proj, i) => (
-                              <span key={i} className="inline-block bg-indigo-50 text-indigo-700 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs">
-                                {proj}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs">
-                              {team.projectName || 'Tất cả dự án'}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            title="Sửa thông tin" 
-                            onClick={(e) => { e.stopPropagation(); handleOpenEdit(team); }}
-                            className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-xl transition border border-indigo-100 bg-white"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button 
-                            title="Xóa" 
-                            onClick={(e) => { e.stopPropagation(); deleteTeam(team.id); }}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition border border-red-100 bg-white"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                {/* Bộ lọc Dự án */}
+                <select
+                  value={teamProjectFilter}
+                  onChange={(e) => setTeamProjectFilter(e.target.value)}
+                  className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="ALL">Tất cả Dự án</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+
+                {/* Bộ lọc Phân loại */}
+                <select
+                  value={teamTypeFilter}
+                  onChange={(e) => setTeamTypeFilter(e.target.value)}
+                  className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="ALL">Tất cả Phân loại ({visibleTeams.length})</option>
+                  <option value="Thầu phụ">Thầu phụ ({thauPhuCount})</option>
+                  <option value="Cơ hữu">Cơ hữu ({coHuuCount})</option>
+                </select>
+              </div>
+
+              {/* Nút In & Xuất Excel */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handlePrintTeamsTable}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-xl border border-gray-200 shadow-2xs transition-colors text-xs"
+                >
+                  <Printer className="w-4 h-4" /> In Bảng
+                </button>
+                <button
+                  onClick={handleExportTeamsExcel}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-xl border border-emerald-200 shadow-2xs transition-colors text-xs"
+                >
+                  <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
+                </button>
+              </div>
+            </div>
+
+            {/* Bảng danh sách các tổ đội */}
+            <div id="print-teams-table" className="overflow-x-auto rounded-xl border border-gray-200">
+              <table className="w-full text-left qss-table">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-100">
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase w-12 text-center">STT</th>
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase min-w-[220px]">TỔ ĐỘI & ĐỘI TRƯỞNG</th>
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase text-center w-32">PHÂN LOẠI</th>
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase min-w-[200px]">DỰ ÁN ÁP DỤNG</th>
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase text-center w-40">SỐ THÀNH VIÊN</th>
+                    <th className="py-3 px-4 text-xs font-extrabold uppercase text-right w-36">THAO TÁC</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTeams.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-12 text-center text-xs text-gray-400 font-medium italic">
+                        <Users className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+                        Không tìm thấy tổ đội nào phù hợp với bộ lọc.
                       </td>
                     </tr>
-                    
-                    {/* Expandable Member List */}
-                    {expandedTeamId === team.id && (
-                      <tr className="bg-slate-50 border-b border-gray-200">
-                        <td colSpan={3} className="p-0">
-                          <div className="p-4 px-6 md:px-12 animate-in slide-in-from-top-2 fade-in duration-200">
-                            <div className="bg-white rounded-xl shadow-sm border border-indigo-100 overflow-hidden">
-                              <div className="bg-indigo-50/50 px-4 py-2 border-b border-indigo-100 flex items-center justify-between">
-                                <h4 className="text-xs font-extrabold text-indigo-900 uppercase">Danh sách thành viên tổ đội ({team.members?.length || 0})</h4>
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => handlePrintTeam(team)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 text-[11px] font-bold uppercase rounded hover:bg-gray-50 transition-colors shadow-sm">
-                                    <Printer className="w-3.5 h-3.5" /> In
-                                  </button>
-                                  <button onClick={() => handleExportTeamExcel(team)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold uppercase rounded hover:bg-emerald-100 transition-colors shadow-sm">
-                                    <FileSpreadsheet className="w-3.5 h-3.5" /> Xuất Excel
-                                  </button>
-                                </div>
-                              </div>
-                              <div id={`print-team-${team.id}`} className="overflow-x-auto">
-                                <table className="w-full text-left">
-                                  <thead>
-                                    <tr className="bg-gray-50 border-b border-gray-100">
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase w-12 text-center">STT</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase min-w-[150px]">Họ và Tên</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">Chức vụ</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Tuổi</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">CCCD</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Năm sinh</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Ngày cấp</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">Địa chỉ</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">Bằng cấp nghề</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Bảo hiểm tai nạn</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Chứng chỉ AT</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">Giấy khám SK</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center">HĐLĐ</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase">Ghi chú</th>
-                                      <th className="py-2.5 px-4 text-[11px] font-extrabold text-gray-500 uppercase text-center sticky right-0 bg-gray-50 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Thao tác</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {(!team.members || team.members.length === 0) ? (
-                                      <tr>
-                                        <td colSpan={15} className="py-6 text-center text-xs text-gray-400 font-medium italic">
-                                          Chưa có dữ liệu thành viên. Vui lòng thêm thành viên vào tổ đội này.
-                                        </td>
-                                      </tr>
-                                    ) : (
-                                      team.members.map((member, idx) => (
-                                        <tr key={member.id} className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors last:border-0 group">
-                                          <td className="py-2 px-4 text-xs font-bold text-gray-400 text-center">{idx + 1}</td>
-                                          <td className="py-2 px-4 text-xs font-bold text-gray-900 flex items-center gap-2 whitespace-nowrap">
-                                            <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 overflow-hidden shrink-0">
-                                              {member.photo ? <img src={member.photo} alt={member.name} className="w-full h-full object-cover" /> : <User className="w-3.5 h-3.5" />}
-                                            </div>
-                                            {member.name}
-                                          </td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.position || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 text-center">{member.age || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.cccd || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 text-center">{member.birthYear || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 text-center whitespace-nowrap">{member.issueDate || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[200px] truncate" title={member.address}>{member.address || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.vocationalCertificate || '-'}</td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-center whitespace-nowrap">
-                                            <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${getExpiryStatus(member.insuranceExpiry) === 'danger' ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-sky-50 text-sky-600 border-sky-200'}`}>
-                                              {member.insuranceExpiry || 'Chưa có'}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-center whitespace-nowrap">
-                                            <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${getExpiryStatus(member.safetyCardExpiry) === 'danger' ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-emerald-50 text-emerald-600 border-emerald-200'}`}>
-                                              {member.safetyCardExpiry || 'Chưa có'}
-                                            </span>
-                                          </td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-center whitespace-nowrap">
-                                            {member.healthCertificate ? (
-                                              <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${getExpiryStatus(member.healthCertificate) === 'danger' ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-amber-50 text-amber-600 border-amber-200'}`}>
-                                                {member.healthCertificate}
-                                              </span>
-                                            ) : (
-                                              <span className="text-gray-400">-</span>
-                                            )}
-                                          </td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-center whitespace-nowrap">
-                                            {member.contract ? (
-                                              <span className={`px-2 py-0.5 rounded-md font-extrabold text-[10px] border ${getExpiryStatus(member.contract) === 'danger' ? 'bg-red-100 text-red-700 border-red-300 animate-pulse' : 'bg-purple-50 text-purple-600 border-purple-200'}`}>
-                                                {member.contract}
-                                              </span>
-                                            ) : (
-                                              <span className="text-gray-400">-</span>
-                                            )}
-                                          </td>
-                                          <td className="py-2 px-4 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[200px] truncate" title={member.notes}>{member.notes || '-'}</td>
-                                          <td className="py-2 px-4 text-center sticky right-0 bg-white group-hover:bg-indigo-50/30 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] border-l border-gray-50 z-10">
-                                            <div className="flex items-center justify-center gap-2">
-                                              <button 
-                                                onClick={() => handleOpenEditMember(team.id, member)}
-                                                className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors"
-                                                title="Sửa"
-                                              >
-                                                <Edit2 className="w-3.5 h-3.5" />
-                                              </button>
-                                              <button 
-                                                onClick={() => {
-                                                  useStore.getState().openGlobalConfirm('Bạn có chắc chắn muốn xóa thành viên này?', () => {
-                                                    useStore.getState().deleteTeamMember(team.id, member.id);
-                                                  });
-                                                }}
-                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                                                title="Xóa"
-                                              >
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                              </button>
-                                            </div>
-                                          </td>
-                                        </tr>
-                                      ))
-                                    )}
-                                    {/* Add Member Row */}
-                                    <tr>
-                                      <td colSpan={15} className="py-0">
-                                        <button 
-                                          onClick={() => handleOpenAddMember(team.id)}
-                                          className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 transition-colors font-bold text-xs uppercase tracking-wider"
-                                        >
-                                          <Plus className="w-4 h-4" /> Thêm thành viên mới
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
-                              </div>
+                  ) : (
+                    filteredTeams.map((team, idx) => {
+                      const memberCount = team.members?.length || 0;
+                      return (
+                        <tr key={team.id} className="transition border-b border-gray-100 hover:bg-indigo-50/30">
+                          <td className="py-3 px-4 text-xs font-bold text-gray-400 text-center">{idx + 1}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-extrabold text-gray-900 text-sm">{team.teamName}</div>
+                            <div className="text-xs text-indigo-600 font-semibold flex items-center gap-1.5 mt-0.5">
+                              <Phone className="w-3.5 h-3.5 text-indigo-400" /> 
+                              <span>{team.leaderName} ({team.phone || 'N/A'})</span>
                             </div>
-                          </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {team.teamType ? (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                                team.teamType === 'Cơ hữu' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {team.teamType}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex flex-wrap gap-1.5">
+                              {Array.isArray(team.projects) && team.projects.length > 0 ? (
+                                team.projects.map((proj, i) => (
+                                  <span key={i} className="inline-block bg-indigo-50 text-indigo-700 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs">
+                                    {proj}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="inline-block bg-indigo-50 text-indigo-700 text-xs font-extrabold px-2.5 py-1 rounded-lg border border-indigo-200 shadow-2xs">
+                                  {team.projectName || 'Tất cả dự án'}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <button
+                              onClick={() => {
+                                setSelectedTeamId(team.id);
+                                setActiveTab('team-workers');
+                              }}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold transition ${
+                                memberCount > 0 
+                                  ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200' 
+                                  : 'bg-gray-50 text-gray-400 hover:bg-gray-100 border border-gray-200'
+                              }`}
+                              title="Bấm để xem danh sách thành viên đội này"
+                            >
+                              <User className="w-3.5 h-3.5" />
+                              <span>{memberCount} thành viên</span>
+                              <ChevronRight className="w-3 h-3 ml-0.5" />
+                            </button>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                title="Xem danh sách thành viên đội này"
+                                onClick={() => {
+                                  setSelectedTeamId(team.id);
+                                  setActiveTab('team-workers');
+                                }}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition border border-indigo-100 bg-white"
+                              >
+                                <UserCheck className="w-4 h-4" />
+                              </button>
+                              <button 
+                                title="Sửa thông tin tổ đội" 
+                                onClick={() => handleOpenEdit(team)}
+                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-xl transition border border-indigo-100 bg-white"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button 
+                                title="Xóa tổ đội" 
+                                onClick={() => handleDeleteTeam(team)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-xl transition border border-red-100 bg-white"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: CÔNG NHÂN CÁC ĐỘI (DANH SÁCH THÀNH VIÊN TRONG TỔ ĐỘI ĐÓ) */}
+        {activeTab === 'team-workers' && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden space-y-4 p-5">
+            {/* Toolbar: Chọn tổ đội, Tìm kiếm & Thao tác */}
+            <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 no-print">
+              <div className="flex flex-wrap items-center gap-3 flex-1">
+                {/* Chọn tổ đội */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black uppercase text-gray-700 tracking-wider whitespace-nowrap">Chọn Tổ Đội:</span>
+                  <select
+                    value={selectedTeam?.id || ''}
+                    onChange={(e) => setSelectedTeamId(e.target.value)}
+                    className="px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-black text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer min-w-[240px]"
+                  >
+                    {visibleTeams.map(t => (
+                      <option key={t.id} value={t.id}>
+                        {t.teamName} — ({t.members?.length || 0} thành viên)
+                      </option>
+                    ))}
+                    {visibleTeams.length === 0 && (
+                      <option value="">(Không có tổ đội nào thuộc công trình của bạn)</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Tìm kiếm thành viên trong đội */}
+                <div className="relative flex-1 min-w-[240px] max-w-sm">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo họ tên, CCCD, chức vụ, địa chỉ..."
+                    value={teamWorkerSearchTerm}
+                    onChange={(e) => setTeamWorkerSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              {/* Nút hành động */}
+              {selectedTeam && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handlePrintTeam(selectedTeam)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-xl border border-gray-200 shadow-2xs transition-colors text-xs"
+                  >
+                    <Printer className="w-4 h-4" /> In Bảng
+                  </button>
+                  <button
+                    onClick={() => handleExportTeamExcel(selectedTeam)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-xl border border-emerald-200 shadow-2xs transition-colors text-xs"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
+                  </button>
+                  {canUserManageTeamMembers(currentUser, selectedTeam, allProjects) ? (
+                    <button
+                      onClick={() => handleOpenAddMember(selectedTeam.id)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition active:scale-95"
+                    >
+                      <Plus className="w-4 h-4" /> Thêm Thành Viên
+                    </button>
+                  ) : (
+                    <div 
+                      className="flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 text-gray-400 text-xs font-bold rounded-xl border border-gray-200 cursor-not-allowed select-none" 
+                      title="GSHT chỉ được tạo thành viên cho tổ đội làm công trình mà GSHT được phân công."
+                    >
+                      <Lock className="w-3.5 h-3.5 text-gray-400" />
+                      <span>Không có quyền thêm TV</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Bảng chi tiết thành viên của tổ đội đang chọn */}
+            {selectedTeam ? (
+              <div id={`print-team-${selectedTeam.id}`} className="overflow-x-auto rounded-xl border border-gray-200">
+                {renderMemberTable(filteredSelectedTeamMembers, selectedTeam.id)}
+              </div>
+            ) : (
+              <div className="p-16 text-center text-gray-400">
+                <Users className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                <p className="font-semibold text-sm">Vui lòng chọn một tổ đội để xem danh sách thành viên.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: TOÀN THỂ CÔNG NHÂN (BẢNG TỔNG HỢP CÔNG NHÂN TẤT CẢ CÁC ĐỘI) */}
+        {activeTab === 'all-workers' && (
+          <div className="space-y-4">
+            {/* Quick Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs flex items-center gap-3">
+                <div className="p-3 bg-indigo-50 rounded-xl text-indigo-600">
+                  <HardHat className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Toàn Thể Công Nhân</div>
+                  <div className="text-xl font-black text-gray-900">{allWorkers.length} người</div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs flex items-center gap-3">
+                <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Tổng Số Tổ Đội</div>
+                  <div className="text-xl font-black text-gray-900">{visibleTeams.length} đội</div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs flex items-center gap-3">
+                <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Hồ Sơ Hợp Lệ</div>
+                  <div className="text-xl font-black text-emerald-600">
+                    {Math.max(0, allWorkers.length - totalWarningWorkers)} người
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs flex items-center gap-3">
+                <div className="p-3 bg-amber-50 rounded-xl text-amber-600">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="text-[11px] text-gray-500 font-bold uppercase tracking-wider">Cảnh Báo / Sắp Hết Hạn</div>
+                  <div className="text-xl font-black text-amber-600">{totalWarningWorkers} hồ sơ</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Content Container */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden space-y-4 p-5">
+              {/* Toolbar */}
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 no-print">
+                <div className="flex flex-wrap items-center gap-2 flex-1">
+                  {/* Search */}
+                  <div className="relative flex-1 min-w-[240px] max-w-sm">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Tìm theo tên, CCCD, SĐT, quê quán, tổ đội..."
+                      value={allWorkerSearchTerm}
+                      onChange={(e) => setAllWorkerSearchTerm(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
+                    />
+                  </div>
+
+                  {/* Filter Project */}
+                  <select
+                    value={allWorkerProjectFilter}
+                    onChange={(e) => setAllWorkerProjectFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="ALL">Tất cả Dự án</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+
+                  {/* Filter Team */}
+                  <select
+                    value={allWorkerTeamFilter}
+                    onChange={(e) => setAllWorkerTeamFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="ALL">Tất cả Tổ Đội ({visibleTeams.length})</option>
+                    {visibleTeams.map(t => (
+                      <option key={t.id} value={t.id}>{t.teamName}</option>
+                    ))}
+                  </select>
+
+                  {/* Filter Expiry */}
+                  <select
+                    value={allWorkerExpiryFilter}
+                    onChange={(e) => setAllWorkerExpiryFilter(e.target.value)}
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="ALL">Tất cả Hồ sơ</option>
+                    <option value="WARNING">⚠️ Cảnh báo / Sắp hết hạn ({totalWarningWorkers})</option>
+                    <option value="SAFE">✅ Hồ sơ hợp lệ</option>
+                  </select>
+                </div>
+
+                {/* Print and Export Buttons */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handlePrintAllWorkers}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-gray-50 text-gray-700 hover:bg-gray-100 font-bold rounded-xl border border-gray-200 shadow-2xs transition-colors text-xs"
+                  >
+                    <Printer className="w-4 h-4" /> In Bảng
+                  </button>
+                  <button
+                    onClick={handleExportAllWorkersExcel}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 font-bold rounded-xl border border-emerald-200 shadow-2xs transition-colors text-xs"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" /> Xuất Excel
+                  </button>
+                </div>
+              </div>
+
+              {/* Table of all workers */}
+              <div id="print-all-workers-table" className="overflow-x-auto rounded-xl border border-gray-200">
+                <table className="w-full text-left qss-table">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100">
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase w-10 text-center">STT</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[150px]">Họ và Tên</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[160px]">Tổ Đội</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Dự Án</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Chức vụ</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Tuổi</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">CCCD</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Năm sinh</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Ngày cấp</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[140px]">Địa chỉ</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Bằng cấp nghề</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Bảo hiểm tai nạn</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Chứng chỉ AT</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Giấy khám SK</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">HĐLĐ</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Ghi chú</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center sticky right-0 bg-gray-50 z-10 shadow-[-4px_0_10px_rgba(0,0,0,0.02)]">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredAllWorkers.length === 0 ? (
+                      <tr>
+                        <td colSpan={17} className="py-12 text-center text-xs text-gray-400 font-medium italic">
+                          <HardHat className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+                          Không tìm thấy công nhân nào phù hợp với bộ lọc hiện tại.
                         </td>
                       </tr>
+                    ) : (
+                      filteredAllWorkers.map((worker, idx) => (
+                        <tr key={`${worker.teamId}-${worker.id}`} className="border-b border-gray-50 hover:bg-indigo-50/30 transition-colors last:border-0 group">
+                          <td className="py-2 px-3 text-xs font-bold text-gray-400 text-center">{idx + 1}</td>
+                          <td className="py-2 px-3 text-xs font-bold text-gray-900 flex items-center gap-2 whitespace-nowrap">
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 overflow-hidden shrink-0">
+                              {worker.photo ? (
+                                <img src={worker.photo} alt={worker.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-3.5 h-3.5" />
+                              )}
+                            </div>
+                            <span>{worker.name}</span>
+                          </td>
+                          <td className="py-2 px-3 text-xs whitespace-nowrap">
+                            <button
+                              onClick={() => {
+                                setSelectedTeamId(worker.teamId);
+                                setActiveTab('team-workers');
+                              }}
+                              className="font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline flex items-center gap-1"
+                              title="Bấm để chuyển sang tab Công nhân của đội này"
+                            >
+                              <span>{worker.teamName}</span>
+                              <ChevronRight className="w-3 h-3 text-indigo-400" />
+                            </button>
+                            <div className="text-[11px] text-gray-400">
+                              {worker.leaderName} ({worker.leaderPhone || 'N/A'})
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-xs">
+                            <div className="flex flex-wrap gap-1 max-w-[150px]">
+                              {Array.isArray(worker.teamProjects) && worker.teamProjects.length > 0 ? (
+                                worker.teamProjects.map((p, i) => (
+                                  <span key={i} className="inline-block bg-indigo-50 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-100 whitespace-nowrap">
+                                    {p}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{worker.position || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{worker.age || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{worker.cccd || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{worker.birthYear || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center whitespace-nowrap">{worker.issueDate || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[180px] truncate" title={worker.address}>
+                            {worker.address || '-'}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{worker.vocationalCertificate || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                            {renderExpiryBadge(worker.insuranceExpiry, 'sky')}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                            {renderExpiryBadge(worker.safetyCardExpiry, 'emerald')}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                            {renderExpiryBadge(worker.healthCertificate, 'amber')}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-center whitespace-nowrap">
+                            {renderExpiryBadge(worker.contract, 'purple')}
+                          </td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap max-w-[150px] truncate" title={worker.notes}>
+                            {worker.notes || '-'}
+                          </td>
+                          <td className="py-2 px-3 text-center sticky right-0 bg-white group-hover:bg-indigo-50/30 transition-colors shadow-[-4px_0_10px_rgba(0,0,0,0.02)] border-l border-gray-50 z-10">
+                            {(() => {
+                              const workerTeam = teams.find(t => t.id === worker.teamId);
+                              const canManageWorkerTeam = canUserManageTeamMembers(currentUser, workerTeam, allProjects);
+                              return canManageWorkerTeam ? (
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button 
+                                    onClick={() => handleOpenEditMember(worker.teamId, worker)}
+                                    className="p-1.5 text-indigo-500 hover:bg-indigo-100 rounded-md transition-colors"
+                                    title="Sửa công nhân"
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteMember(worker.teamId, worker)}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                    title="Xóa công nhân"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] text-gray-400 font-semibold italic select-none">Chỉ xem</span>
+                              );
+                            })()}
+                          </td>
+                        </tr>
+                      ))
                     )}
-                  </React.Fragment>
-                ))}
-              </tbody>
-            </table>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <AddTeamModal 
