@@ -13,6 +13,104 @@ const parseNumber = (value) => {
   return Number.isFinite(num) ? num : 0;
 };
 
+const isPhuNoi = (name = '') => {
+  if (!name) return false;
+  const upper = name.trim().toUpperCase().normalize('NFC');
+  const hasPhu = upper.includes('PHỦ') || upper.includes('PHU');
+  const hasNoi = upper.includes('NỘI') || upper.includes('NOI') || upper.includes('TRONG');
+  const hasNgoai = upper.includes('NGOẠI') || upper.includes('NGOAI') || upper.includes('NGOÀI');
+  return hasPhu && hasNoi && !hasNgoai;
+};
+
+const isPhuNgoai = (name = '') => {
+  if (!name) return false;
+  const upper = name.trim().toUpperCase().normalize('NFC');
+  const hasPhu = upper.includes('PHỦ') || upper.includes('PHU');
+  const hasNgoai = upper.includes('NGOẠI') || upper.includes('NGOAI') || upper.includes('NGOÀI');
+  return hasPhu && hasNgoai;
+};
+
+const buildReportRowsWithSubtotals = (list = []) => {
+  if (!list || list.length === 0) return [];
+
+  const phuNoiItems = [];
+  const phuNgoaiItems = [];
+  const otherBefore = [];
+  const otherAfter = [];
+
+  const firstPaintIdx = list.findIndex(i => isPhuNoi(i.materialName) || isPhuNgoai(i.materialName));
+  const lastPaintIdx = list.map(i => isPhuNoi(i.materialName) || isPhuNgoai(i.materialName)).lastIndexOf(true);
+
+  if (firstPaintIdx === -1) {
+    return list;
+  }
+
+  list.forEach((item, idx) => {
+    if (isPhuNoi(item.materialName)) {
+      phuNoiItems.push(item);
+    } else if (isPhuNgoai(item.materialName)) {
+      phuNgoaiItems.push(item);
+    } else {
+      if (idx > lastPaintIdx) {
+        otherAfter.push(item);
+      } else {
+        otherBefore.push(item);
+      }
+    }
+  });
+
+  const createSubtotal = (name, type, items) => {
+    const ordered = items.reduce((s, i) => s + (i.ordered || 0), 0);
+    const received = items.reduce((s, i) => s + (i.received || 0), 0);
+    const shortage = Math.max(0, ordered - received);
+    const dm = items.reduce((s, i) => s + (i.dm || 0), 0);
+    const kl = items.reduce((s, i) => s + (i.kl || 0), 0);
+    const amount = items.reduce((s, i) => s + (i.amount || 0), 0);
+    const remainingAmount = items.reduce((s, i) => s + (i.remainingAmount || 0), 0);
+    const unit = items.find(i => i.unit)?.unit || 'Thùng/18l';
+
+    return {
+      id: `subtotal-${type}`,
+      materialName: name,
+      unit,
+      ordered,
+      received,
+      shortage,
+      dm,
+      kl,
+      price: 0,
+      amount,
+      remainingAmount,
+      isSubtotal: true,
+      subtotalType: type
+    };
+  };
+
+  const rows = [];
+  rows.push(...otherBefore);
+
+  let subtotalNoi = null;
+  if (phuNoiItems.length > 0) {
+    phuNoiItems.forEach(item => {
+      rows.push({ ...item, isPhuNoiItem: true });
+    });
+    subtotalNoi = createSubtotal('TỔNG PHỦ NỘI', 'phuNoi', phuNoiItems);
+    rows.push(subtotalNoi);
+  }
+
+  let subtotalNgoai = null;
+  if (phuNgoaiItems.length > 0) {
+    phuNgoaiItems.forEach(item => {
+      rows.push({ ...item, isPhuNgoaiItem: true });
+    });
+    subtotalNgoai = createSubtotal('TỔNG PHỦ NGOẠI', 'phuNgoai', phuNgoaiItems);
+    rows.push(subtotalNgoai);
+  }
+
+  rows.push(...otherAfter);
+  return rows;
+};
+
 export default function MaterialReportModal({
   isOpen,
   onClose,
@@ -238,6 +336,14 @@ export default function MaterialReportModal({
     };
   }, [materialItems, materialRows, finalDinhMucMap, finalUnitMap]);
 
+  const totalDisplayRows = useMemo(() => {
+    return buildReportRowsWithSubtotals(totalList);
+  }, [totalList]);
+
+  const dmDisplayRows = useMemo(() => {
+    return buildReportRowsWithSubtotals(dmList);
+  }, [dmList]);
+
   if (!isOpen) return null;
 
   const titles = {
@@ -299,17 +405,38 @@ export default function MaterialReportModal({
             </tr>
           </thead>
           <tbody>
-            ${totalList.map(item => `
-              <tr>
-                <td><strong>${item.materialName}</strong></td>
-                <td class="text-right">${item.ordered.toLocaleString('vi-VN')}</td>
-                <td class="text-right text-green">${item.received.toLocaleString('vi-VN')}</td>
-                <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
-                <td class="text-right text-green">${item.price > 0 ? item.price.toLocaleString('vi-VN') + ' đ' : '-'}</td>
-                <td class="text-right text-blue"><strong>${item.amount > 0 ? item.amount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
-                <td class="text-right text-red"><strong>${item.remainingAmount > 0 ? item.remainingAmount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
-              </tr>
-            `).join('')}
+            ${totalDisplayRows.map(item => {
+              if (item.isSubtotal) {
+                const subClass = item.subtotalType === 'phuNoi'
+                  ? 'row-subtotal-phu-noi'
+                  : item.subtotalType === 'phuNgoai'
+                    ? 'row-subtotal-phu-ngoai'
+                    : 'row-subtotal-all-phu';
+                return `
+                  <tr class="${subClass}">
+                    <td><strong>${item.materialName}</strong></td>
+                    <td class="text-right"><strong>${item.ordered.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-right text-green"><strong>${item.received.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}"><strong>${item.shortage.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-center">-</td>
+                    <td class="text-right text-blue"><strong>${item.amount > 0 ? item.amount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
+                    <td class="text-right text-red"><strong>${item.remainingAmount > 0 ? item.remainingAmount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
+                  </tr>
+                `;
+              }
+              const rowClass = item.isPhuNoiItem ? 'row-phu-noi' : '';
+              return `
+                <tr class="${rowClass}">
+                  <td><strong>${item.materialName}</strong></td>
+                  <td class="text-right">${item.ordered.toLocaleString('vi-VN')}</td>
+                  <td class="text-right text-green">${item.received.toLocaleString('vi-VN')}</td>
+                  <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
+                  <td class="text-right text-green">${item.price > 0 ? item.price.toLocaleString('vi-VN') + ' đ' : '-'}</td>
+                  <td class="text-right text-blue"><strong>${item.amount > 0 ? item.amount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
+                  <td class="text-right text-red"><strong>${item.remainingAmount > 0 ? item.remainingAmount.toLocaleString('vi-VN') + ' đ' : '-'}</strong></td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
           <tfoot>
             <tr style="font-weight: bold; background-color: #f1f5f9; border-top: 2px solid #334155;">
@@ -340,17 +467,38 @@ export default function MaterialReportModal({
             </tr>
           </thead>
           <tbody>
-            ${dmList.map(item => `
-              <tr>
-                <td><strong>${item.materialName}</strong></td>
-                <td class="text-center">${item.unit || '-'}</td>
-                <td class="text-right">${item.ordered.toLocaleString('vi-VN')}</td>
-                <td class="text-right text-green">${item.received.toLocaleString('vi-VN')}</td>
-                <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
-                <td class="text-right text-blue">${item.dm > 0 ? item.dm.toLocaleString('vi-VN') : '-'}</td>
-                <td class="text-right text-blue"><strong>${item.kl > 0 ? item.kl.toLocaleString('vi-VN') : '-'}</strong></td>
-              </tr>
-            `).join('')}
+            ${dmDisplayRows.map(item => {
+              if (item.isSubtotal) {
+                const subClass = item.subtotalType === 'phuNoi'
+                  ? 'row-subtotal-phu-noi'
+                  : item.subtotalType === 'phuNgoai'
+                    ? 'row-subtotal-phu-ngoai'
+                    : 'row-subtotal-all-phu';
+                return `
+                  <tr class="${subClass}">
+                    <td><strong>${item.materialName}</strong></td>
+                    <td class="text-center"><strong>${item.unit || '-'}</strong></td>
+                    <td class="text-right"><strong>${item.ordered.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-right text-green"><strong>${item.received.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}"><strong>${item.shortage.toLocaleString('vi-VN')}</strong></td>
+                    <td class="text-right"><strong>${item.dm > 0 ? item.dm.toLocaleString('vi-VN') : '-'}</strong></td>
+                    <td class="text-right text-blue"><strong>${item.kl > 0 ? item.kl.toLocaleString('vi-VN') : '-'}</strong></td>
+                  </tr>
+                `;
+              }
+              const rowClass = item.isPhuNoiItem ? 'row-phu-noi' : '';
+              return `
+                <tr class="${rowClass}">
+                  <td><strong>${item.materialName}</strong></td>
+                  <td class="text-center">${item.unit || '-'}</td>
+                  <td class="text-right">${item.ordered.toLocaleString('vi-VN')}</td>
+                  <td class="text-right text-green">${item.received.toLocaleString('vi-VN')}</td>
+                  <td class="text-right ${item.shortage > 0 ? 'text-red' : ''}">${item.shortage.toLocaleString('vi-VN')}</td>
+                  <td class="text-right text-blue">${item.dm > 0 ? item.dm.toLocaleString('vi-VN') : '-'}</td>
+                  <td class="text-right text-blue"><strong>${item.kl > 0 ? item.kl.toLocaleString('vi-VN') : '-'}</strong></td>
+                </tr>
+              `;
+            }).join('')}
           </tbody>
         </table>
       `;
@@ -367,12 +515,17 @@ export default function MaterialReportModal({
             th, td { border: 1px solid #94a3b8; padding: 10px 14px; text-align: left; }
             th { background-color: #f1f5f9; color: #334155; text-transform: uppercase; font-size: 12px; font-weight: bold; }
             .text-right { text-align: right; }
+            .text-center { text-align: center; }
             .text-red { color: #dc2626; font-weight: bold; }
             .text-green { color: #16a34a; }
             .text-blue { color: #2563eb; }
             .align-middle { vertical-align: middle; }
             .bg-gray { background-color: #f8fafc; font-weight: bold; }
             .bg-amber { background-color: #fef3c7 !important; }
+            .row-phu-noi { background-color: #ffedd5 !important; }
+            .row-subtotal-phu-noi { background-color: #fef3c7 !important; font-weight: bold; border-top: 2px solid #f59e0b; border-bottom: 2px solid #d97706; color: #9a3412; }
+            .row-subtotal-phu-ngoai { background-color: #e0f2fe !important; font-weight: bold; border-top: 2px solid #0284c7; border-bottom: 2px solid #0369a1; color: #0369a1; }
+            .row-subtotal-all-phu { background-color: #e0e7ff !important; font-weight: bold; border-top: 2px solid #4f46e5; border-bottom: 3px double #4338ca; color: #1e1b4b; }
             h2 { color: #0f172a; margin-bottom: 8px; font-size: 22px; text-align: center; text-transform: uppercase; }
             .subtitle { color: #475569; font-size: 13px; margin-bottom: 25px; text-align: center; font-style: italic; }
           </style>
@@ -439,6 +592,44 @@ export default function MaterialReportModal({
     const redStyle = { font: { bold: true, color: { rgb: 'DC2626' } } };
     const greenStyle = { font: { color: { rgb: '16A34A' } } };
     const amberFill = { fill: { fgColor: { rgb: 'FEF3C7' } } };
+    const peachRowFill = { fill: { fgColor: { rgb: 'FFEDD5' } } };
+
+    const subBorderNoi = {
+      top: { style: 'thin', color: { rgb: 'F59E0B' } },
+      bottom: { style: 'medium', color: { rgb: 'D97706' } },
+      left: cellBorder.left,
+      right: cellBorder.right
+    };
+    const subNoiStyle = {
+      font: { bold: true, color: { rgb: '9A3412' } },
+      fill: { fgColor: { rgb: 'FEF3C7' } },
+      border: subBorderNoi
+    };
+
+    const subBorderNgoai = {
+      top: { style: 'thin', color: { rgb: '0284C7' } },
+      bottom: { style: 'medium', color: { rgb: '0369A1' } },
+      left: cellBorder.left,
+      right: cellBorder.right
+    };
+    const subNgoaiStyle = {
+      font: { bold: true, color: { rgb: '0369A1' } },
+      fill: { fgColor: { rgb: 'E0F2FE' } },
+      border: subBorderNgoai
+    };
+
+    const subBorderAllPhu = {
+      top: { style: 'medium', color: { rgb: '4F46E5' } },
+      bottom: { style: 'double', color: { rgb: '3730A3' } },
+      left: cellBorder.left,
+      right: cellBorder.right
+    };
+    const subAllPhuStyle = {
+      font: { bold: true, color: { rgb: '1E1B4B' } },
+      fill: { fgColor: { rgb: 'E0E7FF' } },
+      border: subBorderAllPhu
+    };
+
     const footerStyle = {
       font: { bold: true, color: { rgb: '1E1B4B' } },
       fill: { fgColor: { rgb: 'E0E7FF' } },
@@ -540,16 +731,35 @@ export default function MaterialReportModal({
       ]);
 
       // Data rows
-      totalList.forEach(item => {
-        aoa.push([
-          baseCell(item.materialName, { font: { bold: true } }),
-          numCell(item.ordered),
-          numCell(item.received, { ...greenStyle }),
-          numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder } : {}),
-          numCell(item.price > 0 ? item.price : 0, { ...greenStyle }),
-          numCell(item.amount > 0 ? item.amount : 0, { font: { bold: true, color: { rgb: '4338CA' } } }),
-          numCell(item.remainingAmount > 0 ? item.remainingAmount : 0, { font: { bold: true, color: { rgb: 'DC2626' } } })
-        ]);
+      totalDisplayRows.forEach(item => {
+        if (item.isSubtotal) {
+          const rowStyle = item.subtotalType === 'phuNoi'
+            ? subNoiStyle
+            : item.subtotalType === 'phuNgoai'
+              ? subNgoaiStyle
+              : subAllPhuStyle;
+
+          aoa.push([
+            baseCell(item.materialName, { ...rowStyle, alignment: { vertical: 'center' } }),
+            numCell(item.ordered, { ...rowStyle }),
+            numCell(item.received, { ...rowStyle, font: { bold: true, color: { rgb: '16A34A' } } }),
+            numCell(item.shortage, { ...rowStyle, font: { bold: true, color: item.shortage > 0 ? { rgb: 'DC2626' } : rowStyle.font.color } }),
+            baseCell('-', { ...rowStyle, alignment: { horizontal: 'center', vertical: 'center' } }),
+            numCell(item.amount > 0 ? item.amount : 0, { ...rowStyle, font: { bold: true, color: { rgb: '4338CA' } } }),
+            numCell(item.remainingAmount > 0 ? item.remainingAmount : 0, { ...rowStyle, font: { bold: true, color: { rgb: 'DC2626' } } })
+          ]);
+        } else {
+          const itemPeach = item.isPhuNoiItem ? peachRowFill : {};
+          aoa.push([
+            baseCell(item.materialName, { font: { bold: true }, ...itemPeach }),
+            numCell(item.ordered, { ...itemPeach }),
+            numCell(item.received, { ...greenStyle, ...itemPeach }),
+            numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder, ...itemPeach } : { ...itemPeach }),
+            numCell(item.price > 0 ? item.price : 0, { ...greenStyle, ...itemPeach }),
+            numCell(item.amount > 0 ? item.amount : 0, { font: { bold: true, color: { rgb: '4338CA' } }, ...itemPeach }),
+            numCell(item.remainingAmount > 0 ? item.remainingAmount : 0, { font: { bold: true, color: { rgb: 'DC2626' } }, ...itemPeach })
+          ]);
+        }
       });
 
       // Footer / totals
@@ -565,7 +775,7 @@ export default function MaterialReportModal({
 
     } else {
       // ── "Tổng và ĐM" tab ──
-      const COLS = 6;
+      const COLS = 7;
       // Title
       aoa.push([
         { v: titleText, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: '0F172A' } }, alignment: { horizontal: 'center', vertical: 'center' } } },
@@ -592,16 +802,35 @@ export default function MaterialReportModal({
       ]);
 
       // Data rows
-      dmList.forEach(item => {
-        aoa.push([
-          baseCell(item.materialName, { font: { bold: true } }),
-          baseCell(item.unit || '', { alignment: { horizontal: 'center', vertical: 'center' } }),
-          numCell(item.ordered),
-          numCell(item.received, { ...greenStyle }),
-          numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder } : {}),
-          numCell(item.dm > 0 ? item.dm : 0, { font: { color: { rgb: '4338CA' } } }),
-          numCell(item.kl > 0 ? item.kl : 0, { font: { bold: true, color: { rgb: '4338CA' } } })
-        ]);
+      dmDisplayRows.forEach(item => {
+        if (item.isSubtotal) {
+          const rowStyle = item.subtotalType === 'phuNoi'
+            ? subNoiStyle
+            : item.subtotalType === 'phuNgoai'
+              ? subNgoaiStyle
+              : subAllPhuStyle;
+
+          aoa.push([
+            baseCell(item.materialName, { ...rowStyle, alignment: { vertical: 'center' } }),
+            baseCell(item.unit || '', { ...rowStyle, alignment: { horizontal: 'center', vertical: 'center' } }),
+            numCell(item.ordered, { ...rowStyle }),
+            numCell(item.received, { ...rowStyle, font: { bold: true, color: { rgb: '16A34A' } } }),
+            numCell(item.shortage, { ...rowStyle, font: { bold: true, color: item.shortage > 0 ? { rgb: 'DC2626' } : rowStyle.font.color } }),
+            numCell(item.dm > 0 ? item.dm : 0, { ...rowStyle }),
+            numCell(item.kl > 0 ? item.kl : 0, { ...rowStyle, font: { bold: true, color: rowStyle.font.color } })
+          ]);
+        } else {
+          const itemPeach = item.isPhuNoiItem ? peachRowFill : {};
+          aoa.push([
+            baseCell(item.materialName, { font: { bold: true }, ...itemPeach }),
+            baseCell(item.unit || '', { alignment: { horizontal: 'center', vertical: 'center' }, ...itemPeach }),
+            numCell(item.ordered, { ...itemPeach }),
+            numCell(item.received, { ...greenStyle, ...itemPeach }),
+            numCell(item.shortage, item.shortage > 0 ? { ...redStyle, border: cellBorder, ...itemPeach } : { ...itemPeach }),
+            numCell(item.dm > 0 ? item.dm : 0, { font: { color: { rgb: '4338CA' } }, ...itemPeach }),
+            numCell(item.kl > 0 ? item.kl : 0, { font: { bold: true, color: { rgb: '4338CA' } }, ...itemPeach })
+          ]);
+        }
       });
 
       // No footer row per user request
@@ -615,9 +844,9 @@ export default function MaterialReportModal({
     if (activeTab === 'shortage') {
       ws['!cols'] = [{ wch: 18 }, { wch: 38 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     } else if (activeTab === 'dm') {
-      ws['!cols'] = [{ wch: 34 }, { wch: 8 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
+      ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 16 }];
     } else {
-      ws['!cols'] = [{ wch: 34 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
+      ws['!cols'] = [{ wch: 36 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 18 }, { wch: 18 }];
     }
 
     // Row heights
@@ -786,59 +1015,157 @@ export default function MaterialReportModal({
                   })
                 )
               ) : activeTab === 'total' ? (
-                totalList.length === 0 ? (
+                totalDisplayRows.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                       Chưa có dữ liệu vật tư nào.
                     </td>
                   </tr>
                 ) : (
-                  totalList.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{item.materialName}</td>
-                      <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{item.ordered.toLocaleString('vi-VN')}</td>
-                      <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{item.received.toLocaleString('vi-VN')}</td>
-                      <td className={`px-4 py-3 text-right font-bold border-r border-slate-100 ${item.shortage > 0 ? 'text-red-600 bg-red-50/30' : 'text-slate-400'}`}>
-                        {item.shortage.toLocaleString('vi-VN')}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-emerald-700 border-r border-slate-100">
-                        {item.price > 0 ? `${item.price.toLocaleString('vi-VN')} đ` : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20 border-r border-slate-100">
-                        {item.amount > 0 ? `${item.amount.toLocaleString('vi-VN')} đ` : '-'}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-bold ${item.remainingAmount > 0 ? 'text-rose-600 bg-rose-50/30' : 'text-slate-400'}`}>
-                        {item.remainingAmount > 0 ? `${item.remainingAmount.toLocaleString('vi-VN')} đ` : '-'}
-                      </td>
-                    </tr>
-                  ))
+                  totalDisplayRows.map((item, idx) => {
+                    if (item.isSubtotal) {
+                      const isNoi = item.subtotalType === 'phuNoi';
+                      const isNgoai = item.subtotalType === 'phuNgoai';
+                      const isAll = item.subtotalType === 'allPhu';
+
+                      const rowBg = isNoi
+                        ? 'bg-amber-100/80 text-amber-950 border-y-2 border-amber-300'
+                        : isNgoai
+                          ? 'bg-sky-100/80 text-sky-950 border-y-2 border-sky-300'
+                          : 'bg-indigo-100 text-indigo-950 border-y-2 border-indigo-400 shadow-xs';
+
+                      const tagBg = isNoi
+                        ? 'bg-amber-600 text-white'
+                        : isNgoai
+                          ? 'bg-sky-600 text-white'
+                          : 'bg-indigo-600 text-white';
+
+                      return (
+                        <tr key={`tot-sub-${idx}`} className={`${rowBg} font-bold transition-colors`}>
+                          <td className="px-4 py-3 border-r border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider font-extrabold ${tagBg}`}>
+                                {isAll ? 'TỔNG GỘP' : 'TỔNG NHÓM'}
+                              </span>
+                              <span>{item.materialName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-right border-r border-slate-200">{item.ordered.toLocaleString('vi-VN')}</td>
+                          <td className="px-4 py-3 text-right text-emerald-700 border-r border-slate-200">{item.received.toLocaleString('vi-VN')}</td>
+                          <td className={`px-4 py-3 text-right border-r border-slate-200 ${item.shortage > 0 ? 'text-red-700 bg-red-100/50' : ''}`}>
+                            {item.shortage.toLocaleString('vi-VN')}
+                          </td>
+                          <td className="px-4 py-3 text-center border-r border-slate-200 text-slate-400">-</td>
+                          <td className="px-4 py-3 text-right font-black text-indigo-900 border-r border-slate-200">
+                            {item.amount > 0 ? `${item.amount.toLocaleString('vi-VN')} đ` : '-'}
+                          </td>
+                          <td className={`px-4 py-3 text-right font-black ${item.remainingAmount > 0 ? 'text-rose-700' : ''}`}>
+                            {item.remainingAmount > 0 ? `${item.remainingAmount.toLocaleString('vi-VN')} đ` : '-'}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const rowBg = item.isPhuNoiItem
+                      ? 'bg-amber-50/40 hover:bg-amber-100/40'
+                      : 'hover:bg-slate-50/50';
+
+                    return (
+                      <tr key={idx} className={`${rowBg} transition-colors`}>
+                        <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{item.materialName}</td>
+                        <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{item.ordered.toLocaleString('vi-VN')}</td>
+                        <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{item.received.toLocaleString('vi-VN')}</td>
+                        <td className={`px-4 py-3 text-right font-bold border-r border-slate-100 ${item.shortage > 0 ? 'text-red-600 bg-red-50/30' : 'text-slate-400'}`}>
+                          {item.shortage.toLocaleString('vi-VN')}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-emerald-700 border-r border-slate-100">
+                          {item.price > 0 ? `${item.price.toLocaleString('vi-VN')} đ` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20 border-r border-slate-100">
+                          {item.amount > 0 ? `${item.amount.toLocaleString('vi-VN')} đ` : '-'}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-bold ${item.remainingAmount > 0 ? 'text-rose-600 bg-rose-50/30' : 'text-slate-400'}`}>
+                          {item.remainingAmount > 0 ? `${item.remainingAmount.toLocaleString('vi-VN')} đ` : '-'}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )
               ) : (
                 /* dm tab */
-                dmList.length === 0 ? (
+                dmDisplayRows.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                       Chưa có dữ liệu vật tư nào.
                     </td>
                   </tr>
                 ) : (
-                  dmList.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{item.materialName}</td>
-                      <td className="px-4 py-3 text-center text-xs font-semibold text-slate-500 border-r border-slate-100">{item.unit || <span className="text-slate-300">-</span>}</td>
-                      <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{item.ordered.toLocaleString('vi-VN')}</td>
-                      <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{item.received.toLocaleString('vi-VN')}</td>
-                      <td className={`px-4 py-3 text-right font-bold border-r border-slate-100 ${item.shortage > 0 ? 'text-red-600 bg-red-50/30' : 'text-slate-400'}`}>
-                        {item.shortage.toLocaleString('vi-VN')}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-indigo-600 border-r border-slate-100">
-                        {item.dm > 0 ? item.dm.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20">
-                        {item.kl > 0 ? item.kl.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
-                      </td>
-                    </tr>
-                  ))
+                  dmDisplayRows.map((item, idx) => {
+                    if (item.isSubtotal) {
+                      const isNoi = item.subtotalType === 'phuNoi';
+                      const isNgoai = item.subtotalType === 'phuNgoai';
+                      const isAll = item.subtotalType === 'allPhu';
+
+                      const rowBg = isNoi
+                        ? 'bg-amber-100/80 text-amber-950 border-y-2 border-amber-300'
+                        : isNgoai
+                          ? 'bg-sky-100/80 text-sky-950 border-y-2 border-sky-300'
+                          : 'bg-indigo-100 text-indigo-950 border-y-2 border-indigo-400 shadow-xs';
+
+                      const tagBg = isNoi
+                        ? 'bg-amber-600 text-white'
+                        : isNgoai
+                          ? 'bg-sky-600 text-white'
+                          : 'bg-indigo-600 text-white';
+
+                      return (
+                        <tr key={`dm-sub-${idx}`} className={`${rowBg} font-bold transition-colors`}>
+                          <td className="px-4 py-3 border-r border-slate-200">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider font-extrabold ${tagBg}`}>
+                                {isAll ? 'TỔNG GỘP' : 'TỔNG NHÓM'}
+                              </span>
+                              <span>{item.materialName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs font-bold border-r border-slate-200">{item.unit || '-'}</td>
+                          <td className="px-4 py-3 text-right border-r border-slate-200">{item.ordered.toLocaleString('vi-VN')}</td>
+                          <td className="px-4 py-3 text-right text-emerald-700 border-r border-slate-200">{item.received.toLocaleString('vi-VN')}</td>
+                          <td className={`px-4 py-3 text-right border-r border-slate-200 ${item.shortage > 0 ? 'text-red-700 bg-red-100/50' : ''}`}>
+                            {item.shortage.toLocaleString('vi-VN')}
+                          </td>
+                          <td className="px-4 py-3 text-right border-r border-slate-200">
+                            {item.dm > 0 ? item.dm.toLocaleString('vi-VN') : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right font-black">
+                            {item.kl > 0 ? item.kl.toLocaleString('vi-VN') : '-'}
+                          </td>
+                        </tr>
+                      );
+                    }
+
+                    const rowBg = item.isPhuNoiItem
+                      ? 'bg-amber-50/40 hover:bg-amber-100/40'
+                      : 'hover:bg-slate-50/50';
+
+                    return (
+                      <tr key={idx} className={`${rowBg} transition-colors`}>
+                        <td className="px-4 py-3 font-medium text-slate-700 border-r border-slate-100">{item.materialName}</td>
+                        <td className="px-4 py-3 text-center text-xs font-semibold text-slate-500 border-r border-slate-100">{item.unit || <span className="text-slate-300">-</span>}</td>
+                        <td className="px-4 py-3 text-right font-medium border-r border-slate-100">{item.ordered.toLocaleString('vi-VN')}</td>
+                        <td className="px-4 py-3 text-right font-medium text-emerald-600 border-r border-slate-100">{item.received.toLocaleString('vi-VN')}</td>
+                        <td className={`px-4 py-3 text-right font-bold border-r border-slate-100 ${item.shortage > 0 ? 'text-red-600 bg-red-50/30' : 'text-slate-400'}`}>
+                          {item.shortage.toLocaleString('vi-VN')}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-indigo-600 border-r border-slate-100">
+                          {item.dm > 0 ? item.dm.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-indigo-700 bg-indigo-50/20">
+                          {item.kl > 0 ? item.kl.toLocaleString('vi-VN') : <span className="text-slate-300">-</span>}
+                        </td>
+                      </tr>
+                    );
+                  })
                 )
               )}
             </tbody>
