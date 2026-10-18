@@ -20,9 +20,18 @@ import {
   HardHat,
   ShieldAlert,
   CheckCircle2,
-  Lock
+  Lock,
+  X
 } from 'lucide-react';
-import { exportToExcel } from '@/utils/exportUtils';
+import { exportToExcel, exportWorkersToExcel } from '@/utils/exportUtils';
+
+// Helper định dạng chức vụ (mặc định hoặc 'Công nhân' -> 'CN')
+export const formatPosition = (pos) => {
+  if (!pos || pos === '-') return 'CN';
+  const trimmed = String(pos).trim();
+  if (trimmed.toLowerCase() === 'công nhân' || trimmed.toLowerCase() === 'cn') return 'CN';
+  return trimmed;
+};
 
 export default function ManageTeamsPage() {
   const { teams, deleteTeam, activeProject, deleteTeamMember } = useStore();
@@ -129,7 +138,12 @@ export default function ManageTeamsPage() {
 
       const matchProject = 
         teamProjectFilter === 'ALL' ||
-        teamProjs.some(p => p.toLowerCase() === teamProjectFilter.toLowerCase());
+        teamProjs.some(p => {
+          if (!p) return false;
+          const pLower = p.trim().toLowerCase();
+          const fLower = teamProjectFilter.trim().toLowerCase();
+          return pLower === fLower || pLower.includes(fLower) || fLower.includes(pLower);
+        });
 
       return matchSearch && matchType && matchProject;
     });
@@ -149,6 +163,7 @@ export default function ManageTeamsPage() {
       (m.name && m.name.toLowerCase().includes(term)) ||
       (m.cccd && m.cccd.toLowerCase().includes(term)) ||
       (m.position && m.position.toLowerCase().includes(term)) ||
+      formatPosition(m.position).toLowerCase().includes(term) ||
       (m.address && m.address.toLowerCase().includes(term)) ||
       (m.notes && m.notes.toLowerCase().includes(term))
     );
@@ -173,22 +188,72 @@ export default function ManageTeamsPage() {
     });
   }, [visibleTeams]);
 
+  // Danh sách toàn bộ các Công trình / Dự án thực tế (kết hợp từ danh mục dự án, tổ đội và công nhân)
+  const allAvailableProjects = useMemo(() => {
+    const projSet = new Set();
+    // 1. Từ danh sách projects trong store
+    (projects || []).forEach(p => {
+      if (p && p.name) projSet.add(p.name.trim());
+    });
+    // 2. Từ các tổ đội và thành viên
+    (visibleTeams || []).forEach(t => {
+      const projs = Array.isArray(t.projects) && t.projects.length > 0 
+        ? t.projects 
+        : (t.projectName ? t.projectName.split(',').map(s => s.trim()).filter(Boolean) : []);
+      projs.forEach(p => {
+        if (p && typeof p === 'string') projSet.add(p.trim());
+      });
+      (t.members || []).forEach(m => {
+        if (m.project && typeof m.project === 'string') projSet.add(m.project.trim());
+      });
+    });
+    return Array.from(projSet).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [projects, visibleTeams]);
+
+  // Đếm số lượng công nhân theo từng công trình
+  const countWorkersInProject = useMemo(() => {
+    const map = {};
+    allWorkers.forEach(w => {
+      const set = new Set();
+      (w.teamProjects || []).forEach(p => {
+        if (p) set.add(p.trim());
+      });
+      if (w.project) set.add(w.project.trim());
+      set.forEach(p => {
+        map[p] = (map[p] || 0) + 1;
+      });
+    });
+    return map;
+  }, [allWorkers]);
+
   // Filtered workers for Tab 3 (Toàn thể công nhân)
   const filteredAllWorkers = useMemo(() => {
     return allWorkers.filter(w => {
-      const term = allWorkerSearchTerm.toLowerCase();
-      const matchSearch = !allWorkerSearchTerm || (
+      const term = allWorkerSearchTerm.trim().toLowerCase();
+      const matchSearch = !term || (
         (w.name && w.name.toLowerCase().includes(term)) ||
         (w.cccd && w.cccd.toLowerCase().includes(term)) ||
         (w.teamName && w.teamName.toLowerCase().includes(term)) ||
         (w.leaderName && w.leaderName.toLowerCase().includes(term)) ||
         (w.address && w.address.toLowerCase().includes(term)) ||
         (w.position && w.position.toLowerCase().includes(term)) ||
-        (w.notes && w.notes.toLowerCase().includes(term))
+        formatPosition(w.position).toLowerCase().includes(term) ||
+        (w.notes && w.notes.toLowerCase().includes(term)) ||
+        (w.teamProjects && w.teamProjects.some(p => p && p.toLowerCase().includes(term))) ||
+        (w.project && w.project.toLowerCase().includes(term))
       );
 
+      const filterP = allWorkerProjectFilter.trim().toLowerCase();
       const matchProject = allWorkerProjectFilter === 'ALL' || (
-        w.teamProjects && w.teamProjects.some(p => p.toLowerCase() === allWorkerProjectFilter.toLowerCase())
+        (w.teamProjects && w.teamProjects.some(p => {
+          if (!p) return false;
+          const pLower = p.trim().toLowerCase();
+          return pLower === filterP || pLower.includes(filterP) || filterP.includes(pLower);
+        })) ||
+        (w.project && (() => {
+          const mLower = w.project.trim().toLowerCase();
+          return mLower === filterP || mLower.includes(filterP) || filterP.includes(mLower);
+        })())
       );
 
       const matchTeam = allWorkerTeamFilter === 'ALL' || w.teamId === allWorkerTeamFilter;
@@ -275,12 +340,34 @@ export default function ManageTeamsPage() {
 
   // Export & Print for Tab 1 (Danh sách các tổ đội)
   const handlePrintTeamsTable = () => {
-    const printContent = document.getElementById('print-teams-table');
-    if (!printContent) return;
+    if (filteredTeams.length === 0) {
+      alert("Không có dữ liệu tổ đội để in.");
+      return;
+    }
 
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
     document.body.appendChild(iframe);
+
+    const rowsHtml = filteredTeams.map((team, idx) => {
+      const projectsStr = Array.isArray(team.projects) ? team.projects.join(', ') : (team.projectName || '-');
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td style="text-align: left; font-weight: bold;">${team.teamName || ''}</td>
+          <td style="text-align: left;">${team.leaderName || '-'}</td>
+          <td style="text-align: center; font-family: monospace;">${team.phone || '-'}</td>
+          <td style="text-align: center;">${team.teamType || 'Thầu phụ'}</td>
+          <td style="text-align: left;">${projectsStr}</td>
+          <td style="text-align: center; font-weight: bold;">${team.members?.length || 0}</td>
+        </tr>
+      `;
+    }).join('');
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -289,22 +376,53 @@ export default function ManageTeamsPage() {
           <title>Danh Sách Tổ Đội Thi Công</title>
           <style>
             @media print {
-              @page { size: landscape; margin: 15mm; }
-              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; color: #111; }
-              .sub-title { text-align: center; font-size: 12px; color: #666; margin-bottom: 20px; }
-              table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
-              th, td { padding: 8px 6px; border: 1px solid #ccc; word-wrap: break-word; }
-              th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
-              th:last-child, td:last-child { display: none !important; }
-              .text-center { text-align: center; }
+              @page { size: landscape; margin: 10mm 8mm; }
             }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 10px; color: #111; }
+            .header-box { text-align: center; margin-bottom: 12px; border-bottom: 1.5px solid #333; padding-bottom: 6px; }
+            .comp-name { font-size: 10pt; font-weight: bold; color: #333; text-transform: uppercase; margin-bottom: 3px; }
+            h2 { margin: 0 0 4px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+            .sub-title { font-size: 8.5pt; color: #555; }
+            table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+            th, td { padding: 5px 6px; border: 1px solid #94a3b8; vertical-align: middle; word-wrap: break-word; }
+            th { background-color: #f1f5f9 !important; font-weight: bold; text-transform: uppercase; text-align: center; font-size: 8pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr:nth-child(even) td { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr { page-break-inside: avoid; }
           </style>
         </head>
         <body>
-          <h2>DANH SÁCH TỔ ĐỘI THI CÔNG</h2>
-          <div class="sub-title">Tổng số: ${filteredTeams.length} tổ đội | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
-          ${printContent.innerHTML}
+          <div class="header-box">
+            <div class="comp-name">CÔNG TY CỔ PHẦN CƠ ĐIỆN VÀ PCCC QSS</div>
+            <h2>DANH SÁCH TỔ ĐỘI THI CÔNG</h2>
+            <div class="sub-title">Tổng số: ${filteredTeams.length} tổ đội | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px;">STT</th>
+                <th>Tên Tổ Đội</th>
+                <th>Đội Trưởng</th>
+                <th style="width: 110px;">Số Điện Thoại</th>
+                <th style="width: 100px;">Phân Loại</th>
+                <th>Dự Án Áp Dụng</th>
+                <th style="width: 90px;">Số Lượng CN</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div style="margin-top: 30px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 9pt; padding: 0 40px;">
+            <div style="text-align: center;">
+              <strong>NGƯỜI LẬP BẢNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, họ tên)</span>
+            </div>
+            <div style="text-align: center;">
+              <strong>CHỈ HUY TRƯỞNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, đóng dấu)</span>
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -316,8 +434,10 @@ export default function ManageTeamsPage() {
     setTimeout(() => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-      document.body.removeChild(iframe);
-    }, 250);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 300);
   };
 
   const handleExportTeamsExcel = () => {
@@ -340,63 +460,127 @@ export default function ManageTeamsPage() {
   };
 
   // Export & Print for Tab 2 (Thành viên tổ đội cụ thể)
-  const handleExportTeamExcel = (team) => {
+  const handleExportTeamExcel = async (team) => {
     if (!team || !team.members || team.members.length === 0) {
       alert("Tổ đội này chưa có thành viên để xuất Excel.");
       return;
     }
     
-    const exportData = team.members.map((m, idx) => ({
-      "STT": idx + 1,
-      "Họ và Tên": m.name || '',
-      "Chức vụ": m.position || '',
-      "Tuổi": m.age || '',
-      "CCCD": m.cccd || '',
-      "Năm sinh": m.birthYear || '',
-      "Ngày cấp": m.issueDate || '',
-      "Địa chỉ": m.address || '',
-      "Bằng cấp nghề": m.vocationalCertificate || '',
-      "Bảo hiểm tai nạn": m.insuranceExpiry || '',
-      "Chứng chỉ AT": m.safetyCardExpiry || '',
-      "Giấy khám SK": m.healthCertificate || '',
-      "HĐLĐ": m.contract || '',
-      "Ghi chú": m.notes || ''
-    }));
-
-    exportToExcel(exportData, `DanhSachThanhVien_${team.teamName || team.name || 'ToDoi'}`, `Thành viên`);
+    await exportWorkersToExcel({
+      workers: team.members,
+      fileName: `DanhSachThanhVien_${team.teamName || team.name || 'ToDoi'}`,
+      sheetName: `Thành viên`,
+      isAllWorkers: false
+    });
   };
 
   const handlePrintTeam = (team) => {
-    const printContent = document.getElementById(`print-team-${team.id}`);
-    if (!printContent) return;
+    if (!team || !team.members || team.members.length === 0) {
+      alert("Tổ đội này chưa có thành viên để in.");
+      return;
+    }
 
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
     document.body.appendChild(iframe);
+
+    const rowsHtml = team.members.map((m, idx) => {
+      const photoHtml = m.photo
+        ? `<img src="${m.photo}" style="width: 22px; height: 28px; object-fit: cover; border-radius: 2px; border: 1px solid #cbd5e1; vertical-align: middle; margin-right: 5px; display: inline-block;" />`
+        : '';
+
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td style="text-align: left; font-weight: bold; white-space: nowrap;">
+            ${photoHtml}<span>${m.name || ''}</span>
+          </td>
+          <td style="text-align: center; font-weight: bold;">${formatPosition(m.position)}</td>
+          <td style="text-align: center;">${m.age || '-'}</td>
+          <td style="text-align: center; font-family: monospace;">${m.cccd || '-'}</td>
+          <td style="text-align: center;">${m.birthYear || '-'}</td>
+          <td style="text-align: center;">${m.issueDate || '-'}</td>
+          <td style="text-align: left;">${m.address || '-'}</td>
+          <td style="text-align: center;">${m.vocationalCertificate || '-'}</td>
+          <td style="text-align: center;">${m.insuranceExpiry || '-'}</td>
+          <td style="text-align: center;">${m.safetyCardExpiry || '-'}</td>
+          <td style="text-align: center;">${m.healthCertificate || '-'}</td>
+          <td style="text-align: center;">${m.contract || '-'}</td>
+          <td style="text-align: left;">${m.notes || '-'}</td>
+        </tr>
+      `;
+    }).join('');
 
     const htmlContent = `
       <!DOCTYPE html>
       <html>
         <head>
-          <title>In danh sách thành viên tổ đội ${team.teamName || team.name || ''}</title>
+          <title>Danh Sách Thành Viên - ${team.teamName || team.name || ''}</title>
           <style>
             @media print {
-              @page { size: landscape; margin: 15mm; }
-              body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
-              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 8px; color: #111; }
-              .sub-header { text-align: center; font-size: 12px; margin-bottom: 20px; color: #666; }
-              table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: left; }
-              th, td { padding: 8px 6px; border: 1px solid #ccc; word-wrap: break-word; }
-              th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
-              th:last-child, td:last-child { display: none !important; }
-              .text-center { text-align: center; }
+              @page { size: landscape; margin: 8mm 6mm; }
             }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 10px; color: #111; }
+            .header-box { text-align: center; margin-bottom: 12px; border-bottom: 1.5px solid #333; padding-bottom: 6px; }
+            .comp-name { font-size: 10pt; font-weight: bold; color: #333; text-transform: uppercase; margin-bottom: 3px; }
+            h2 { margin: 0 0 4px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+            .sub-title { font-size: 8.5pt; color: #555; }
+            table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+            th, td { padding: 4px 5px; border: 1px solid #94a3b8; vertical-align: middle; word-wrap: break-word; }
+            th { background-color: #f1f5f9 !important; font-weight: bold; text-transform: uppercase; text-align: center; font-size: 7.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr:nth-child(even) td { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr { page-break-inside: avoid; }
           </style>
         </head>
         <body>
-          <h2>DANH SÁCH THÀNH VIÊN TỔ ĐỘI ${team.teamName || team.name || ''}</h2>
-          <div class="sub-header">Đội trưởng: ${team.leaderName || 'N/A'} - SĐT: ${team.phone || 'N/A'} | Tổng số: ${team.members?.length || 0} thành viên</div>
-          ${printContent.innerHTML}
+          <div class="header-box">
+            <div class="comp-name">CÔNG TY CỔ PHẦN CƠ ĐIỆN VÀ PCCC QSS</div>
+            <h2>DANH SÁCH THÀNH VIÊN TỔ ĐỘI: ${team.teamName || team.name || ''}</h2>
+            <div class="sub-title">Đội trưởng: ${team.leaderName || 'N/A'} - SĐT: ${team.phone || 'N/A'} | Phân loại: ${team.teamType || 'Thầu phụ'} | Tổng số: ${team.members?.length || 0} thành viên | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32px;">STT</th>
+                <th>Họ và Tên</th>
+                <th style="width: 50px;">Chức vụ</th>
+                <th style="width: 60px;">Tuổi</th>
+                <th style="width: 95px;">CCCD</th>
+                <th style="width: 65px;">Năm sinh</th>
+                <th style="width: 65px;">Ngày cấp</th>
+                <th>Địa chỉ</th>
+                <th style="width: 75px;">Bằng nghề</th>
+                <th style="width: 75px;">Bảo hiểm TN</th>
+                <th style="width: 75px;">Chứng chỉ AT</th>
+                <th style="width: 75px;">Giấy khám SK</th>
+                <th style="width: 65px;">HĐLĐ</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div style="margin-top: 25px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 8.5pt; padding: 0 40px;">
+            <div style="text-align: center;">
+              <strong>ĐỘI TRƯỞNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, họ tên)</span>
+            </div>
+            <div style="text-align: center;">
+              <strong>CÁN BỘ AN TOÀN</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, họ tên)</span>
+            </div>
+            <div style="text-align: center;">
+              <strong>CHỈ HUY TRƯỞNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, đóng dấu)</span>
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -408,48 +592,82 @@ export default function ManageTeamsPage() {
     setTimeout(() => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-      document.body.removeChild(iframe);
-    }, 250);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 300);
   };
 
   // Export & Print for Tab 3 (Toàn thể công nhân)
-  const handleExportAllWorkersExcel = () => {
+  const handleExportAllWorkersExcel = async () => {
     if (filteredAllWorkers.length === 0) {
       alert("Không có dữ liệu công nhân để xuất Excel.");
       return;
     }
 
-    const exportData = filteredAllWorkers.map((m, idx) => ({
-      "STT": idx + 1,
-      "Họ và Tên": m.name || '',
-      "Tổ Đội": m.teamName || '',
-      "Đội Trưởng": m.leaderName ? `${m.leaderName} (${m.leaderPhone || ''})` : '',
-      "Phân Loại": m.teamType || 'Thầu phụ',
-      "Dự Án": Array.isArray(m.teamProjects) ? m.teamProjects.join(', ') : (m.teamProjects || ''),
-      "Chức vụ": m.position || '',
-      "Tuổi": m.age || '',
-      "CCCD": m.cccd || '',
-      "Năm sinh": m.birthYear || '',
-      "Ngày cấp": m.issueDate || '',
-      "Địa chỉ": m.address || '',
-      "Bằng cấp nghề": m.vocationalCertificate || '',
-      "Bảo hiểm tai nạn": m.insuranceExpiry || '',
-      "Chứng chỉ AT": m.safetyCardExpiry || '',
-      "Giấy khám SK": m.healthCertificate || '',
-      "HĐLĐ": m.contract || '',
-      "Ghi chú": m.notes || ''
-    }));
-
-    exportToExcel(exportData, `DanhSachToanTheCongNhan_${new Date().toISOString().slice(0, 10)}`, 'Toàn thể công nhân');
+    await exportWorkersToExcel({
+      workers: filteredAllWorkers,
+      fileName: `DanhSachToanTheCongNhan_${new Date().toISOString().slice(0, 10)}`,
+      sheetName: 'Toàn thể công nhân',
+      isAllWorkers: true
+    });
   };
 
   const handlePrintAllWorkers = () => {
-    const printContent = document.getElementById('print-all-workers-table');
-    if (!printContent) return;
+    if (filteredAllWorkers.length === 0) {
+      alert("Không có dữ liệu công nhân để in.");
+      return;
+    }
 
     const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '0';
+    iframe.style.height = '0';
+    iframe.style.border = '0';
     document.body.appendChild(iframe);
+
+    const rowsHtml = filteredAllWorkers.map((w, idx) => {
+      const photoHtml = w.photo
+        ? `<img src="${w.photo}" style="width: 22px; height: 28px; object-fit: cover; border-radius: 2px; border: 1px solid #cbd5e1; vertical-align: middle; margin-right: 5px; display: inline-block;" />`
+        : '';
+      const projectsStr = Array.isArray(w.teamProjects) && w.teamProjects.length > 0
+        ? w.teamProjects.join(', ')
+        : (w.project || '-');
+
+      return `
+        <tr>
+          <td style="text-align: center;">${idx + 1}</td>
+          <td style="text-align: left; font-weight: bold; white-space: nowrap;">
+            ${photoHtml}<span>${w.name || ''}</span>
+          </td>
+          <td style="text-align: left;">
+            <strong>${w.teamName || ''}</strong>
+            ${w.leaderName ? `<div style="font-size: 7.5pt; color: #555;">${w.leaderName} (${w.leaderPhone || 'N/A'})</div>` : ''}
+          </td>
+          <td style="text-align: left;">${projectsStr}</td>
+          <td style="text-align: center; font-weight: bold;">${formatPosition(w.position)}</td>
+          <td style="text-align: center;">${w.age || '-'}</td>
+          <td style="text-align: center; font-family: monospace;">${w.cccd || '-'}</td>
+          <td style="text-align: center;">${w.birthYear || '-'}</td>
+          <td style="text-align: center;">${w.issueDate || '-'}</td>
+          <td style="text-align: left;">${w.address || '-'}</td>
+          <td style="text-align: center;">${w.vocationalCertificate || '-'}</td>
+          <td style="text-align: center;">${w.insuranceExpiry || '-'}</td>
+          <td style="text-align: center;">${w.safetyCardExpiry || '-'}</td>
+          <td style="text-align: center;">${w.healthCertificate || '-'}</td>
+          <td style="text-align: center;">${w.contract || '-'}</td>
+          <td style="text-align: left;">${w.notes || '-'}</td>
+        </tr>
+      `;
+    }).join('');
+
+    const filterInfo = [
+      allWorkerProjectFilter !== 'ALL' && `Dự án: ${allWorkerProjectFilter}`,
+      allWorkerTeamFilter !== 'ALL' && `Tổ đội: ${visibleTeams.find(t => t.id === allWorkerTeamFilter)?.teamName || ''}`,
+      allWorkerSearchTerm && `Tìm kiếm: "${allWorkerSearchTerm}"`
+    ].filter(Boolean).join(' | ');
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -458,22 +676,66 @@ export default function ManageTeamsPage() {
           <title>Danh Sách Toàn Thể Công Nhân</title>
           <style>
             @media print {
-              @page { size: landscape; margin: 12mm; }
-              body { font-family: Arial, sans-serif; padding: 15px; color: #333; }
-              h2 { text-align: center; font-size: 18px; text-transform: uppercase; margin-bottom: 6px; color: #111; }
-              .sub-title { text-align: center; font-size: 11px; color: #666; margin-bottom: 16px; }
-              table { width: 100%; border-collapse: collapse; font-size: 10px; text-align: left; }
-              th, td { padding: 6px 4px; border: 1px solid #ccc; word-wrap: break-word; }
-              th { background-color: #f3f4f6 !important; font-weight: bold; text-transform: uppercase; }
-              th:last-child, td:last-child { display: none !important; }
-              .text-center { text-align: center; }
+              @page { size: landscape; margin: 8mm 6mm; }
             }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 10px; color: #111; }
+            .header-box { text-align: center; margin-bottom: 12px; border-bottom: 1.5px solid #333; padding-bottom: 6px; }
+            .comp-name { font-size: 10pt; font-weight: bold; color: #333; text-transform: uppercase; margin-bottom: 3px; }
+            h2 { margin: 0 0 4px 0; font-size: 14pt; font-weight: 800; text-transform: uppercase; }
+            .sub-title { font-size: 8.5pt; color: #555; }
+            table { width: 100%; border-collapse: collapse; font-size: 8pt; }
+            th, td { padding: 4px 5px; border: 1px solid #94a3b8; vertical-align: middle; word-wrap: break-word; }
+            th { background-color: #f1f5f9 !important; font-weight: bold; text-transform: uppercase; text-align: center; font-size: 7.5pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr:nth-child(even) td { background-color: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            tr { page-break-inside: avoid; }
           </style>
         </head>
         <body>
-          <h2>DANH SÁCH TOÀN THỂ CÔNG NHÂN</h2>
-          <div class="sub-title">Tổng số: ${filteredAllWorkers.length} công nhân | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
-          ${printContent.innerHTML}
+          <div class="header-box">
+            <div class="comp-name">CÔNG TY CỔ PHẦN CƠ ĐIỆN VÀ PCCC QSS</div>
+            <h2>DANH SÁCH TOÀN THỂ CÔNG NHÂN</h2>
+            <div class="sub-title">${filterInfo ? `${filterInfo} | ` : ''}Tổng số: ${filteredAllWorkers.length} công nhân | Ngày in: ${new Date().toLocaleDateString('vi-VN')}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 32px;">STT</th>
+                <th>Họ và Tên</th>
+                <th>Tổ Đội</th>
+                <th>Công Trình</th>
+                <th style="width: 48px;">Chức vụ</th>
+                <th style="width: 60px;">Tuổi</th>
+                <th style="width: 95px;">CCCD</th>
+                <th style="width: 65px;">Năm sinh</th>
+                <th style="width: 65px;">Ngày cấp</th>
+                <th>Địa chỉ</th>
+                <th style="width: 75px;">Bằng nghề</th>
+                <th style="width: 75px;">Bảo hiểm TN</th>
+                <th style="width: 75px;">Chứng chỉ AT</th>
+                <th style="width: 75px;">Giấy khám SK</th>
+                <th style="width: 60px;">HĐLĐ</th>
+                <th>Ghi chú</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rowsHtml}
+            </tbody>
+          </table>
+          <div style="margin-top: 25px; display: flex; justify-content: space-between; page-break-inside: avoid; font-size: 8.5pt; padding: 0 40px;">
+            <div style="text-align: center;">
+              <strong>NGƯỜI LẬP BẢNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, họ tên)</span>
+            </div>
+            <div style="text-align: center;">
+              <strong>CÁN BỘ AN TOÀN / GSHT</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, họ tên)</span>
+            </div>
+            <div style="text-align: center;">
+              <strong>CHỈ HUY TRƯỞNG</strong><br><br><br><br>
+              <span style="font-size: 8pt; color: #666;">(Ký, đóng dấu)</span>
+            </div>
+          </div>
         </body>
       </html>
     `;
@@ -485,8 +747,10 @@ export default function ManageTeamsPage() {
     setTimeout(() => {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
-      document.body.removeChild(iframe);
-    }, 250);
+      setTimeout(() => {
+        if (document.body.contains(iframe)) document.body.removeChild(iframe);
+      }, 1000);
+    }, 300);
   };
 
   // Helper render for document expiry badge
@@ -575,7 +839,7 @@ export default function ManageTeamsPage() {
                   </div>
                   <span>{member.name}</span>
                 </td>
-                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.position || '-'}</td>
+                <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatPosition(member.position)}</td>
                 <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{member.age || '-'}</td>
                 <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{member.cccd || '-'}</td>
                 <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{member.birthYear || '-'}</td>
@@ -739,15 +1003,15 @@ export default function ManageTeamsPage() {
                   />
                 </div>
 
-                {/* Bộ lọc Dự án */}
+                {/* Bộ lọc Công trình */}
                 <select
                   value={teamProjectFilter}
                   onChange={(e) => setTeamProjectFilter(e.target.value)}
-                  className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                 >
-                  <option value="ALL">Tất cả Dự án</option>
-                  {projects.map(p => (
-                    <option key={p.id} value={p.name}>{p.name}</option>
+                  <option value="ALL">🏗️ Tất cả Công trình ({allAvailableProjects.length})</option>
+                  {allAvailableProjects.map(projName => (
+                    <option key={projName} value={projName}>{projName}</option>
                   ))}
                 </select>
 
@@ -1041,24 +1305,38 @@ export default function ManageTeamsPage() {
                     <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
                       type="text"
-                      placeholder="Tìm theo tên, CCCD, SĐT, quê quán, tổ đội..."
+                      placeholder="Tìm theo tên, CCCD, công trình, tổ đội..."
                       value={allWorkerSearchTerm}
                       onChange={(e) => setAllWorkerSearchTerm(e.target.value)}
                       className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold"
                     />
                   </div>
 
-                  {/* Filter Project */}
+                  {/* Filter Công trình */}
                   <select
                     value={allWorkerProjectFilter}
                     onChange={(e) => setAllWorkerProjectFilter(e.target.value)}
-                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    <option value="ALL">Tất cả Dự án</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.name}>{p.name}</option>
+                    <option value="ALL">🏗️ Tất cả Công trình ({allAvailableProjects.length})</option>
+                    {allAvailableProjects.map(projName => (
+                      <option key={projName} value={projName}>
+                        {projName} {countWorkersInProject[projName] ? `(${countWorkersInProject[projName]} người)` : ''}
+                      </option>
                     ))}
                   </select>
+
+                  {allWorkerProjectFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setAllWorkerProjectFilter('ALL')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl border border-indigo-200 shadow-2xs transition-all active:scale-95"
+                      title="Bỏ lọc công trình này"
+                    >
+                      <span>{allWorkerProjectFilter}</span>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {/* Filter Team */}
                   <select
@@ -1109,7 +1387,7 @@ export default function ManageTeamsPage() {
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase w-10 text-center">STT</th>
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[150px]">Họ và Tên</th>
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase min-w-[160px]">Tổ Đội</th>
-                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Dự Án</th>
+                      <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Công Trình</th>
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">Chức vụ</th>
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase text-center">Tuổi</th>
                       <th className="py-2.5 px-3 text-[11px] font-extrabold text-gray-500 uppercase">CCCD</th>
@@ -1164,19 +1442,32 @@ export default function ManageTeamsPage() {
                             </div>
                           </td>
                           <td className="py-2 px-3 text-xs">
-                            <div className="flex flex-wrap gap-1 max-w-[150px]">
+                            <div className="flex flex-wrap gap-1 max-w-[170px]">
                               {Array.isArray(worker.teamProjects) && worker.teamProjects.length > 0 ? (
-                                worker.teamProjects.map((p, i) => (
-                                  <span key={i} className="inline-block bg-indigo-50 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-indigo-100 whitespace-nowrap">
-                                    {p}
-                                  </span>
-                                ))
+                                worker.teamProjects.map((p, i) => {
+                                  const isSelected = allWorkerProjectFilter === p;
+                                  return (
+                                    <button
+                                      type="button"
+                                      key={i}
+                                      onClick={() => setAllWorkerProjectFilter(isSelected ? 'ALL' : p)}
+                                      className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors whitespace-nowrap cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' 
+                                          : 'bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-600 hover:text-white'
+                                      }`}
+                                      title={`Bấm để ${isSelected ? 'bỏ lọc' : 'lọc theo'} công trình ${p}`}
+                                    >
+                                      {p}
+                                    </button>
+                                  );
+                                })
                               ) : (
                                 <span className="text-gray-400">-</span>
                               )}
                             </div>
                           </td>
-                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{worker.position || '-'}</td>
+                          <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{formatPosition(worker.position)}</td>
                           <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{worker.age || '-'}</td>
                           <td className="py-2 px-3 text-xs font-semibold text-gray-600 whitespace-nowrap">{worker.cccd || '-'}</td>
                           <td className="py-2 px-3 text-xs font-semibold text-gray-600 text-center">{worker.birthYear || '-'}</td>

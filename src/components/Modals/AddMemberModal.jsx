@@ -16,11 +16,13 @@ import {
   CheckCircle2, 
   Sparkles, 
   Users,
-  AlertCircle
+  AlertCircle,
+  Clipboard
 } from 'lucide-react';
 import { useStore, canUserManageTeamMembers } from '@/store/useStore';
 import { scanCccdImage } from '@/utils/cccdScanner';
 import { exportToExcel } from '@/utils/exportUtils';
+import { cropImageTo3x4, extractImageFromClipboard, readImageFromClipboardAsync } from '@/utils/imageUtils';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 
@@ -39,7 +41,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
   // Single Member Form State
   const defaultMember = {
     name: '',
-    position: '',
+    position: 'CN',
     age: '',
     cccd: '',
     birthYear: '',
@@ -73,7 +75,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
       setScanProgress(null);
       if (memberToEdit) {
         setModalMode('single');
-        setMember({ ...defaultMember, ...memberToEdit });
+        setMember({ ...defaultMember, ...memberToEdit, position: (!memberToEdit.position || memberToEdit.position.trim().toLowerCase() === 'công nhân') ? 'CN' : memberToEdit.position });
       } else {
         setMember(defaultMember);
         // Start with 1 empty row in batch mode if empty
@@ -81,7 +83,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           {
             id: `m-temp-0`,
             name: '',
-            position: 'Công nhân',
+            position: 'CN',
             cccd: '',
             birthYear: '',
             age: '',
@@ -99,8 +101,6 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
       }
     }
   }, [isOpen, memberToEdit]);
-
-  if (!isOpen) return null;
 
   // Single Member Handlers
   const updateMember = (field, value) => {
@@ -133,14 +133,56 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     setMember(prev => ({ ...prev, birthYear: formattedDate, age: ageStr }));
   };
 
-  const handlePhotoUpload = (e) => {
+  const processAndSetAvatar = async (fileOrBlobOrUrl) => {
+    try {
+      const cropped = await cropImageTo3x4(fileOrBlobOrUrl, 360, 480);
+      if (cropped) {
+        updateMember('photo', cropped);
+        toast.success('Đã dán/tải ảnh đại diện 3x4 thành công!');
+      }
+    } catch (err) {
+      console.error('Lỗi xử lý ảnh đại diện:', err);
+      toast.error('Không thể xử lý ảnh đại diện.');
+    }
+  };
+
+  // Lắng nghe sự kiện phím dán ảnh (Ctrl + V) toàn form khi ở mode thêm/sửa 1 thành viên
+  useEffect(() => {
+    if (!isOpen || modalMode !== 'single') return;
+
+    const handleWindowPaste = async (e) => {
+      const imgFile = extractImageFromClipboard(e);
+      if (imgFile) {
+        e.preventDefault();
+        e.stopPropagation();
+        await processAndSetAvatar(imgFile);
+      }
+    };
+
+    window.addEventListener('paste', handleWindowPaste);
+    return () => {
+      window.removeEventListener('paste', handleWindowPaste);
+    };
+  }, [isOpen, modalMode]);
+
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        updateMember('photo', event.target.result);
-      };
-      reader.readAsDataURL(file);
+      await processAndSetAvatar(file);
+      e.target.value = '';
+    }
+  };
+
+  const handlePasteAvatarClick = async () => {
+    try {
+      const blob = await readImageFromClipboardAsync();
+      if (blob) {
+        await processAndSetAvatar(blob);
+        return;
+      }
+      toast.info('Hãy chụp màn hình (Win + Shift + S), sau đó nhấn phím Ctrl + V để dán ảnh.');
+    } catch (err) {
+      toast.info('Nhấn tổ hợp phím Ctrl + V để dán ảnh đã chụp.');
     }
   };
 
@@ -164,7 +206,14 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
 
       if (res.success && res.data) {
         const d = res.data;
-        const avatar = d.avatarPhoto || dataUrl;
+        let avatar = d.avatarPhoto || dataUrl;
+        if (avatar) {
+          try {
+            avatar = await cropImageTo3x4(avatar, 360, 480);
+          } catch (e) {
+            console.warn('Lỗi crop 3x4 avatar từ CCCD:', e);
+          }
+        }
         const cleanBirthYear = d.birthYear ? d.birthYear.replace(/\s+/g, '') : '';
         const cleanIssueDate = d.issueDate ? (
           d.issueDate.includes('/') ? d.issueDate.split('/').reverse().join('-') : d.issueDate
@@ -177,7 +226,8 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           age: d.age || prev.age,
           address: d.address || prev.address,
           issueDate: cleanIssueDate || prev.issueDate,
-          photo: avatar || prev.photo
+          photo: avatar || prev.photo,
+          position: (!prev.position || prev.position.trim().toLowerCase() === 'công nhân') ? 'CN' : prev.position
         }));
 
         const extractedFields = [
@@ -239,6 +289,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     
     const memberData = {
       ...member,
+      position: (!member.position || member.position.trim().toLowerCase() === 'công nhân') ? 'CN' : member.position.trim(),
       safetyCardExpiry: member.safetyCardExpiry || 'Chưa có',
       insuranceExpiry: member.insuranceExpiry || 'Chưa có',
     };
@@ -261,7 +312,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
       {
         id: `m-temp-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         name: '',
-        position: 'Công nhân',
+        position: 'CN',
         cccd: '',
         birthYear: '',
         age: '',
@@ -339,7 +390,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           extractedList.push({
             id: `m-temp-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
             name: d.name || '',
-            position: 'Công nhân',
+            position: 'CN',
             cccd: d.cccd || '',
             birthYear: d.birthYear ? d.birthYear.replace(/\s+/g, '') : '',
             age: d.age || '',
@@ -357,7 +408,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
           extractedList.push({
             id: `m-temp-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 4)}`,
             name: '',
-            position: 'Công nhân',
+            position: 'CN',
             cccd: '',
             birthYear: '',
             age: '',
@@ -396,7 +447,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     const templateData = [
       {
         "Họ và Tên": "Nguyễn Văn An",
-        "Chức vụ": "Công nhân",
+        "Chức vụ": "CN",
         "Số CCCD": "001095012345",
         "Năm sinh": "15/08/1995",
         "Ngày cấp": "2021-04-20",
@@ -435,7 +486,10 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
         const imported = json.map((row, idx) => ({
           id: `m-temp-xl-${Date.now()}-${idx}`,
           name: row['Họ và Tên'] || row['Họ và tên'] || row['Họ Tên'] || row['name'] || '',
-          position: row['Chức vụ'] || row['chức vụ'] || 'Công nhân',
+          position: (() => {
+            const p = (row['Chức vụ'] || row['chức vụ'] || '').trim();
+            return (!p || p.toLowerCase() === 'công nhân') ? 'CN' : p;
+          })(),
           cccd: String(row['Số CCCD'] || row['CCCD'] || row['cccd'] || ''),
           birthYear: String(row['Năm sinh'] || row['Ngày sinh'] || row['Năm Sinh'] || ''),
           age: row['Tuổi'] ? String(row['Tuổi']) : '',
@@ -488,6 +542,8 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
     toast.success(`Đã thêm thành công ${validMembers.length} thành viên vào tổ đội!`);
     onClose();
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
@@ -623,21 +679,78 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
               {/* Form Input Container */}
               <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
                 <div className="flex flex-col md:flex-row gap-6">
-                  {/* Avatar Upload */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-24 h-32 bg-gray-50 rounded-xl overflow-hidden shrink-0 border-2 border-dashed border-gray-300 flex items-center justify-center relative group/avatar cursor-pointer hover:border-indigo-400 transition-colors">
+                  {/* Avatar Upload with Paste (Ctrl+V) & 3x4 crop */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div 
+                      tabIndex={0}
+                      title="Bấm vào đây hoặc nhấn phím Ctrl+V để dán ảnh đã chụp màn hình"
+                      onPaste={async (e) => {
+                        const img = extractImageFromClipboard(e);
+                        if (img) {
+                          e.preventDefault();
+                          await processAndSetAvatar(img);
+                        }
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (file && file.type.startsWith('image/')) {
+                          await processAndSetAvatar(file);
+                        }
+                      }}
+                      className="w-28 h-36 bg-slate-50 rounded-2xl overflow-hidden shrink-0 border-2 border-dashed border-indigo-200 hover:border-indigo-500 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-200 focus:outline-none flex flex-col items-center justify-center relative group/avatar cursor-pointer transition-all shadow-xs"
+                    >
                       {member.photo ? (
-                        <img src={member.photo} alt="Avatar" className="w-full h-full object-cover" />
+                        <>
+                          <img src={member.photo} alt="Avatar 3x4" className="w-full h-full object-cover" />
+                          <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-600/90 text-white shadow-2xs backdrop-blur-xs">
+                            3x4
+                          </span>
+                          <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer text-white gap-1 p-1">
+                            <Upload className="w-5 h-5 mb-0.5" />
+                            <span className="text-[10px] font-bold">Đổi ảnh</span>
+                            <span className="text-[9px] text-indigo-200">hoặc dán Ctrl+V</span>
+                            <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                          </label>
+                        </>
                       ) : (
-                        <UserCircle2 className="w-10 h-10 text-gray-300" />
+                        <label className="w-full h-full flex flex-col items-center justify-center p-2 text-center cursor-pointer">
+                          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl mb-1.5 group-hover/avatar:scale-110 transition-transform">
+                            <Camera className="w-5 h-5" />
+                          </div>
+                          <span className="text-[11px] text-gray-700 font-extrabold leading-tight">Tải Ảnh</span>
+                          <span className="text-[9px] text-indigo-600 font-bold bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded-full mt-1.5 shadow-2xs">
+                            Ctrl + V để dán
+                          </span>
+                          <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                        </label>
                       )}
-                      <label className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 opacity-0 group-hover/avatar:opacity-100 transition-opacity cursor-pointer">
-                        <Upload className="w-5 h-5 text-white mb-1" />
-                        <span className="text-[10px] text-white font-bold uppercase">Tải Ảnh</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
-                      </label>
                     </div>
-                    <span className="text-[10px] text-gray-400 font-bold uppercase">Ảnh đại diện</span>
+
+                    <div className="flex items-center gap-1.5 w-full justify-center">
+                      <button
+                        type="button"
+                        onClick={handlePasteAvatarClick}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-extrabold transition-all border border-indigo-200 active:scale-95 shadow-2xs"
+                        title="Dán ảnh chụp màn hình từ bộ nhớ tạm"
+                      >
+                        <Clipboard className="w-3 h-3" />
+                        <span>Dán ảnh (Ctrl+V)</span>
+                      </button>
+
+                      {member.photo && (
+                        <button
+                          type="button"
+                          onClick={() => updateMember('photo', '')}
+                          className="p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-all border border-red-200 active:scale-95"
+                          title="Xóa ảnh này"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Ảnh thẻ 3x4</span>
                   </div>
                   
                   {/* Fields */}
@@ -660,7 +773,7 @@ export default function AddMemberModal({ isOpen, onClose, teamId, memberToEdit }
                           value={member.position} 
                           onChange={e => updateMember('position', e.target.value)} 
                           className="w-full text-sm px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-gray-700" 
-                          placeholder="Ví dụ: Công nhân, Thợ chính..." 
+                          placeholder="Ví dụ: CN, Thợ chính..." 
                         />
                       </div>
                     </div>

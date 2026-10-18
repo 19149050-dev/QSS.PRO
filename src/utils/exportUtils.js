@@ -1,4 +1,229 @@
 import * as XLSX from 'xlsx-js-style';
+import ExcelJS from 'exceljs';
+import { cropImageTo3x4 } from './imageUtils.js';
+
+/**
+ * Xuất danh sách thành viên / công nhân kèm ảnh thẻ 3x4 phục vụ kế toán mua HSCN
+ * @param {Array} workers - Mảng dữ liệu thành viên
+ * @param {string} fileName - Tên file tải về
+ * @param {string} sheetName - Tên sheet
+ * @param {boolean} isAllWorkers - Phân biệt xuất toàn bộ công nhân hay theo tổ đội
+ */
+export const exportWorkersToExcel = async ({
+  workers = [],
+  fileName = 'DanhSachThanhVien',
+  sheetName = 'Thành viên',
+  isAllWorkers = false
+}) => {
+  try {
+    if (!workers || workers.length === 0) {
+      alert("Không có dữ liệu thành viên để xuất Excel.");
+      return;
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'QSS PRO';
+    workbook.created = new Date();
+
+    const worksheet = workbook.addWorksheet(sheetName, {
+      views: [{ showGridLines: true }]
+    });
+
+    // 1. Định nghĩa các cột
+    if (isAllWorkers) {
+      worksheet.columns = [
+        { header: 'STT', key: 'stt', width: 7 },
+        { header: 'Ảnh 3x4', key: 'photo', width: 15 },
+        { header: 'Họ và Tên', key: 'name', width: 26 },
+        { header: 'Tổ Đội', key: 'teamName', width: 22 },
+        { header: 'Đội Trưởng', key: 'leaderName', width: 24 },
+        { header: 'Phân Loại', key: 'teamType', width: 15 },
+        { header: 'Dự Án', key: 'teamProjects', width: 22 },
+        { header: 'Chức vụ', key: 'position', width: 16 },
+        { header: 'Tuổi', key: 'age', width: 14 },
+        { header: 'CCCD', key: 'cccd', width: 18 },
+        { header: 'Năm sinh', key: 'birthYear', width: 14 },
+        { header: 'Ngày cấp', key: 'issueDate', width: 14 },
+        { header: 'Địa chỉ', key: 'address', width: 36 },
+        { header: 'Bằng cấp nghề', key: 'vocationalCertificate', width: 16 },
+        { header: 'Bảo hiểm tai nạn', key: 'insuranceExpiry', width: 18 },
+        { header: 'Chứng chỉ AT', key: 'safetyCardExpiry', width: 16 },
+        { header: 'Giấy khám SK', key: 'healthCertificate', width: 16 },
+        { header: 'HĐLĐ', key: 'contract', width: 16 },
+        { header: 'Ghi chú', key: 'notes', width: 22 }
+      ];
+    } else {
+      worksheet.columns = [
+        { header: 'STT', key: 'stt', width: 7 },
+        { header: 'Ảnh 3x4', key: 'photo', width: 15 },
+        { header: 'Họ và Tên', key: 'name', width: 26 },
+        { header: 'Chức vụ', key: 'position', width: 16 },
+        { header: 'Tuổi', key: 'age', width: 14 },
+        { header: 'CCCD', key: 'cccd', width: 18 },
+        { header: 'Năm sinh', key: 'birthYear', width: 14 },
+        { header: 'Ngày cấp', key: 'issueDate', width: 14 },
+        { header: 'Địa chỉ', key: 'address', width: 36 },
+        { header: 'Bằng cấp nghề', key: 'vocationalCertificate', width: 16 },
+        { header: 'Bảo hiểm tai nạn', key: 'insuranceExpiry', width: 18 },
+        { header: 'Chứng chỉ AT', key: 'safetyCardExpiry', width: 16 },
+        { header: 'Giấy khám SK', key: 'healthCertificate', width: 16 },
+        { header: 'HĐLĐ', key: 'contract', width: 16 },
+        { header: 'Ghi chú', key: 'notes', width: 22 }
+      ];
+    }
+
+    // 2. Định dạng hàng Header
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 32;
+    headerRow.eachCell((cell) => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11, name: 'Arial' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF4F46E5' } // Indigo-600
+      };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+        right: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+      };
+    });
+
+    // 3. Thêm dữ liệu từng dòng & chèn ảnh thẻ 3x4
+    for (let i = 0; i < workers.length; i++) {
+      const w = workers[i];
+      const rowIdx = i + 2; // Dòng 1 là header
+
+      const formatWorkerPosition = (pos) => {
+        if (!pos || pos === '-') return 'CN';
+        const s = String(pos).trim();
+        return s.toLowerCase() === 'công nhân' || s.toLowerCase() === 'cn' ? 'CN' : s;
+      };
+
+      const rowData = isAllWorkers ? {
+        stt: i + 1,
+        photo: '',
+        name: w.name || '',
+        teamName: w.teamName || '',
+        leaderName: w.leaderName ? `${w.leaderName} (${w.leaderPhone || ''})` : '',
+        teamType: w.teamType || 'Thầu phụ',
+        teamProjects: Array.isArray(w.teamProjects) ? w.teamProjects.join(', ') : (w.teamProjects || ''),
+        position: formatWorkerPosition(w.position),
+        age: w.age || '',
+        cccd: w.cccd ? String(w.cccd) : '',
+        birthYear: w.birthYear || '',
+        issueDate: w.issueDate || '',
+        address: w.address || '',
+        vocationalCertificate: w.vocationalCertificate || '',
+        insuranceExpiry: w.insuranceExpiry || 'Chưa có',
+        safetyCardExpiry: w.safetyCardExpiry || 'Chưa có',
+        healthCertificate: w.healthCertificate || '',
+        contract: w.contract || '',
+        notes: w.notes || ''
+      } : {
+        stt: i + 1,
+        photo: '',
+        name: w.name || '',
+        position: formatWorkerPosition(w.position),
+        age: w.age || '',
+        cccd: w.cccd ? String(w.cccd) : '',
+        birthYear: w.birthYear || '',
+        issueDate: w.issueDate || '',
+        address: w.address || '',
+        vocationalCertificate: w.vocationalCertificate || '',
+        insuranceExpiry: w.insuranceExpiry || 'Chưa có',
+        safetyCardExpiry: w.safetyCardExpiry || 'Chưa có',
+        healthCertificate: w.healthCertificate || '',
+        contract: w.contract || '',
+        notes: w.notes || ''
+      };
+
+      const row = worksheet.addRow(rowData);
+      row.height = 90; // Chiều cao phù hợp tỷ lệ ảnh thẻ 3x4 (120px)
+
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cell.font = { size: 10, name: 'Arial', color: { argb: 'FF1F2937' } };
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          left: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+          right: { style: 'thin', color: { argb: 'FFD1D5DB' } },
+        };
+
+        // Cột CCCD định dạng Text để không mất số 0 đầu
+        const cccdColIdx = isAllWorkers ? 10 : 6;
+        if (colNumber === cccdColIdx) {
+          cell.numFmt = '@';
+        }
+
+        // Cột Họ tên (Cột 3) căn trái và in đậm
+        if (colNumber === 3) {
+          cell.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+          cell.font = { bold: true, size: 10, name: 'Arial', color: { argb: 'FF111827' } };
+        } else if (cell.value && String(cell.value).length > 25) {
+          cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+        } else {
+          cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+        }
+      });
+
+      // Xử lý chèn ảnh 3x4 vào Cột 2 (B)
+      if (w.photo) {
+        try {
+          const croppedPhoto = await cropImageTo3x4(w.photo, 300, 400);
+          if (croppedPhoto) {
+            const imageId = workbook.addImage({
+              base64: croppedPhoto,
+              extension: 'jpeg'
+            });
+
+            // Tỷ lệ chuẩn 3x4: 72px x 96px (72/96 = 3/4)
+            // Căn giữa tuyệt đối trong ô B (chiều rộng 15 ~ 112px, chiều cao 90pt ~ 120px)
+            // Lề trái ~20px (190,500 EMUs), Lề trên ~12px (114,300 EMUs)
+            worksheet.addImage(imageId, {
+              tl: {
+                nativeCol: 1,
+                nativeColOff: 190500,
+                nativeRow: rowIdx - 1,
+                nativeRowOff: 114300
+              },
+              ext: { width: 72, height: 96 },
+              editAs: 'oneCell'
+            });
+          }
+        } catch (imgErr) {
+          console.warn(`Lỗi chèn ảnh cho ${w.name}:`, imgErr);
+          const photoCell = row.getCell(2);
+          photoCell.value = '(Lỗi ảnh)';
+          photoCell.font = { italic: true, size: 9, color: { argb: 'FFEF4444' } };
+        }
+      } else {
+        const photoCell = row.getCell(2);
+        photoCell.value = '(Chưa có)';
+        photoCell.font = { italic: true, size: 9, color: { argb: 'FF9CA3AF' } };
+      }
+    }
+
+    // 4. Xuất và tải file về máy
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${fileName}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error("Lỗi khi xuất file Excel kèm ảnh:", error);
+    alert("Đã xảy ra lỗi trong quá trình xuất file Excel kèm ảnh.");
+  }
+};
 
 /**
  * Xuất dữ liệu cơ bản ra file Excel (.xlsx) với định dạng (style)
