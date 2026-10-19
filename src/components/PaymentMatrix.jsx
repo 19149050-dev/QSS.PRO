@@ -9,6 +9,67 @@ import { standardBlocksTemplate, thachCaoBlocksTemplate } from '@/lib/mockData';
 import QuickEntryModal from '@/components/Modals/QuickEntryModal';
 import IpcReportModal from '@/components/Modals/IpcReportModal';
 
+export const normalizeTeamName = (str) => {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^(đk|dk)\s+/i, '')
+    .trim();
+};
+
+export const partMatchesTeam = (part, teamFilter) => {
+  if (!part || !teamFilter) return false;
+  if (teamFilter === 'ALL') return true;
+
+  const normFilter = normalizeTeamName(teamFilter);
+  if (!normFilter) return false;
+
+  // 1. Check parenthesized sections
+  const matches = [...part.matchAll(/\(([^)]+)\)/g)];
+  for (const m of matches) {
+    const content = m[1].trim();
+    if (/^[\d\.\,\s\%cănCĂN]+$/i.test(content) || /^\d+\/\d+$/.test(content)) {
+      continue;
+    }
+    const normContent = normalizeTeamName(content);
+    if (normContent === normFilter) {
+      return true;
+    }
+  }
+
+  // 2. Fallback: regex for (DK Name) or (ĐK Name) or (Name) case-insensitive
+  const escapedFilter = normFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parenTeamRegex = new RegExp(`\\(\\s*(?:đk|dk)?\\s*${escapedFilter}\\s*\\)`, 'i');
+  if (parenTeamRegex.test(part.replace(/\s+/g, ' '))) {
+    return true;
+  }
+
+  return false;
+};
+
+export const removeTeamFromPart = (part, teamFilter) => {
+  if (!part || !teamFilter || teamFilter === 'ALL') return part;
+  const normFilter = normalizeTeamName(teamFilter);
+  if (!normFilter) return part;
+
+  const matches = [...part.matchAll(/\(([^)]+)\)/g)];
+  for (const m of matches) {
+    const content = m[1].trim();
+    if (/^[\d\.\,\s\%cănCĂN]+$/i.test(content) || /^\d+\/\d+$/.test(content)) {
+      continue;
+    }
+    if (normalizeTeamName(content) === normFilter) {
+      return part.replace(m[0], '').replace(/\s+/g, ' ').trim();
+    }
+  }
+
+  const escapedFilter = normFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parenTeamRegex = new RegExp(`\\s*\\(\\s*(?:đk|dk)?\\s*${escapedFilter}\\s*\\)`, 'gi');
+  return part.replace(parenTeamRegex, '').replace(/\s+/g, ' ').trim();
+};
+
 export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', selectedTeamFilter = 'ALL', selectedIpcFilter = 'ALL', period = '', headerContent, filterContent }) {
   const store = useStore();
   const isAdmin = store.currentUser?.role === 'ADMIN' || store.currentUser?.role === 'GIÁM ĐỐC';
@@ -390,7 +451,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                }
                valForColor = filteredIpcVal;
             } else if (type === 'team' && selectedTeamFilter !== 'ALL') {
-              valForColor = (valForColor || '').split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`)).join(' + ');
+              valForColor = (valForColor || '').split(' + ').filter(p => partMatchesTeam(p, selectedTeamFilter)).join(' + ');
             }
             
             if (filterBatch && filterBatch !== 'ALL') {
@@ -719,9 +780,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     
     // Strip team names for specific team view
     if (team && team !== 'ALL') {
-      const teamParts = rawVal.split(' + ').filter(p => p.includes(`(${team})`));
+      const teamParts = rawVal.split(' + ').filter(p => partMatchesTeam(p, team));
       if (teamParts.length > 0) {
-        display = teamParts.map(p => p.replace(`(${team})`, '').trim()).join(' + ');
+        display = teamParts.map(p => removeTeamFromPart(p, team)).join(' + ');
       } else {
         return '';
       }
@@ -759,8 +820,9 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       (store.teams || []).forEach(t => {
         const tName = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
         if (tName) {
-          const escapedTeamName = tName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          display = display.replace(new RegExp(`\\s*\\(${escapedTeamName}\\)`, 'g'), '');
+          const norm = normalizeTeamName(tName);
+          const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          display = display.replace(new RegExp(`\\s*\\(\\s*(?:đk|dk)?\\s*${escaped}\\s*\\)`, 'gi'), '');
         }
       });
       return display;
@@ -828,12 +890,12 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
     if (!team || team === 'ALL') return newVal;
     const parts = rawVal ? rawVal.split(' + ').map(p => p.trim()).filter(Boolean) : [];
     // Keep all other teams' batches 100% intact
-    const otherTeamParts = parts.filter(p => !p.includes(`(${team})`));
+    const otherTeamParts = parts.filter(p => !partMatchesTeam(p, team));
 
     if (newVal && newVal.trim() !== '') {
       const teamBatches = newVal.split(' + ').map(p => p.trim()).filter(Boolean);
       const formattedTeamBatches = teamBatches.map(b => {
-        if (b.includes(`(${team})`)) return b;
+        if (partMatchesTeam(b, team)) return b;
         return `${b} (${team})`;
       });
       return [...otherTeamParts, ...formattedTeamBatches].join(' + ');
@@ -868,8 +930,8 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
       const parts = currentRawVal.split(' + ').map(p => p.trim()).filter(Boolean);
       if (selectedTeamFilter !== 'ALL') {
         initialBatches = parts
-          .filter(p => p.includes(`(${selectedTeamFilter})`) || (!p.match(/\([A-Za-z]/) && (p.includes('ĐỢT') || p.includes('IPC') || !p.match(/\([^)]*\)/g))))
-          .map(p => p.replace(`(${selectedTeamFilter})`, '').trim());
+          .filter(p => partMatchesTeam(p, selectedTeamFilter) || (!p.match(/\([A-Za-zÀ-ỹ]/) && (p.includes('ĐỢT') || p.includes('IPC') || !p.match(/\([^)]*\)/g))))
+          .map(p => removeTeamFromPart(p, selectedTeamFilter));
       } else {
         initialBatches = parts;
       }
@@ -1407,7 +1469,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                         }
                       } else {
                         if (selectedTeamFilter !== 'ALL') {
-                          const teamParts = valForColor.split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`));
+                          const teamParts = valForColor.split(' + ').filter(p => partMatchesTeam(p, selectedTeamFilter));
                           valForColor = teamParts.join(' + ');
                           
                           if (valForColor) {
@@ -1665,7 +1727,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
               const isSpecificTeam = type === 'team' && selectedTeamFilter !== 'ALL';
               let currentTeamUnits = 0;
               if (isSpecificTeam && selectedCell.rawValue) {
-                const teamParts = selectedCell.rawValue.split(' + ').filter(p => p.includes(`(${selectedTeamFilter})`)).join(' + ');
+                const teamParts = selectedCell.rawValue.split(' + ').filter(p => partMatchesTeam(p, selectedTeamFilter)).join(' + ');
                 currentTeamUnits = parseTotalUnitsForCell(teamParts, maxUnits);
               }
               const remainingUnits = Math.max(0, maxUnits - allTeamsUnits);
@@ -1965,7 +2027,7 @@ export default function PaymentMatrix({ projectName = 'SUNHOME', type = 'team', 
                       const rawVal = selectedCell?.rawValue || '';
                       const allParts = rawVal ? rawVal.split(' + ').map(p => p.trim()).filter(Boolean) : [];
                       const otherTeamParts = activeTeam 
-                        ? allParts.filter(p => !p.includes(`(${activeTeam})`))
+                        ? allParts.filter(p => !partMatchesTeam(p, activeTeam))
                         : [];
                       
                       let otherTeamQ = { percent: 0, units: 0 };
@@ -2471,8 +2533,9 @@ export function PaymentMatrixFilters({ projectName, type = 'default' }) {
             (store.teams || []).forEach(t => {
               const tName = typeof t === 'string' ? t : (t.teamName || t.team_name || t.name);
               if (tName) {
-                const escaped = tName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                str = str.replace(new RegExp(`\\s*\\(${escaped}\\)`, 'g'), '');
+                const norm = normalizeTeamName(tName);
+                const escaped = norm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                str = str.replace(new RegExp(`\\s*\\(\\s*(?:đk|dk)?\\s*${escaped}\\s*\\)`, 'gi'), '');
               }
             });
 

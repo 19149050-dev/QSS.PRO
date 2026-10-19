@@ -523,7 +523,13 @@ export const exportMatrixToExcel = ({
         }
 
         const isFilled = col.type !== 'floor' && col.type !== 'numApts' && Boolean(cellVal);
-        let cellHex = col.type === 'floor' ? 'F8FAFC' : (col.type === 'numApts' ? 'FFFFFF' : (rawVal ? getExcelCellColorHex(rawVal) : 'FFFFFF'));
+        let cellHex = col.type === 'floor' 
+          ? 'F8FAFC' 
+          : (col.type === 'numApts' 
+            ? 'FFFFFF' 
+            : (selectedTeamFilter !== 'ALL'
+              ? (cellVal ? getExcelCellColorHex(cellVal) : (rawVal ? 'CBD5E1' : 'FFFFFF'))
+              : (rawVal ? getExcelCellColorHex(rawVal) : 'FFFFFF')));
 
         if (rawVal && col.type === 'item') {
           const totalAptsNum = parseFloat(blockNumApts) || 0;
