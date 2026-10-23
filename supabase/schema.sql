@@ -249,6 +249,7 @@ CREATE TABLE IF NOT EXISTS public.shop_drawings (
   approval_date date,
   code text,
   drawing_name text NOT NULL,
+  drawing_type text DEFAULT 'Căn hộ',
   status text DEFAULT 'Đã duyệt',
   note text,
   created_at timestamp with time zone DEFAULT timezone('utc'::text, now()),

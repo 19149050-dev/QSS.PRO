@@ -634,19 +634,36 @@ inHouseSheets: {},
       },
       addShopDrawing: async (item) => {
         const tempId = `shop-${Date.now()}`;
-        const newItem = { id: tempId, drawing_name: item.drawingName, project_name: item.projectName || '', approval_date: item.approvalDate || null, code: item.code || '', status: item.status || 'Đã duyệt', note: item.note || '' };
+        const newItem = { 
+          id: tempId, 
+          drawing_name: item.drawingName, 
+          drawing_type: item.drawingType || 'Căn hộ',
+          project_name: item.projectName || '', 
+          approval_date: item.approvalDate || null, 
+          code: item.code || '', 
+          status: item.status || 'Đã duyệt', 
+          note: item.note || '' 
+        };
         set((state) => ({ shopDrawings: [...state.shopDrawings, newItem] }));
         try {
-          const { data, error } = await supabase.from('shop_drawings').insert([{
+          const payload = {
             drawing_name: item.drawingName,
+            drawing_type: item.drawingType || 'Căn hộ',
             project_name: item.projectName || '',
             approval_date: item.approvalDate || null,
             code: item.code || '',
             status: item.status || 'Đã duyệt',
             note: item.note || ''
-          }]).select();
+          };
+          let { data, error } = await supabase.from('shop_drawings').insert([payload]).select();
+          if (error && (error.message?.includes('drawing_type') || error.code === 'PGRST204')) {
+            delete payload.drawing_type;
+            const res = await supabase.from('shop_drawings').insert([payload]).select();
+            data = res.data;
+            error = res.error;
+          }
           if (!error && data && data.length > 0) {
-            set((state) => ({ shopDrawings: state.shopDrawings.map(s => s.id === tempId ? data[0] : s) }));
+            set((state) => ({ shopDrawings: state.shopDrawings.map(s => s.id === tempId ? { ...s, ...data[0] } : s) }));
           }
         } catch (err) { console.error('Add shop drawing error:', err); }
       },
@@ -654,7 +671,14 @@ inHouseSheets: {},
         set((state) => ({ shopDrawings: state.shopDrawings.map(s => s.id === id ? { ...s, ...updatedData } : s) }));
         if (!String(id).startsWith('shop-')) {
           try {
-            await supabase.from('shop_drawings').update(updatedData).eq('id', id);
+            let { error } = await supabase.from('shop_drawings').update(updatedData).eq('id', id);
+            if (error && (error.message?.includes('drawing_type') || error.code === 'PGRST204')) {
+              const fallback = { ...updatedData };
+              delete fallback.drawing_type;
+              if (Object.keys(fallback).length > 0) {
+                await supabase.from('shop_drawings').update(fallback).eq('id', id);
+              }
+            }
           } catch (err) { console.error('Update shop drawing error:', err); }
         }
       },

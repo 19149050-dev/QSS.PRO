@@ -12,11 +12,26 @@ const getTodayString = () => {
   return `${year}-${month}-${day}`;
 };
 
+export const detectDrawingTypeFromName = (name = '') => {
+  const upper = name.toUpperCase();
+  if (upper.includes('CH+HL') || upper.includes('HL+CH') || upper.includes('CH + HL') || upper.includes('HL + CH')) {
+    return 'CH+HL';
+  }
+  if (upper.includes('HÀNH LANG') || /\bHL\b/.test(upper) || upper.includes(' HL ') || upper.endsWith(' HL') || upper.startsWith('HL ')) {
+    return 'Hành lang';
+  }
+  if (upper.includes('CĂN HỘ') || /\bCH\b/.test(upper) || upper.includes(' CH ') || upper.endsWith(' CH') || upper.startsWith('CH ')) {
+    return 'Căn hộ';
+  }
+  return '';
+};
+
 export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 'ALL' }) {
   const { projects, shopDrawings, addShopDrawing } = useStore();
   
   const [newProjectName, setNewProjectName] = useState('');
   const [newCode, setNewCode] = useState('');
+  const [newDrawingType, setNewDrawingType] = useState('Căn hộ');
   const [newDrawingName, setNewDrawingName] = useState('');
   const [newApprovalDate, setNewApprovalDate] = useState(getTodayString());
   const [newStatus, setNewStatus] = useState('Đã duyệt');
@@ -56,6 +71,7 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
       const p = defaultProject !== 'ALL' ? defaultProject : (projects?.[0]?.name || '');
       setNewProjectName(p);
       setNewCode(calculateNextCode(p));
+      setNewDrawingType('Căn hộ');
       setNewDrawingName('');
       setNewApprovalDate(getTodayString());
       setNewStatus('Đã duyệt');
@@ -69,6 +85,15 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
     }
   }, [newProjectName]);
 
+  const handleDrawingNameChange = (e) => {
+    const val = e.target.value;
+    setNewDrawingName(val);
+    const detected = detectDrawingTypeFromName(val);
+    if (detected) {
+      setNewDrawingType(detected);
+    }
+  };
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
@@ -77,6 +102,7 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
     
     addShopDrawing({
       drawingName: newDrawingName.trim(),
+      drawingType: newDrawingType,
       projectName: newProjectName,
       code: newCode.trim(),
       approvalDate: newApprovalDate || null,
@@ -101,7 +127,7 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5 text-sm">
-          <div className="grid grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block font-semibold text-gray-700 mb-1.5">Mã bản vẽ (Code)</label>
               <input
@@ -111,6 +137,19 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
                 onChange={(e) => setNewCode(e.target.value)}
                 className="w-full px-3 py-2.5 bg-zinc-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
+            </div>
+            <div>
+              <label className="block font-semibold text-gray-700 mb-1.5">Khu vực <span className="text-red-500">*</span></label>
+              <select
+                value={newDrawingType}
+                onChange={(e) => setNewDrawingType(e.target.value)}
+                className="w-full px-3 py-2.5 bg-zinc-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-slate-700"
+              >
+                <option value="Hành lang">Hành lang</option>
+                <option value="Căn hộ">Căn hộ</option>
+                <option value="CH+HL">CH+HL</option>
+                <option value="Khác">Khác</option>
+              </select>
             </div>
             <div>
               <label className="block font-semibold text-gray-700 mb-1.5">Tên công trình <span className="text-red-500">*</span></label>
@@ -133,9 +172,9 @@ export default function AddShopDrawingModal({ isOpen, onClose, defaultProject = 
             <input
               type="text"
               required
-              placeholder="Nhập tên bản vẽ..."
+              placeholder="Nhập tên bản vẽ (VD: TẦNG 07 HL THÁP A-B)..."
               value={newDrawingName}
-              onChange={(e) => setNewDrawingName(e.target.value)}
+              onChange={handleDrawingNameChange}
               className="w-full px-3 py-2.5 bg-zinc-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold"
               autoFocus
             />

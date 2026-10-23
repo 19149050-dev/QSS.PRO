@@ -1,6 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useStore } from '@/store/useStore';
-import { PlusCircle, Trash2, Edit2, Check, X, Calendar, Search, CheckSquare, FolderGit2 } from 'lucide-react';
+import { 
+  PlusCircle, Trash2, Edit2, Check, X, Calendar, Search, 
+  CheckSquare, FolderGit2, ArrowUpDown, Building2, DoorOpen, 
+  Layers, LayoutGrid 
+} from 'lucide-react';
 
 const NotePopover = ({ value, onChange, disabled, done }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -92,6 +96,28 @@ const stringToColor = (str) => {
   return colors[Math.abs(hash) % colors.length];
 };
 
+export const getDrawingType = (item) => {
+  if (item?.drawing_type) return item.drawing_type;
+  const name = (item?.drawing_name || '').toUpperCase();
+  if (name.includes('CH+HL') || name.includes('HL+CH') || name.includes('CH + HL') || name.includes('HL + CH')) {
+    return 'CH+HL';
+  }
+  if (name.includes('HÀNH LANG') || /\bHL\b/.test(name) || name.includes(' HL ') || name.endsWith(' HL') || name.startsWith('HL ')) {
+    return 'Hành lang';
+  }
+  if (name.includes('CĂN HỘ') || /\bCH\b/.test(name) || name.includes(' CH ') || name.endsWith(' CH') || name.startsWith('CH ')) {
+    return 'Căn hộ';
+  }
+  return 'Khác';
+};
+
+const typeBadgeStyles = {
+  'Hành lang': 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100/80',
+  'Căn hộ': 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100/80',
+  'CH+HL': 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100/80',
+  'Khác': 'bg-zinc-100 text-zinc-600 border-zinc-200 hover:bg-zinc-200/80',
+};
+
 import AddShopDrawingModal from '@/components/Modals/AddShopDrawingModal';
 
 export default function ShopView() {
@@ -105,6 +131,8 @@ export default function ShopView() {
   } = useStore();
 
   const [filterProject, setFilterProject] = useState('ALL');
+  const [filterType, setFilterType] = useState('ALL');
+  const [sortBy, setSortBy] = useState('AREA_CH_FIRST');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [isAdding, setIsAdding] = useState(false);
@@ -112,29 +140,68 @@ export default function ShopView() {
   const [editingId, setEditingId] = useState(null);
   const [editDrawingName, setEditDrawingName] = useState('');
 
+  const naturalCompare = (a, b) => {
+    return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+  };
+
   const filteredDrawings = useMemo(() => {
-    let result = shopDrawings || [];
+    let result = [...(shopDrawings || [])];
     if (filterProject !== 'ALL') {
       result = result.filter(s => s.project_name === filterProject);
+    }
+    if (filterType !== 'ALL') {
+      result = result.filter(s => getDrawingType(s) === filterType);
     }
     if (searchTerm.trim() !== '') {
       const lower = searchTerm.toLowerCase();
       result = result.filter(s => 
         (s.drawing_name || '').toLowerCase().includes(lower) || 
         (s.code || '').toLowerCase().includes(lower) ||
-        (s.note || '').toLowerCase().includes(lower)
+        (s.note || '').toLowerCase().includes(lower) ||
+        getDrawingType(s).toLowerCase().includes(lower)
       );
     }
     
-    // Sort logic: Sort by project_name first, then by created_at
+    // Sort logic
     return result.sort((a, b) => {
-      const projA = a.project_name || '';
-      const projB = b.project_name || '';
-      const cmp = projA.localeCompare(projB);
-      if (cmp !== 0) return cmp;
+      // If showing all projects, keep projects grouped together first
+      if (filterProject === 'ALL') {
+        const projA = a.project_name || '';
+        const projB = b.project_name || '';
+        const cmpProj = projA.localeCompare(projB);
+        if (cmpProj !== 0) return cmpProj;
+      }
+
+      if (sortBy === 'AREA_CH_FIRST' || sortBy === 'AREA_HL_FIRST') {
+        const orderCH = { 'Căn hộ': 1, 'Hành lang': 2, 'CH+HL': 3, 'Khác': 4 };
+        const orderHL = { 'Hành lang': 1, 'Căn hộ': 2, 'CH+HL': 3, 'Khác': 4 };
+        const orderMap = sortBy === 'AREA_CH_FIRST' ? orderCH : orderHL;
+        
+        const rankA = orderMap[getDrawingType(a)] || 99;
+        const rankB = orderMap[getDrawingType(b)] || 99;
+        if (rankA !== rankB) return rankA - rankB;
+
+        // In same area, sort naturally by code, then by drawing name
+        const codeCmp = naturalCompare(a.code, b.code);
+        if (codeCmp !== 0) return codeCmp;
+        return naturalCompare(a.drawing_name, b.drawing_name);
+      }
+
+      if (sortBy === 'CODE_ASC') {
+        const codeCmp = naturalCompare(a.code, b.code);
+        if (codeCmp !== 0) return codeCmp;
+        return naturalCompare(a.drawing_name, b.drawing_name);
+      }
+
+      if (sortBy === 'DATE_DESC') {
+        const dateA = new Date(a.approval_date || 0);
+        const dateB = new Date(b.approval_date || 0);
+        if (dateB - dateA !== 0) return dateB - dateA;
+      }
+
       return new Date(b.created_at || 0) - new Date(a.created_at || 0);
     });
-  }, [shopDrawings, filterProject, searchTerm]);
+  }, [shopDrawings, filterProject, filterType, searchTerm, sortBy]);
 
   const handleStartEdit = (item) => {
     setEditingId(item.id);
@@ -182,6 +249,30 @@ export default function ShopView() {
               <option key={p.id} value={p.name}>{p.name}</option>
             ))}
           </select>
+
+          <select
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+            className="px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all shadow-sm"
+          >
+            <option value="ALL">Tất cả khu vực</option>
+            <option value="Hành lang">Hành lang</option>
+            <option value="Căn hộ">Căn hộ</option>
+            <option value="CH+HL">CH+HL</option>
+            <option value="Khác">Khác</option>
+          </select>
+
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3.5 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent transition-all shadow-sm"
+          >
+            <option value="AREA_CH_FIRST">Sắp xếp: Căn hộ 1 khu, HL 1 khu</option>
+            <option value="AREA_HL_FIRST">Sắp xếp: HL 1 khu, Căn hộ 1 khu</option>
+            <option value="DEFAULT">Sắp xếp: Mặc định (Thời gian)</option>
+            <option value="CODE_ASC">Sắp xếp: Mã bản vẽ (A-Z)</option>
+            <option value="DATE_DESC">Sắp xếp: Ngày duyệt (Mới nhất)</option>
+          </select>
           
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
@@ -213,19 +304,35 @@ export default function ShopView() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-200 bg-zinc-50/80">
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[15%]">Ngày duyệt</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[10%]">Code</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[25%]">Tên bản vẽ</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[15%]">Tên công trình</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[10%]">Trạng thái</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[15%]">Ghi chú</th>
-                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-center w-[10%]">Thao tác</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[14%]">Ngày duyệt</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[9%]">Code</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[22%]">Tên bản vẽ</th>
+                <th 
+                  onClick={() => {
+                    setSortBy(prev => prev === 'AREA_CH_FIRST' ? 'AREA_HL_FIRST' : 'AREA_CH_FIRST');
+                  }}
+                  className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[12%] cursor-pointer hover:text-blue-600 transition-colors select-none group/th"
+                  title="Bấm để sắp xếp theo khu vực (Căn hộ / Hành lang)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span>Khu vực</span>
+                    <ArrowUpDown className={`w-3.5 h-3.5 transition-colors ${
+                      sortBy === 'AREA_CH_FIRST' || sortBy === 'AREA_HL_FIRST' 
+                        ? 'text-blue-600' 
+                        : 'text-zinc-300 group-hover/th:text-zinc-500'
+                    }`} />
+                  </div>
+                </th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[14%]">Tên công trình</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[11%]">Trạng thái</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest w-[11%]">Ghi chú</th>
+                <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-center w-[7%]">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-100">
               {filteredDrawings.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="px-6 py-12 text-center">
+                  <td colSpan="8" className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-zinc-400">
                       <FolderGit2 className="w-12 h-12 mb-3 text-zinc-300" />
                       <p className="text-sm font-medium text-zinc-500">Chưa có dữ liệu bản vẽ shop</p>
@@ -234,14 +341,35 @@ export default function ShopView() {
                   </td>
                 </tr>
               ) : (
-                filteredDrawings.map((item) => {
+                filteredDrawings.map((item, index) => {
+                  const currentType = getDrawingType(item);
+                  const prevType = index > 0 ? getDrawingType(filteredDrawings[index - 1]) : null;
+                  const isNewGroup = (sortBy === 'AREA_CH_FIRST' || sortBy === 'AREA_HL_FIRST') && (index === 0 || currentType !== prevType);
                   const done = isCompleted(item.status);
                   
                   return (
-                    <tr 
-                      key={item.id} 
-                      className={`group transition-colors ${done ? 'bg-zinc-100 text-zinc-500' : 'hover:bg-zinc-50'}`}
-                    >
+                    <React.Fragment key={item.id}>
+                      {isNewGroup && (
+                        <tr className="bg-slate-100/70 border-y border-zinc-200 select-none">
+                          <td colSpan="8" className="px-6 py-2.5">
+                            <div className="flex items-center gap-2.5">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-xs ${typeBadgeStyles[currentType] || typeBadgeStyles['Khác']}`}>
+                                {currentType === 'Căn hộ' && <Building2 className="w-3.5 h-3.5" />}
+                                {currentType === 'Hành lang' && <DoorOpen className="w-3.5 h-3.5" />}
+                                {currentType === 'CH+HL' && <Layers className="w-3.5 h-3.5" />}
+                                {currentType === 'Khác' && <LayoutGrid className="w-3.5 h-3.5" />}
+                                KHU: {currentType.toUpperCase()}
+                              </span>
+                              <span className="text-xs font-bold text-zinc-500">
+                                • {filteredDrawings.filter(x => getDrawingType(x) === currentType).length} bản vẽ
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr 
+                        className={`group transition-colors ${done ? 'bg-zinc-100 text-zinc-500' : 'hover:bg-zinc-50'}`}
+                      >
                       <td className="px-6 py-4">
                         <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border ${done ? 'bg-zinc-100 border-zinc-300' : 'bg-white border-zinc-200 shadow-sm'}`}>
                           <Calendar className={`w-4 h-4 ${done ? 'text-zinc-500' : 'text-blue-500'}`} />
@@ -286,6 +414,30 @@ export default function ShopView() {
                             {item.drawing_name}
                           </div>
                         )}
+                      </td>
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const currentType = getDrawingType(item);
+                          return (
+                            <div className="relative inline-block w-full min-w-[105px]">
+                              <select
+                                value={currentType}
+                                disabled={done}
+                                onChange={(e) => updateShopDrawing(item.id, { drawing_type: e.target.value })}
+                                className={`w-full appearance-none px-2.5 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-black/10 text-center ${
+                                  done 
+                                    ? 'bg-zinc-100 text-zinc-400 border-zinc-200 line-through' 
+                                    : (typeBadgeStyles[currentType] || typeBadgeStyles['Khác'])
+                                }`}
+                              >
+                                <option value="Hành lang" className="bg-white text-amber-700 font-bold">Hành lang</option>
+                                <option value="Căn hộ" className="bg-white text-blue-700 font-bold">Căn hộ</option>
+                                <option value="CH+HL" className="bg-white text-purple-700 font-bold">CH+HL</option>
+                                <option value="Khác" className="bg-white text-zinc-600 font-bold">Khác</option>
+                              </select>
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-6 py-4">
                         <select
@@ -355,8 +507,9 @@ export default function ShopView() {
                         </div>
                       </td>
                     </tr>
-                  );
-                })
+                  </React.Fragment>
+                );
+              })
               )}
             </tbody>
           </table>
